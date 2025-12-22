@@ -91,8 +91,8 @@ type KnowledgeBaseFile interface {
 // KnowledgeBaseFileModel is the model for the knowledge base file table
 type KnowledgeBaseFileModel struct {
 	UID types.FileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	// the knowledge base file is under the owner(namespace)
-	Owner      types.NamespaceUIDType `gorm:"column:owner;type:uuid;not null" json:"owner"`
+	// NamespaceUID is the namespace that owns this file
+	NamespaceUID types.NamespaceUIDType `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
 	KBUID      types.KBUIDType        `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	CreatorUID types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	Filename   string                 `gorm:"column:filename;size:255;not null" json:"filename"`
@@ -446,7 +446,7 @@ func (r *repository) ListKnowledgeBaseFiles(ctx context.Context, params Knowledg
 	var kbs []KnowledgeBaseFileModel
 	var totalCount int64
 
-	where := "owner = ? AND kb_uid = ?"
+	where := "namespace_uid = ? AND kb_uid = ?"
 	whereArgs := []interface{}{params.OwnerUID, params.KBUID}
 
 	// Apply AIP-160 filter if provided

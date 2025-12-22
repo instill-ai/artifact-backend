@@ -130,8 +130,9 @@ func (c *Client) generateContentAndExtractMarkdown(ctx context.Context, model st
 	// === Call Gemini API ===
 	result, err := c.client.Models.GenerateContent(ctx, model, contents, config)
 	if err != nil {
+		// Don't wrap with %w - create a flat error with user-facing message
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("gemini API call failed: %w", err),
+			fmt.Errorf("gemini API call failed: %v", err),
 			"AI service is temporarily unavailable. Please try again in a few moments.",
 		)
 	}
@@ -139,10 +140,9 @@ func (c *Client) generateContentAndExtractMarkdown(ctx context.Context, model st
 	// === Extract Response ===
 	markdown, err := c.extractMarkdownFromResponse(result)
 	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to extract markdown from response: %w", err),
-			"Unable to process the AI response. Please try again or contact support.",
-		)
+		// Return the error directly - it already has user-facing messages attached
+		// from extractMarkdownFromResponse. Avoid adding another layer.
+		return nil, err
 	}
 
 	// === Build Output ===
@@ -315,19 +315,17 @@ func retryConversion(ctx context.Context, maxRetries int, fn func() (*conversion
 		}
 	}
 
-	return nil, errorsx.AddMessage(
-		fmt.Errorf("conversion failed after %d attempts: %w", maxRetries+1, lastErr),
-		"Failed to convert file after multiple attempts. The file may be corrupted or in an unsupported format.",
-	)
+	// Return the last error directly - it already has user-facing messages attached.
+	// Avoid re-wrapping to prevent deeply nested error chains in Temporal logs.
+	return nil, lastErr
 }
 
 // buildConversionResult constructs the final conversion result from internal output
 func buildConversionResult(output *conversionOutput, err error) (*ai.ConversionResult, error) {
 	if err != nil {
-		return nil, errorsx.AddMessage(
-			err,
-			"Failed to convert file to markdown. Please try again or contact support if the problem persists.",
-		)
+		// Return the error directly - it already has user-facing messages attached.
+		// Avoid adding another layer to prevent deeply nested error chains in Temporal logs.
+		return nil, err
 	}
 
 	return &ai.ConversionResult{

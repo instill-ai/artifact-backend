@@ -23,68 +23,66 @@ export let options = {
     checks: ["rate == 1.0"],
   },
   // Parallel source scenarios per file type (exec functions are defined below)
-  // CRITICAL: Staggered start times prevent AI service rate limiting
-  // 23 parallel tests hitting Gemini API simultaneously causes "no content in candidate" errors
-  // Stagger by 3s intervals to spread load: 0s, 3s, 6s, 9s, ... (69s max delay)
+  // CRITICAL: Staggered start times prevent API gateway rate limiting (429 errors)
+  // Without staggering, 50 KB creations hit the API simultaneously causing rate limits
+  // Stagger by 1s intervals to spread load while keeping test duration reasonable
   scenarios: {
-    // Document file types
-    test_type_text: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT' },
-    test_type_markdown: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN' },
-    test_type_csv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV' },
-    test_type_html: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML' },
-    test_type_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF' },
-    test_type_ppt: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT' },
-    test_type_pptx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX' },
-    test_type_xls: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS' },
-    test_type_xlsx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX' },
-    test_type_doc: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC' },
-    test_type_docx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX' },
-    // Regression tests: Type inference from filename (type field omitted)
-    // These tests ensure the backend correctly infers file type from extension when type is not provided
-    test_type_markdown_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN_INFERRED' },
-    test_type_text_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT_INFERRED' },
-    test_type_csv_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV_INFERRED' },
-    test_type_html_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML_INFERRED' },
-    test_type_pdf_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF_INFERRED' },
-    test_type_ppt_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT_INFERRED' },
-    test_type_pptx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX_INFERRED' },
-    test_type_xls_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS_INFERRED' },
-    test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED' },
-    test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED' },
-    test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED' },
-    // Image file types
-    test_type_png: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PNG' },
-    test_type_jpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPEG' },
-    test_type_jpg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPG' },
-    test_type_gif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_GIF' },
-    test_type_webp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBP' },
-    test_type_tiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIFF' },
-    test_type_tif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIF' },
-    test_type_heic: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIC' },
-    test_type_heif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIF' },
-    test_type_avif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVIF' },
-    test_type_bmp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_BMP' },
-    // test_type_mp3: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP3' },
-    // Audio file types
-    test_type_wav: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WAV' },
-    test_type_aac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AAC' },
-    test_type_ogg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_OGG' },
-    test_type_flac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLAC' },
-    test_type_aiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AIFF' },
-    test_type_m4a: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_M4A' },
-    test_type_wma: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMA' },
-    test_type_webm_audio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_AUDIO' },
-    // Video file types
-    test_type_mp4: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP4' },
-    test_type_mkv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MKV' },
-    test_type_avi: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVI' },
-    test_type_mov: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MOV' },
-    test_type_flv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLV' },
-    test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV' },
-    test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG' },
-    test_type_webm_video: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO' },
-    // Regression test: Verify process_status is always string enum, never integer
-    test_process_status_format: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_PROCESS_STATUS_FORMAT' },
+    // Document file types (0-10s stagger)
+    test_type_text: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT', startTime: '0s' },
+    test_type_markdown: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN', startTime: '1s' },
+    test_type_csv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV', startTime: '2s' },
+    test_type_html: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML', startTime: '3s' },
+    test_type_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF', startTime: '4s' },
+    test_type_ppt: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT', startTime: '5s' },
+    test_type_pptx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX', startTime: '6s' },
+    test_type_xls: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS', startTime: '7s' },
+    test_type_xlsx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX', startTime: '8s' },
+    test_type_doc: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC', startTime: '9s' },
+    test_type_docx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX', startTime: '10s' },
+    // Regression tests: Type inference from filename (11-21s stagger)
+    test_type_markdown_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN_INFERRED', startTime: '11s' },
+    test_type_text_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT_INFERRED', startTime: '12s' },
+    test_type_csv_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV_INFERRED', startTime: '13s' },
+    test_type_html_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML_INFERRED', startTime: '14s' },
+    test_type_pdf_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF_INFERRED', startTime: '15s' },
+    test_type_ppt_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT_INFERRED', startTime: '16s' },
+    test_type_pptx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX_INFERRED', startTime: '17s' },
+    test_type_xls_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS_INFERRED', startTime: '18s' },
+    test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED', startTime: '19s' },
+    test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED', startTime: '20s' },
+    test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED', startTime: '21s' },
+    // Image file types (22-32s stagger)
+    test_type_png: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PNG', startTime: '22s' },
+    test_type_jpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPEG', startTime: '23s' },
+    test_type_jpg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPG', startTime: '24s' },
+    test_type_gif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_GIF', startTime: '25s' },
+    test_type_webp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBP', startTime: '26s' },
+    test_type_tiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIFF', startTime: '27s' },
+    test_type_tif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIF', startTime: '28s' },
+    test_type_heic: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIC', startTime: '29s' },
+    test_type_heif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIF', startTime: '30s' },
+    test_type_avif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVIF', startTime: '31s' },
+    test_type_bmp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_BMP', startTime: '32s' },
+    // Audio file types (33-40s stagger)
+    test_type_wav: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WAV', startTime: '33s' },
+    test_type_aac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AAC', startTime: '34s' },
+    test_type_ogg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_OGG', startTime: '35s' },
+    test_type_flac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLAC', startTime: '36s' },
+    test_type_aiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AIFF', startTime: '37s' },
+    test_type_m4a: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_M4A', startTime: '38s' },
+    test_type_wma: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMA', startTime: '39s' },
+    test_type_webm_audio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_AUDIO', startTime: '40s' },
+    // Video file types (41-48s stagger)
+    test_type_mp4: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP4', startTime: '41s' },
+    test_type_mkv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MKV', startTime: '42s' },
+    test_type_avi: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVI', startTime: '43s' },
+    test_type_mov: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MOV', startTime: '44s' },
+    test_type_flv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLV', startTime: '45s' },
+    test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV', startTime: '46s' },
+    test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG', startTime: '47s' },
+    test_type_webm_video: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO', startTime: '48s' },
+    // Regression test: Verify process_status is always string enum, never integer (49s)
+    test_process_status_format: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_PROCESS_STATUS_FORMAT', startTime: '49s' },
   },
 };
 
@@ -127,19 +125,19 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // CRITICAL: Wait for THIS TEST's file processing to complete before deleting knowledge bases
-    // Deleting knowledge bases triggers cleanup workflows that drop vector DB collections
-    // If we delete while files are still processing, we get "collection does not exist" errors
-    // IMPORTANT: We MUST NOT proceed with deletion if files are still processing, as this creates
-    // zombie workflows that continue running after the KB/files are deleted.
-    console.log("Teardown: Waiting for this test's file processing to complete...");
-    const allProcessingComplete = helper.waitForAllFileProcessingComplete(600, data.dbIDPrefix); // Increased to 10 minutes for AI-intensive operations
+    // CRITICAL: Wait for file processing AND Temporal activities to settle before cleanup
+    // This uses waitForSafeCleanup which:
+    // 1. Waits for file processing to complete (via DB check)
+    // 2. Adds buffer delay for in-flight Temporal activities to finish
+    // 3. Checks for recently completed files that might still have workflows
+    console.log("Teardown: Waiting for safe cleanup...");
+    const safeToCleanup = helper.waitForSafeCleanup(600, data.dbIDPrefix, 5); // 10 min + 5s buffer
 
-    check({ allProcessingComplete }, {
-      "Teardown: All files processed before cleanup (no zombie workflows)": () => allProcessingComplete === true,
+    check({ safeToCleanup }, {
+      "Teardown: Safe to cleanup (no zombie workflows)": () => safeToCleanup === true,
     });
 
-    if (!allProcessingComplete) {
+    if (!safeToCleanup) {
       console.error("Teardown: Files still processing after timeout - CANNOT safely delete knowledge bases");
       console.error("Teardown: Leaving knowledge bases in place to avoid zombie workflows");
       console.error("Teardown: Manual cleanup may be required or increase timeout");
@@ -348,6 +346,14 @@ function runKnowledgeBaseFileTest(data, opts) {
     const knowledgeBaseId = kb.id;
     check(cRes, { [`POST /v1alpha/namespaces/{namespace_id}/knowledge-bases 200 (${knowledgeBaseId})`]: (r) => r.status === 200 });
 
+    // CRITICAL: Early return if KB creation failed - prevents cascading 404 errors
+    if (!knowledgeBaseId || cRes.status !== 200) {
+      console.error(`✗ KB creation failed with status ${cRes.status} - aborting test for ${fileType || 'unknown'}`);
+      console.error(`  Response: ${cRes.body}`);
+      check(false, { [`KB creation succeeded (${fileType})`]: () => false });
+      return;
+    }
+
     // List knowledge bases and ensure our knowledge base is present
     const listKBRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header);
     logUnexpected(listKBRes, 'GET /v1alpha/namespaces/{namespace_id}/knowledge-bases');
@@ -380,10 +386,15 @@ function runKnowledgeBaseFileTest(data, opts) {
     const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
     const fileUid = file.uid;
     const testLabel = omitType ? `${fileType} [TYPE INFERRED]` : fileType;
-    if (!fileUid) {
-      console.log(`WARN ${testLabel}: No fileUid in response. Response status: ${uRes.status}, body: ${uRes.body}`);
-    }
     check(uRes, { [`POST /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files 200 (${testLabel})`]: (r) => r.status === 200 });
+
+    // CRITICAL: Early return if file upload failed - prevents cascading 404 errors
+    if (!fileUid || uRes.status !== 200) {
+      console.error(`✗ File upload failed with status ${uRes.status} - aborting test for ${testLabel}`);
+      console.error(`  Response: ${uRes.body}`);
+      check(false, { [`File upload succeeded (${testLabel})`]: () => false });
+      return;
+    }
 
     // List knowledge base files and ensure our file is present
     const listKBFilesRes = http.request(

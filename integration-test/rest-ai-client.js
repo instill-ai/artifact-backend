@@ -281,10 +281,9 @@ export default function (data) {
             }
         }
 
-        // Cleanup: Wait for all file processing in this knowledge base to complete
-        // Use the helper function with knowledge base ID as prefix filter
-        console.log(`AI Test 2.6: Ensuring all knowledge base file processing complete before cleanup...`);
-        helper.waitForAllFileProcessingComplete(180, knowledgeBaseId); // Increased to 180s for GA environment
+        // Cleanup: Wait for file processing AND Temporal activities to settle before cleanup
+        console.log(`AI Test 2.6: Waiting for safe cleanup...`);
+        helper.waitForSafeCleanup(180, knowledgeBaseId, 3);
 
         const deleteResp = http.request(
             "DELETE",
@@ -660,10 +659,9 @@ in artificial intelligence integration and customer satisfaction metrics.
             "AI Test 5.3: File processes with native cache support": () => processedStatus,
         });
 
-        // Cleanup: Wait for all file processing in this knowledge base to complete
-        // Use the helper function with knowledge base ID as prefix filter
-        console.log(`AI Test 5.4: Ensuring all knowledge base file processing complete before cleanup...`);
-        helper.waitForAllFileProcessingComplete(180, knowledgeBaseId); // Increased to 180s for GA environment
+        // Cleanup: Wait for file processing AND Temporal activities to settle before cleanup
+        console.log(`AI Test 5.4: Waiting for safe cleanup...`);
+        helper.waitForSafeCleanup(180, knowledgeBaseId, 3);
 
         http.request(
             "DELETE",

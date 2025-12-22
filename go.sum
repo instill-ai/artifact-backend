@@ -423,8 +423,8 @@ github.com/iancoleman/strcase v0.3.0 h1:nTXanmYxhfFAMjZL34Ov6gkzEsSJZ5DbhxWjvSAS
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
 github.com/imkira/go-interpol v1.1.0/go.mod h1:z0h2/2T3XF8kyEPpRgJ3kmNv+C43p+I/CoI+jC3w2iA=
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
-github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251130220955-a95936c7bf47 h1:j6Z1XFt1z+gOvWY3hr4Miz1PA2mlTP1gIaipIl4nxtY=
-github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251130220955-a95936c7bf47/go.mod h1:bCnBosofpaUxKBuTTJM3/I3thAK37kvfBnKByjnLsl4=
+github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251222144454-cb7677709cdc h1:fy0wZl060uhLxY+dJbr+oS10x49nNxJFuCAye2XCmBQ=
+github.com/instill-ai/protogen-go v0.3.3-alpha.0.20251222144454-cb7677709cdc/go.mod h1:bCnBosofpaUxKBuTTJM3/I3thAK37kvfBnKByjnLsl4=
 github.com/instill-ai/usage-client v0.4.0 h1:xf1hAlO4a8lZwZzz9bprZOJqU3ghIcIsavUUB7UURyg=
 github.com/instill-ai/usage-client v0.4.0/go.mod h1:zZ9LRoXps2u63ARYPAbR2YvqTib3dWJLObZn+9YqhF0=
 github.com/instill-ai/x v0.10.1-alpha.0.20251124025741-686e0983cf51 h1:2CsfgnA7ghjdjCYl/whUrUh9sdUFCKKHPEo8ynk1cL4=

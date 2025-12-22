@@ -394,7 +394,7 @@ func TestKnowledgeBaseColumns(t *testing.T) {
 	c.Check(KnowledgeBaseColumn.KBID, qt.Equals, "id")
 	c.Check(KnowledgeBaseColumn.Description, qt.Equals, "description")
 	c.Check(KnowledgeBaseColumn.Tags, qt.Equals, "tags")
-	c.Check(KnowledgeBaseColumn.Owner, qt.Equals, "owner")
+	c.Check(KnowledgeBaseColumn.NamespaceUID, qt.Equals, "namespace_uid")
 	c.Check(KnowledgeBaseColumn.CreateTime, qt.Equals, "create_time")
 	c.Check(KnowledgeBaseColumn.UpdateTime, qt.Equals, "update_time")
 	c.Check(KnowledgeBaseColumn.DeleteTime, qt.Equals, "delete_time")

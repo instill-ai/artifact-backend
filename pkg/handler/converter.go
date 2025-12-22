@@ -52,7 +52,7 @@ func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Name
 		Type:             convertFileType(kbf.FileType),
 		CreateTime:       timestamppb.New(*kbf.CreateTime),
 		UpdateTime:       timestamppb.New(*kbf.UpdateTime),
-		OwnerUid:         kbf.Owner.String(),
+		NamespaceUid:         kbf.NamespaceUID.String(),
 		CreatorUid:       kbf.CreatorUID.String(),
 		KnowledgeBaseUid: kbf.KBUID.String(),
 		Size:             kbf.Size,

@@ -15,36 +15,36 @@ export let options = {
   thresholds: {
     checks: ["rate == 1.0"],
   },
+  // Staggered start times prevent API gateway rate limiting (429 errors)
+  // When running in parallel with other test files, without staggering all scenarios
+  // start simultaneously which causes rate limiting
   scenarios: {
-    // Health check
-    // test_01_health: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_01_Health' },
+    // Basic CRUD operations (0-4s stagger)
+    test_02_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_CreateKnowledgeBase', startTime: '0s' },
+    test_03_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_ListKnowledgeBases', startTime: '1s' },
+    test_04_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_GetKnowledgeBase', startTime: '2s' },
+    test_05_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_UpdateKnowledgeBase', startTime: '3s' },
+    test_06_delete_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_DeleteKnowledgeBase', startTime: '4s' },
 
-    // Basic CRUD operations
-    test_02_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_CreateKnowledgeBase' },
-    test_03_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_ListKnowledgeBases' },
-    test_04_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_GetKnowledgeBase' },
-    test_05_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_UpdateKnowledgeBase' },
-    test_06_delete_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_DeleteKnowledgeBase' },
+    // End-to-end tests (5-6s stagger)
+    test_07_cleanup_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_CleanupFiles', startTime: '5s' },
+    test_08_e2e_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_E2EKnowledgeBase', startTime: '6s' },
 
-    // End-to-end tests
-    test_07_cleanup_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_CleanupFiles' },
-    test_08_e2e_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_E2EKnowledgeBase' },
-
-    // JWT/Auth tests
-    test_09_jwt_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_JWT_CreateKnowledgeBase' },
-    test_10_jwt_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_JWT_ListKnowledgeBases' },
-    test_11_jwt_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_JWT_GetKnowledgeBase' },
-    test_12_jwt_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_JWT_UpdateKnowledgeBase' },
-    test_13_jwt_create_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_JWT_CreateFile' },
-    test_14_jwt_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_JWT_ListFiles' },
-    test_15_jwt_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_JWT_GetFile' },
-    test_16_jwt_get_file_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_JWT_GetFileContent' },
-    test_17_jwt_get_file_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_JWT_GetFileSummary' },
-    test_18_jwt_list_chunks: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_JWT_ListChunks' },
-    test_19_jwt_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_JWT_GetFileCache' },
-    test_20_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GetFileCache' },
-    test_21_get_file_cache_renewal: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GetFileCacheRenewal' },
-    test_22_get_file_cache_large_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_GetFileCacheLargeFile' },
+    // JWT/Auth tests (7-17s stagger)
+    test_09_jwt_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_JWT_CreateKnowledgeBase', startTime: '7s' },
+    test_10_jwt_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_JWT_ListKnowledgeBases', startTime: '8s' },
+    test_11_jwt_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_JWT_GetKnowledgeBase', startTime: '9s' },
+    test_12_jwt_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_JWT_UpdateKnowledgeBase', startTime: '10s' },
+    test_13_jwt_create_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_JWT_CreateFile', startTime: '11s' },
+    test_14_jwt_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_JWT_ListFiles', startTime: '12s' },
+    test_15_jwt_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_JWT_GetFile', startTime: '13s' },
+    test_16_jwt_get_file_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_JWT_GetFileContent', startTime: '14s' },
+    test_17_jwt_get_file_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_JWT_GetFileSummary', startTime: '15s' },
+    test_18_jwt_list_chunks: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_JWT_ListChunks', startTime: '16s' },
+    test_19_jwt_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_JWT_GetFileCache', startTime: '17s' },
+    test_20_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GetFileCache', startTime: '18s' },
+    test_21_get_file_cache_renewal: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GetFileCacheRenewal', startTime: '19s' },
+    test_22_get_file_cache_large_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_GetFileCacheLargeFile', startTime: '20s' },
   },
 };
 
@@ -89,12 +89,9 @@ export function teardown(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    // Wait for THIS TEST's file processing to complete before deleting knowledge bases
-    console.log("Teardown: Waiting for this test's file processing to complete...");
-    const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
-    if (!allProcessingComplete) {
-      console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
-    }
+    // Wait for file processing AND Temporal activities to settle before cleanup
+    console.log("Teardown: Waiting for safe cleanup...");
+    helper.waitForSafeCleanup(120, data.dbIDPrefix, 3);
 
     console.log(`rest.js teardown: Cleaning up resources with prefix: ${data.dbIDPrefix}`);
     var listResp = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, null, data.header)

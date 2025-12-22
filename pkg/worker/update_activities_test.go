@@ -240,7 +240,7 @@ func TestCleanupOldKnowledgeBaseActivity_Success(t *testing.T) {
 		Then(&repository.KnowledgeBaseModel{
 			UID:                 kbUID,
 			KBID:                "test-kb",
-			Owner:               uuid.Must(uuid.NewV4()).String(),
+			NamespaceUID:               uuid.Must(uuid.NewV4()).String(),
 			ActiveCollectionUID: activeCollectionUID,
 			DeleteTime:          gorm.DeletedAt{},
 		}, nil)
@@ -302,7 +302,7 @@ func TestListFilesForReprocessingActivity_Success(t *testing.T) {
 		When(minimock.AnyContext, kbUID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:   kbUID,
-			Owner: uuid.Must(uuid.NewV4()).String(),
+			NamespaceUID: uuid.Must(uuid.NewV4()).String(),
 		}, nil)
 	mockRepository.ListKnowledgeBaseFilesMock.
 		Set(func(ctx context.Context, params repository.KnowledgeBaseFileListParams) (*repository.KnowledgeBaseFileList, error) {
@@ -359,7 +359,7 @@ func TestCloneFileToStagingKBActivity_Success(t *testing.T) {
 		When(minimock.AnyContext, stagingKBUID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:   stagingKBUID,
-			Owner: ownerUID.String(),
+			NamespaceUID: ownerUID.String(),
 		}, nil)
 	mockRepository.CreateKnowledgeBaseFileMock.
 		Set(func(ctx context.Context, model repository.KnowledgeBaseFileModel, externalServiceCall func(fileUID string) error) (*repository.KnowledgeBaseFileModel, error) {
@@ -499,7 +499,7 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 originalKBUID,
 				KBID:                "test-kb",
-				Owner:               ownerUID.String(),
+				NamespaceUID:               ownerUID.String(),
 				CreatorUID:          types.CreatorUIDType(ownerUID),
 				ActiveCollectionUID: originalCollectionUID,
 			},
@@ -512,7 +512,7 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 stagingKBUID,
 				KBID:                "test-kb-staging",
-				Owner:               ownerUID.String(),
+				NamespaceUID:               ownerUID.String(),
 				ActiveCollectionUID: stagingCollectionUID,
 			},
 		}, nil)
@@ -595,7 +595,7 @@ func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T)
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 originalKBUID,
 				KBID:                "test-kb",
-				Owner:               ownerUID.String(),
+				NamespaceUID:               ownerUID.String(),
 				CreatorUID:          types.CreatorUIDType(ownerUID),
 				ActiveCollectionUID: originalCollectionUID,
 			},
@@ -608,7 +608,7 @@ func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T)
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 stagingKBUID,
 				KBID:                "test-kb-staging",
-				Owner:               ownerUID.String(),
+				NamespaceUID:               ownerUID.String(),
 				ActiveCollectionUID: stagingCollectionUID,
 			},
 		}, nil)
@@ -683,7 +683,7 @@ func TestSynchronizeKBActivity_FilesStillProcessing(t *testing.T) {
 		Then(&repository.KnowledgeBaseModel{
 			UID:   originalKBUID,
 			KBID:  "test-kb",
-			Owner: ownerUID.String(),
+			NamespaceUID: ownerUID.String(),
 		}, nil)
 
 	// Update KB to swapping status
@@ -732,7 +732,7 @@ func TestSynchronizeKBActivity_Success(t *testing.T) {
 		Then(&repository.KnowledgeBaseModel{
 			UID:   originalKBUID,
 			KBID:  "test-kb",
-			Owner: ownerUID.String(),
+			NamespaceUID: ownerUID.String(),
 		}, nil)
 
 	// Update KB to swapping status

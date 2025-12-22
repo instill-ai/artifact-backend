@@ -148,7 +148,7 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 	// Step 4: Swap system configs
 	// Production KB gets the old system config (from rollback)
 	// This ensures the restored embeddings match their original system config
-	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.Owner, map[string]any{
+	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.NamespaceUID, map[string]any{
 		"update_status": artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String(),
 		"staging":       false, // Ensure it stays as production
 		"system_uid":    rollbackSystemUID,
@@ -160,7 +160,7 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 	// Step 5: Update rollback KB to have the new system config
 	// Rollback KB gets the new system config (from production)
 	// This maintains consistency - rollback KB represents what was rolled back from
-	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKB.KBID, productionKB.Owner, map[string]any{
+	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKB.KBID, productionKB.NamespaceUID, map[string]any{
 		"system_uid": productionSystemUID,
 	})
 	if err != nil {
@@ -273,7 +273,7 @@ func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUI
 	// Since the rollback KB is now being purged, there's no need to track retention anymore
 	productionKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, knowledgeBaseID)
 	if err == nil && productionKB != nil {
-		err = s.repository.UpdateKnowledgeBaseWithMap(ctx, knowledgeBaseID, productionKB.Owner, map[string]any{
+		err = s.repository.UpdateKnowledgeBaseWithMap(ctx, knowledgeBaseID, productionKB.NamespaceUID, map[string]any{
 			"rollback_retention_until": nil,
 		})
 		if err != nil {
@@ -362,7 +362,7 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 
 	// CRITICAL: Update retention timestamp on ROLLBACK KB (not production KB)
 	// The cleanup workflow checks the rollback KB's retention field to decide when to clean up
-	_, err = s.repository.UpdateKnowledgeBase(ctx, rollbackKB.KBID, rollbackKB.Owner, repository.KnowledgeBaseModel{
+	_, err = s.repository.UpdateKnowledgeBase(ctx, rollbackKB.KBID, rollbackKB.NamespaceUID, repository.KnowledgeBaseModel{
 		RollbackRetentionUntil: &newRetention,
 	})
 	if err != nil {
@@ -370,7 +370,7 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 	}
 
 	// Also update production KB's retention field for reference/audit trail
-	_, err = s.repository.UpdateKnowledgeBase(ctx, currentKB.KBID, currentKB.Owner, repository.KnowledgeBaseModel{
+	_, err = s.repository.UpdateKnowledgeBase(ctx, currentKB.KBID, currentKB.NamespaceUID, repository.KnowledgeBaseModel{
 		RollbackRetentionUntil: &newRetention,
 	})
 	if err != nil {
@@ -469,7 +469,7 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 		case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String():
 			// Find the staging KB (it has the same ID with "-staging" suffix)
 			stagingKBID := fmt.Sprintf("%s-staging", kb.KBID)
-			stagingKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(uuid.FromStringOrNil(kb.Owner)), stagingKBID)
+			stagingKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(uuid.FromStringOrNil(kb.NamespaceUID)), stagingKBID)
 			if err == nil && stagingKB != nil {
 				// Count completed files in the staging KB
 				if count, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, stagingKB.UID, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String()); err == nil {
@@ -645,7 +645,7 @@ func convertKBToCatalogProto(kb *repository.KnowledgeBaseModel, namespaceID stri
 		Id:             kb.KBID,
 		Description:    kb.Description,
 		Tags:           kb.Tags,
-		OwnerName:      kb.Owner,
+		OwnerName:      kb.NamespaceUID,
 		CreateTime:     timestamppb.New(*kb.CreateTime),
 		UpdateTime:     timestamppb.New(*kb.UpdateTime),
 		DownstreamApps: []string{},

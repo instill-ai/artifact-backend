@@ -976,7 +976,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			var findResult FindTargetFileByNameActivityResult
 			err := workflow.ExecuteActivity(findActivityCtx, w.FindTargetFileByNameActivity, &FindTargetFileByNameActivityParam{
 				TargetKBUID:    dualProcessingInfo.TargetKB.UID,
-				TargetOwnerUID: dualProcessingInfo.TargetKB.Owner,
+				TargetOwnerUID: dualProcessingInfo.TargetKB.NamespaceUID,
 				Filename:       prodFileMeta.metadata.File.Filename,
 			}).Get(findActivityCtx, &findResult)
 			if err != nil {

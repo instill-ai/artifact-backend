@@ -150,14 +150,9 @@ export function teardown(data) {
 
         console.log("\n=== TEARDOWN: Cleaning up test resources ===");
 
-        // CRITICAL: Wait for THIS TEST's file processing to complete before deleting knowledge bases
-        // Deleting knowledge bases triggers cleanup workflows that drop vector DB collections
-        // If we delete while files are still processing, we get "collection does not exist" errors
-        console.log("Teardown: Waiting for this test's file processing to complete...");
-        const allProcessingComplete = helper.waitForAllFileProcessingComplete(120, data.dbIDPrefix);
-        if (!allProcessingComplete) {
-            console.warn("Teardown: Some files still processing after 120s, proceeding anyway");
-        }
+        // Wait for file processing AND Temporal activities to settle before cleanup
+        console.log("Teardown: Waiting for safe cleanup...");
+        helper.waitForSafeCleanup(120, data.dbIDPrefix, 3);
 
         // Delete all test knowledge bases via API (primary cleanup method)
         console.log("Deleting test knowledge bases via API...");

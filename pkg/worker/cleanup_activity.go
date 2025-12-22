@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid"
-	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
@@ -104,11 +103,7 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 	err = w.deleteFilesSync(ctx, param.Bucket, []string{file.Destination})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete file from storage. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteOriginalFileActivityError,
-			err,
-		)
+		return activityError(err, deleteOriginalFileActivityError)
 	}
 
 	// CRITICAL: Also delete the blob object record from the object table
@@ -161,11 +156,7 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 				zap.String("convertedFileUID", convertedFile.UID.String()),
 				zap.Error(err))
 			err = errorsx.AddMessage(err, "Unable to delete converted file from storage. Please try again.")
-			return temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				deleteConvertedFileActivityError,
-				err,
-			)
+			return activityError(err, deleteConvertedFileActivityError)
 		}
 
 		w.log.Info("DeleteConvertedFileActivity: Deleted from MinIO",
@@ -178,11 +169,7 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 	err = w.repository.HardDeleteConvertedFileByFileUID(ctx, param.FileUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete converted file records. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteConvertedFileActivityError,
-			err,
-		)
+		return activityError(err, deleteConvertedFileActivityError)
 	}
 
 	w.log.Info("DeleteConvertedFileActivity: Successfully deleted all converted files",
@@ -212,11 +199,7 @@ func (w *Worker) DeleteTextChunksFromMinIOActivity(ctx context.Context, param *D
 	err = w.deleteTextChunksByFileUIDSync(ctx, kbUID, param.FileUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete text chunks from storage. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteTextChunksActivityError,
-			err,
-		)
+		return activityError(err, deleteTextChunksActivityError)
 	}
 
 	w.log.Info("DeleteTextChunksFromMinIOActivity: Deleted from MinIO",
@@ -227,11 +210,7 @@ func (w *Worker) DeleteTextChunksFromMinIOActivity(ctx context.Context, param *D
 	err = w.repository.HardDeleteTextChunksByKBFileUID(ctx, param.FileUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete text chunk records. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteTextChunksActivityError,
-			err,
-		)
+		return activityError(err, deleteTextChunksActivityError)
 	}
 
 	return nil
@@ -264,11 +243,7 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 			return nil
 		}
 		err = errorsx.AddMessage(err, "Unable to fetch knowledge base. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteEmbeddingsActivityError,
-			err,
-		)
+		return activityError(err, deleteEmbeddingsActivityError)
 	}
 
 	collection := constant.KBCollectionName(kb.ActiveCollectionUID)
@@ -283,11 +258,7 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 			return nil
 		}
 		err = errorsx.AddMessage(err, "Unable to delete embeddings from vector database. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteEmbeddingsActivityError,
-			err,
-		)
+		return activityError(err, deleteEmbeddingsActivityError)
 	}
 
 	w.log.Info("DeleteEmbeddingsFromVectorDBActivity: Deleted from vector db",
@@ -306,11 +277,7 @@ func (w *Worker) DeleteEmbeddingRecordsActivity(ctx context.Context, param *Dele
 	err := w.repository.HardDeleteEmbeddingsByKBFileUID(ctx, param.FileUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete embedding records. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteEmbeddingsActivityError,
-			err,
-		)
+		return activityError(err, deleteEmbeddingsActivityError)
 	}
 
 	return nil
@@ -367,11 +334,7 @@ func (w *Worker) DeleteKBFilesFromMinIOActivity(ctx context.Context, param *Dele
 	err := w.deleteKnowledgeBaseSync(ctx, param.KBUID.String())
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete knowledge base files from storage. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteKBFilesActivityError,
-			err,
-		)
+		return activityError(err, deleteKBFilesActivityError)
 	}
 
 	return nil
@@ -400,7 +363,7 @@ func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *Drop
 	if kb.ActiveCollectionUID == uuid.Nil {
 		w.log.Error("DropVectorDBCollectionActivity: KB has nil active_collection_uid, cannot drop collection",
 			zap.String("kbUID", param.KBUID.String()))
-		return temporal.NewApplicationErrorWithCause(
+		return activityErrorWithMessage(
 			fmt.Sprintf("KB has nil active_collection_uid: %s.", param.KBUID),
 			dropCollectionActivityError,
 			fmt.Errorf("nil active_collection_uid for KB %s", param.KBUID),
@@ -463,11 +426,7 @@ func (w *Worker) DropVectorDBCollectionActivity(ctx context.Context, param *Drop
 			return nil
 		}
 		err = errorsx.AddMessage(err, "Unable to drop vector database collection. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			dropCollectionActivityError,
-			err,
-		)
+		return activityError(err, dropCollectionActivityError)
 	}
 
 	w.log.Info("DropVectorDBCollectionActivity: Collection dropped successfully",
@@ -484,11 +443,7 @@ func (w *Worker) DeleteKBFileRecordsActivity(ctx context.Context, param *DeleteK
 	err := w.repository.DeleteAllKnowledgeBaseFiles(ctx, param.KBUID.String())
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete file records. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteKBFileRecordsActivityError,
-			err,
-		)
+		return activityError(err, deleteKBFileRecordsActivityError)
 	}
 
 	return nil
@@ -502,11 +457,7 @@ func (w *Worker) DeleteKBConvertedFileRecordsActivity(ctx context.Context, param
 	err := w.repository.DeleteAllConvertedFilesInKb(ctx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete converted file records. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteKBConvertedRecordsActivityError,
-			err,
-		)
+		return activityError(err, deleteKBConvertedRecordsActivityError)
 	}
 
 	return nil
@@ -520,11 +471,7 @@ func (w *Worker) DeleteKBTextChunkRecordsActivity(ctx context.Context, param *De
 	err := w.repository.HardDeleteTextChunksByKBUID(ctx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete text chunk records. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteKBTextChunkRecordsActivityError,
-			err,
-		)
+		return activityError(err, deleteKBTextChunkRecordsActivityError)
 	}
 
 	return nil
@@ -538,11 +485,7 @@ func (w *Worker) DeleteKBEmbeddingRecordsActivity(ctx context.Context, param *De
 	err := w.repository.HardDeleteEmbeddingsByKBUID(ctx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete embedding records. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			deleteKBEmbeddingRecordsActivityError,
-			err,
-		)
+		return activityError(err, deleteKBEmbeddingRecordsActivityError)
 	}
 
 	return nil
@@ -556,11 +499,7 @@ func (w *Worker) PurgeKBACLActivity(ctx context.Context, param *PurgeKBACLActivi
 	err := w.aclClient.Purge(ctx, "knowledgebase", param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to purge access control. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			purgeKBACLActivityError,
-			err,
-		)
+		return activityError(err, purgeKBACLActivityError)
 	}
 
 	return nil
@@ -592,22 +531,18 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 			zap.String("kbUID", param.KBUID.String()),
 			zap.String("previousUpdateStatus", kb.UpdateStatus))
 
-		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.KBID, kb.Owner, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.KBID, kb.NamespaceUID, map[string]interface{}{
 			"update_status":      "",
 			"update_workflow_id": "",
 		})
 		if err != nil {
 			err = errorsx.AddMessage(err, "Unable to clear update status before soft-deletion. Please try again.")
-			return temporal.NewApplicationErrorWithCause(
-				"Failed to clear update status before soft-deletion",
-				softDeleteKBRecordActivityError,
-				err,
-			)
+			return activityErrorWithMessage("Failed to clear update status before soft-deletion", softDeleteKBRecordActivityError, err)
 		}
 	}
 
 	// Soft delete the KB record
-	_, err = w.repository.DeleteKnowledgeBase(ctx, kb.Owner, kb.KBID)
+	_, err = w.repository.DeleteKnowledgeBase(ctx, kb.NamespaceUID, kb.KBID)
 	if err != nil {
 		// Check if KB was already deleted (record not found means it was already soft-deleted)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -618,11 +553,7 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 		}
 
 		err = errorsx.AddMessage(err, "Unable to soft-delete knowledge base record. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			softDeleteKBRecordActivityError,
-			err,
-		)
+		return activityError(err, softDeleteKBRecordActivityError)
 	}
 
 	w.log.Info("SoftDeleteKBRecordActivity: KB record soft-deleted successfully",
@@ -658,11 +589,7 @@ func (w *Worker) GetInProgressFileCountActivity(ctx context.Context, param *GetI
 		w.log.Error("GetInProgressFileCountActivity: Failed to get DB file count",
 			zap.String("kbUID", param.KBUID.String()),
 			zap.Error(err))
-		return 0, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			getInProgressFileCountActivityError,
-			err,
-		)
+		return 0, activityError(err, getInProgressFileCountActivityError)
 	}
 
 	// STEP 2: Check for active Temporal workflows related to this KB
@@ -695,7 +622,7 @@ func (w *Worker) getActiveWorkflowCount(ctx context.Context, kbUID types.KBUIDTy
 
 	// Get all files for this KB (including COMPLETED ones, since their workflows might still be running)
 	files, err := w.repository.ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
-		OwnerUID: kb.Owner,
+		OwnerUID: kb.NamespaceUID,
 		KBUID:    kbUID.String(),
 	})
 	if err != nil {
@@ -765,11 +692,7 @@ func (w *Worker) GetKBCollectionUIDActivity(ctx context.Context, param *GetKBCol
 				zap.String("kbUID", param.KBUID.String()))
 			return types.KBUIDType{}, nil
 		}
-		return types.KBUIDType{}, temporal.NewApplicationErrorWithCause(
-			"Failed to get KB for collection UID retrieval",
-			getKBCollectionUIDActivityError,
-			err,
-		)
+		return types.KBUIDType{}, activityErrorWithMessage("Failed to get KB for collection UID retrieval", getKBCollectionUIDActivityError, err)
 	}
 
 	w.log.Info("GetKBCollectionUIDActivity: Collection UID retrieved",
@@ -830,7 +753,7 @@ func (w *Worker) ClearProductionKBRetentionActivity(ctx context.Context, param *
 	}
 
 	// Clear the retention field
-	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.Owner, map[string]any{
+	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.NamespaceUID, map[string]any{
 		"rollback_retention_until": nil,
 	})
 	if err != nil {
@@ -865,11 +788,7 @@ func (w *Worker) CleanupExpiredGCSFilesActivity(ctx context.Context, param *Clea
 	if err != nil {
 		w.log.Error("CleanupExpiredGCSFilesActivity: Failed to scan Redis for GCS files",
 			zap.Error(err))
-		return temporal.NewApplicationErrorWithCause(
-			"Failed to scan Redis for expired GCS files",
-			cleanupExpiredGCSFilesActivityError,
-			err,
-		)
+		return activityErrorWithMessage("Failed to scan Redis for expired GCS files", cleanupExpiredGCSFilesActivityError, err)
 	}
 
 	if len(gcsFiles) == 0 {

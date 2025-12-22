@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
-	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
@@ -58,11 +57,7 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 			return nil
 		}
 		err = errorsx.AddMessage(err, "Unable to update file metadata. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			updateEmbeddingMetadataActivityError,
-			err,
-		)
+		return activityError(err, updateEmbeddingMetadataActivityError)
 	}
 
 	return nil
@@ -107,11 +102,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 			err = fmt.Errorf("no file found with UID %s", param.FileUID.String())
 		}
 		err = errorsx.AddMessage(err, "Unable to retrieve file information. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			embedAndSaveChunksActivityError,
-			err,
-		)
+		return nil, activityError(err, embedAndSaveChunksActivityError)
 	}
 	file := files[0]
 
@@ -124,11 +115,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 			return result, nil
 		}
 		err = errorsx.AddMessage(err, "Unable to retrieve text chunks. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			embedAndSaveChunksActivityError,
-			err,
-		)
+		return nil, activityError(err, embedAndSaveChunksActivityError)
 	}
 
 	if len(chunks) == 0 {
@@ -151,14 +138,10 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 		content, err := w.repository.GetMinIOStorage().GetFile(ctx, bucket, chunk.ContentDest)
 		if err != nil {
 			err = errorsx.AddMessage(
-				fmt.Errorf("failed to load chunk content from MinIO: %w", err),
+				fmt.Errorf("failed to load chunk content from MinIO: %v", err),
 				"Unable to load chunk content for embedding. Please try again.",
 			)
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				embedAndSaveChunksActivityError,
-				err,
-			)
+			return nil, activityError(err, embedAndSaveChunksActivityError)
 		}
 		texts[i] = string(content)
 	}
@@ -173,7 +156,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 		authCtx, ctxErr = CreateAuthenticatedContext(ctx, param.Metadata)
 		if ctxErr != nil {
 			w.log.Error("Failed to create authenticated context", zap.Error(ctxErr))
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithMessage(
 				fmt.Sprintf("Failed to create authenticated context: %s", errorsx.MessageOrErr(ctxErr)),
 				embedAndSaveChunksActivityError,
 				ctxErr,
@@ -185,14 +168,10 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 	kb, err := w.repository.GetKnowledgeBaseByUIDWithConfig(authCtx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(
-			fmt.Errorf("failed to fetch KB system config: %w", err),
+			fmt.Errorf("failed to fetch KB system config: %v", err),
 			"Unable to retrieve knowledge base configuration. Please try again.",
 		)
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			embedAndSaveChunksActivityError,
-			err,
-		)
+		return nil, activityError(err, embedAndSaveChunksActivityError)
 	}
 
 	// Step 6: Generate embeddings - route based on model family
@@ -203,7 +182,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 		w.log.Info("Using OpenAI embedding pipeline route")
 
 		if w.pipelineClient == nil {
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithMessage(
 				"Pipeline client not configured for OpenAI embedding route",
 				embedAndSaveChunksActivityError,
 				fmt.Errorf("pipeline client is nil"))
@@ -215,11 +194,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 				zap.Int("textCount", len(texts)),
 				zap.Error(err))
 			err = errorsx.AddMessage(err, "Unable to generate embeddings using OpenAI pipeline. Please try again.")
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				embedAndSaveChunksActivityError,
-				err,
-			)
+			return nil, activityError(err, embedAndSaveChunksActivityError)
 		}
 
 		result.Pipeline = pipeline.EmbedPipeline.Name()
@@ -243,11 +218,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 				zap.Int("textCount", len(texts)),
 				zap.Error(err))
 			err = errorsx.AddMessage(err, "Unable to generate embeddings. Please try again.")
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				embedAndSaveChunksActivityError,
-				err,
-			)
+			return nil, activityError(err, embedAndSaveChunksActivityError)
 		}
 	}
 
@@ -282,18 +253,14 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 	activeCollectionUID := kb.ActiveCollectionUID
 	if activeCollectionUID.IsNil() {
 		err := errorsx.AddMessage(fmt.Errorf("active collection UID is nil"), "Knowledge base has no active collection. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			embedAndSaveChunksActivityError,
-			err,
-		)
+		return nil, activityError(err, embedAndSaveChunksActivityError)
 	}
 	collection := constant.KBCollectionName(activeCollectionUID)
 
 	// Delete from VectorDB
 	if err := w.repository.DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID); err != nil {
 		w.log.Error("Failed to delete old embeddings from VectorDB", zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithMessage(
 			"Unable to delete old embeddings from vector database. Please try again.",
 			embedAndSaveChunksActivityError,
 			err,
@@ -303,7 +270,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 	// Delete from PostgreSQL
 	if err := w.repository.DeleteEmbeddingsByKBFileUID(ctx, param.FileUID); err != nil {
 		w.log.Error("Failed to delete old embeddings from DB", zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithMessage(
 			"Unable to delete old embeddings from database. Please try again.",
 			embedAndSaveChunksActivityError,
 			err,
@@ -360,7 +327,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 				zap.Int("batchNumber", i+1),
 				zap.Int("totalBatches", totalBatches),
 				zap.Error(err))
-			return nil, temporal.NewApplicationErrorWithCause(
+			return nil, activityErrorWithMessage(
 				fmt.Sprintf("Unable to save embedding batch %d/%d. Please try again.", i+1, totalBatches),
 				embedAndSaveChunksActivityError,
 				err,
@@ -377,7 +344,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 	w.log.Info("Flushing collection after embedding save")
 	if err := w.repository.FlushCollection(ctx, collection); err != nil {
 		w.log.Error("Failed to flush collection", zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithMessage(
 			"Unable to flush vector database collection. Please try again.",
 			embedAndSaveChunksActivityError,
 			err,

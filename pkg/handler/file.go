@@ -127,7 +127,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	kbFile := repository.KnowledgeBaseFileModel{
 		Filename:                  req.GetFile().GetFilename(),
 		FileType:                  req.File.Type.String(),
-		Owner:                     ns.NsUID,
+		NamespaceUID:                     ns.NsUID,
 		KBUID:                     kb.UID,
 		ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
 		ExternalMetadataUnmarshal: md,
@@ -365,7 +365,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		targetFile := repository.KnowledgeBaseFileModel{
 			Filename:                  res.Filename,
 			FileType:                  res.FileType,
-			Owner:                     res.Owner,
+			NamespaceUID:                     res.NamespaceUID,
 			CreatorUID:                res.CreatorUID,
 			KBUID:                     dualTarget.TargetKB.UID, // Different KB (staging or rollback)
 			Destination:               res.Destination,         // Same source file
@@ -475,7 +475,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		File: &artifactpb.File{
 			Uid:                res.UID.String(),
 			Id:                 res.UID.String(),
-			OwnerUid:           res.Owner.String(),
+			NamespaceUid:           res.NamespaceUID.String(),
 			CreatorUid:         res.CreatorUID.String(),
 			KnowledgeBaseUid:   res.KBUID.String(),
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, res.UID.String()),
@@ -668,7 +668,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		file := &artifactpb.File{
 			Uid:                kbFile.UID.String(),
 			Id:                 kbFile.UID.String(),
-			OwnerUid:           kbFile.Owner.String(),
+			NamespaceUid:           kbFile.NamespaceUID.String(),
 			CreatorUid:         kbFile.CreatorUID.String(),
 			KnowledgeBaseUid:   kbFile.KBUID.String(),
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, kbFile.UID.String()),
@@ -1428,7 +1428,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 				targetWorkflowID := uuid.Must(uuid.NewV4()).String()
 				backgroundCtx := context.Background()
 
-				err = ph.service.CleanupFile(backgroundCtx, targetFile.UID, targetFile.Owner, targetFile.RequesterUID, targetWorkflowID, true)
+				err = ph.service.CleanupFile(backgroundCtx, targetFile.UID, targetFile.NamespaceUID, targetFile.RequesterUID, targetWorkflowID, true)
 				if err != nil {
 					logger.Error("Failed to trigger cleanup workflow for target file",
 						zap.String("targetFileUID", targetFile.UID.String()),
@@ -1455,7 +1455,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	backgroundCtx := context.Background()
 
 	// Trigger cleanup workflow
-	err = ph.service.CleanupFile(backgroundCtx, fUID, files[0].Owner, files[0].RequesterUID, workflowID, true)
+	err = ph.service.CleanupFile(backgroundCtx, fUID, files[0].NamespaceUID, files[0].RequesterUID, workflowID, true)
 	if err != nil {
 		// Log the error but don't fail the user's request
 		// The file has already been soft-deleted from their perspective

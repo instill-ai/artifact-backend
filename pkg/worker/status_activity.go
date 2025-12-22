@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -38,22 +37,14 @@ func (w *Worker) GetFileStatusActivity(ctx context.Context, param *GetFileStatus
 	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to retrieve file status. Please try again.")
-		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			getFileStatusActivityError,
-			err,
-		)
+		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, activityError(err, getFileStatusActivityError)
 	}
 	if len(files) == 0 {
 		err := errorsx.AddMessage(
 			errorsx.ErrNotFound,
 			"File not found. It may have been deleted.",
 		)
-		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			getFileStatusActivityError,
-			err,
-		)
+		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, activityError(err, getFileStatusActivityError)
 	}
 	file := files[0]
 
@@ -63,11 +54,7 @@ func (w *Worker) GetFileStatusActivity(ctx context.Context, param *GetFileStatus
 			fmt.Errorf("invalid process status: %v", file.ProcessStatus),
 			"File status is invalid. Please contact support.",
 		)
-		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			getFileStatusActivityError,
-			err,
-		)
+		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, activityError(err, getFileStatusActivityError)
 	}
 
 	status := artifactpb.FileProcessStatus(statusInt)
@@ -85,11 +72,7 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 	if err != nil {
 		w.log.Error("Failed to get file for status update", zap.Error(err))
 		err = errorsx.AddMessage(err, "Unable to update file status. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			updateFileStatusActivityError,
-			err,
-		)
+		return activityError(err, updateFileStatusActivityError)
 	}
 	if len(files) == 0 {
 		return nil

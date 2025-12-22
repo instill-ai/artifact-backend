@@ -6,7 +6,9 @@ import encoding from "k6/encoding";
 
 let proto;
 
-export const apiGatewayMode = (__ENV.API_GATEWAY_URL && true);
+// Default API_GATEWAY_URL to localhost:8080 if not set
+const apiGatewayURL = __ENV.API_GATEWAY_URL || "localhost:8080";
+export const apiGatewayMode = (apiGatewayURL === "localhost:8080");
 
 if (__ENV.API_GATEWAY_PROTOCOL) {
   if (__ENV.API_GATEWAY_PROTOCOL !== "http" && __ENV.API_GATEWAY_PROTOCOL != "https") {
@@ -17,14 +19,14 @@ if (__ENV.API_GATEWAY_PROTOCOL) {
   proto = "http"
 }
 
-export const apiGatewayPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
-export const artifactRESTPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
-export const mgmtRESTPublicHost = apiGatewayMode ? `${proto}://${__ENV.API_GATEWAY_URL}` : `http://api-gateway:8080`
+export const apiGatewayPublicHost = apiGatewayMode ? `${proto}://${apiGatewayURL}` : `http://api-gateway:8080`
+export const artifactRESTPublicHost = apiGatewayMode ? `${proto}://${apiGatewayURL}` : `http://api-gateway:8080`
+export const mgmtRESTPublicHost = apiGatewayMode ? `${proto}://${apiGatewayURL}` : `http://api-gateway:8080`
 
-export const artifactGRPCPublicHost = apiGatewayMode ? `${__ENV.API_GATEWAY_URL}` : `api-gateway:8080`;
+export const artifactGRPCPublicHost = apiGatewayMode ? apiGatewayURL : `api-gateway:8080`;
 export const artifactGRPCPrivateHost = apiGatewayMode ? `localhost:3082` : `artifact-backend:3082`;
 
-export const mgmtGRPCPublicHost = apiGatewayMode ? `${__ENV.API_GATEWAY_URL}` : `api-gateway:8080`;
+export const mgmtGRPCPublicHost = apiGatewayMode ? apiGatewayURL : `api-gateway:8080`;
 export const mgmtGRPCPrivateHost = apiGatewayMode ? `localhost:3084` : `mgmt-backend:3084`;
 
 export const mgmtVersion = 'v1beta';
@@ -263,11 +265,21 @@ export function banner(title) {
 }
 
 // MinIO configuration for integration tests
+// Use localhost when running locally (apiGatewayMode), minio when running in Docker
+// Port mapping: Container port 9000 is exposed as host port 19000
 export const minioConfig = {
-  host: 'minio',
-  port: 9000,
+  host: apiGatewayMode ? 'localhost' : 'minio',
+  port: apiGatewayMode ? 19000 : 9000,
   user: 'minioadmin',
   password: 'minioadmin',
   bucket: 'core-artifact',
   blobBucket: 'core-blob',
+};
+
+// Milvus configuration for integration tests
+// Use localhost when running locally (apiGatewayMode), milvus when running in Docker
+// Port mapping: Container port 19530 is exposed as host port 19530 (same)
+export const milvusConfig = {
+  host: apiGatewayMode ? 'localhost' : 'milvus',
+  port: 19530,
 };

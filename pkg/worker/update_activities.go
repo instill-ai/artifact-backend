@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
@@ -194,11 +193,7 @@ func (w *Worker) ListKnowledgeBasesForUpdateActivity(ctx context.Context, param 
 		kbs, err = w.repository.ListKnowledgeBasesForUpdate(ctx, nil, nil)
 		if err != nil {
 			err = errorsx.AddMessage(err, "Unable to list knowledge bases for update. Please try again.")
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				listKnowledgeBasesForUpdateActivityError,
-				err,
-			)
+			return nil, activityError(err, listKnowledgeBasesForUpdateActivityError)
 		}
 	}
 
@@ -232,7 +227,7 @@ func (w *Worker) ValidateUpdateEligibilityActivity(ctx context.Context, param *V
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			w.log.Warn("ValidateUpdateEligibilityActivity: KB not found (may have been deleted)",
 				zap.String("kbUID", param.KBUID.String()))
-			return nil, temporal.NewNonRetryableApplicationError(
+			return nil, activityErrorNonRetryableWithMessage(
 				fmt.Sprintf("Knowledge base not found (may have been deleted): %s", param.KBUID.String()),
 				validateUpdateEligibilityActivityError,
 				err,
@@ -240,21 +235,13 @@ func (w *Worker) ValidateUpdateEligibilityActivity(ctx context.Context, param *V
 		}
 		// For other errors (DB connection issues, etc.), allow retries
 		err = errorsx.AddMessage(err, "Unable to get knowledge base for validation. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			validateUpdateEligibilityActivityError,
-			err,
-		)
+		return nil, activityError(err, validateUpdateEligibilityActivityError)
 	}
 
 	// Check if already updating
 	if kb.UpdateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String() {
 		err = fmt.Errorf("knowledge base is already updating: %s", param.KBUID.String())
-		return nil, temporal.NewApplicationErrorWithCause(
-			err.Error(),
-			validateUpdateEligibilityActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage(err.Error(), validateUpdateEligibilityActivityError, err)
 	}
 
 	w.log.Info("ValidateUpdateEligibilityActivity: KB is eligible",
@@ -275,11 +262,7 @@ func (w *Worker) CreateStagingKnowledgeBaseActivity(ctx context.Context, param *
 	originalKB, err := w.repository.GetKnowledgeBaseByUIDWithConfig(ctx, param.OriginalKBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get original knowledge base. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			createStagingKnowledgeBaseActivityError,
-			err,
-		)
+		return nil, activityError(err, createStagingKnowledgeBaseActivityError)
 	}
 
 	// Determine which system UID to use
@@ -290,22 +273,14 @@ func (w *Worker) CreateStagingKnowledgeBaseActivity(ctx context.Context, param *
 		system, err := w.repository.GetSystem(ctx, param.SystemID)
 		if err != nil {
 			err = errorsx.AddMessage(err, fmt.Sprintf("Unable to get system from system ID %q. Please try again.", param.SystemID))
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				createStagingKnowledgeBaseActivityError,
-				err,
-			)
+			return nil, activityError(err, createStagingKnowledgeBaseActivityError)
 		}
 		newSystemUID = &system.UID
 		// Also get the config for dimensionality calculation and logging
 		systemConfig, err := system.GetConfigJSON()
 		if err != nil {
 			err = errorsx.AddMessage(err, fmt.Sprintf("Unable to parse system config from system ID %q. Please try again.", param.SystemID))
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				createStagingKnowledgeBaseActivityError,
-				err,
-			)
+			return nil, activityError(err, createStagingKnowledgeBaseActivityError)
 		}
 		newSystemConfig = systemConfig
 		w.log.Info("Using system config",
@@ -347,11 +322,7 @@ func (w *Worker) CreateStagingKnowledgeBaseActivity(ctx context.Context, param *
 	stagingKB, err := w.repository.CreateStagingKnowledgeBase(ctx, &originalKB.KnowledgeBaseModel, newSystemUID, externalServiceCall)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to create staging knowledge base. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			createStagingKnowledgeBaseActivityError,
-			err,
-		)
+		return nil, activityError(err, createStagingKnowledgeBaseActivityError)
 	}
 
 	w.log.Info("CreateStagingKnowledgeBaseActivity: Staging KB created",
@@ -390,7 +361,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 			w.log.Error("SynchronizeKBActivity: KB was deleted - failing workflow permanently",
 				zap.String("originalKBUID", param.OriginalKBUID.String()),
 				zap.Error(err))
-			return nil, temporal.NewNonRetryableApplicationError(
+			return nil, activityErrorNonRetryableWithMessage(
 				fmt.Sprintf("Knowledge base %s was deleted during update workflow. Cannot synchronize deleted KB.", param.OriginalKBUID),
 				synchronizeKBActivityError,
 				err,
@@ -398,29 +369,21 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 		}
 		// Other errors (network, DB connection) are retryable
 		err = errorsx.AddMessage(err, "Unable to get knowledge base for synchronization. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			synchronizeKBActivityError,
-			err,
-		)
+		return nil, activityError(err, synchronizeKBActivityError)
 	}
 
 	// Use optimistic locking: only transition if still in UPDATING status
 	// This prevents race with concurrent updates/rollbacks
-	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, originalKB.KBID, originalKB.NamespaceUID, map[string]interface{}{
 		"update_status": artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING.String(),
 	})
 	if err != nil {
 		// If update fails, someone else modified the KB - fail and let Temporal retry
-		err := fmt.Errorf("failed to lock KB for swapping (concurrent modification): %w", err)
+		err := fmt.Errorf("failed to lock KB for swapping (concurrent modification): %v", err)
 		w.log.Error("SynchronizeKBActivity: Failed to acquire swap lock",
 			zap.String("originalKBUID", param.OriginalKBUID.String()),
 			zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
-			err.Error(),
-			synchronizeKBActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage(err.Error(), synchronizeKBActivityError, err)
 	}
 
 	w.log.Info("SynchronizeKBActivity: KB locked for swapping (status: updating → swapping)",
@@ -445,22 +408,14 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 	stagingInProgressCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.StagingKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING")
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to check for in-progress files in staging KB. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			synchronizeKBActivityError,
-			err,
-		)
+		return nil, activityError(err, synchronizeKBActivityError)
 	}
 
 	// Check production KB for actively processing files
 	productionInProgressCount, err := w.repository.GetFileCountByKnowledgeBaseUID(ctx, param.OriginalKBUID, "FILE_PROCESS_STATUS_PROCESSING,FILE_PROCESS_STATUS_CHUNKING,FILE_PROCESS_STATUS_EMBEDDING")
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to check for in-progress files in production KB. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			synchronizeKBActivityError,
-			err,
-		)
+		return nil, activityError(err, synchronizeKBActivityError)
 	}
 
 	totalInProgressCount := stagingInProgressCount + productionInProgressCount
@@ -476,11 +431,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 			zap.String("productionKBUID", param.OriginalKBUID.String()),
 			zap.Int64("stagingInProgress", stagingInProgressCount),
 			zap.Int64("productionInProgress", productionInProgressCount))
-		return nil, temporal.NewApplicationErrorWithCause(
-			err.Error(),
-			synchronizeKBActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage(err.Error(), synchronizeKBActivityError, err)
 	}
 
 	// STEP 2.5: Check for NOTSTARTED files (excluding recently reconciled files)
@@ -507,11 +458,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 	productionNotStarted, err := w.repository.GetNotStartedFileCountExcluding(ctx, param.OriginalKBUID, param.RecentlyReconciledFileUIDs)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to check production KB file status. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			synchronizeKBActivityError,
-			err,
-		)
+		return nil, activityError(err, synchronizeKBActivityError)
 	}
 
 	if productionNotStarted > 0 {
@@ -523,22 +470,14 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 			zap.Int("excludedReconciledCount", len(param.RecentlyReconciledFileUIDs)),
 			zap.String("likely_cause", "UploadCatalogFile auto-trigger failed or Temporal service is down"),
 			zap.String("required_action", "Manually trigger via ProcessCatalogFiles API or check Temporal service"))
-		return nil, temporal.NewApplicationErrorWithCause(
-			err.Error(),
-			synchronizeKBActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage(err.Error(), synchronizeKBActivityError, err)
 	}
 
 	// Check for NOTSTARTED files in staging KB, excluding recently reconciled files
 	stagingNotStarted, err := w.repository.GetNotStartedFileCountExcluding(ctx, param.StagingKBUID, param.RecentlyReconciledFileUIDs)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to check staging KB file status. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			synchronizeKBActivityError,
-			err,
-		)
+		return nil, activityError(err, synchronizeKBActivityError)
 	}
 
 	if stagingNotStarted > 0 {
@@ -551,11 +490,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 			zap.Int("excludedReconciledCount", len(param.RecentlyReconciledFileUIDs)),
 			zap.String("likely_cause", "Initial clone not triggered OR production workflows failed to trigger staging OR reconciliation ProcessFile failed"),
 			zap.String("required_action", "Manually trigger via ProcessCatalogFiles API or check workflow logs"))
-		return nil, temporal.NewApplicationErrorWithCause(
-			err.Error(),
-			synchronizeKBActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage(err.Error(), synchronizeKBActivityError, err)
 	}
 
 	// STEP 2.6: Check for file count mismatch (dual processing async file creation race)
@@ -605,7 +540,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 					zap.String("productionKBUID", param.OriginalKBUID.String()))
 
 				// Return retryable error - reconciliation might succeed on next attempt
-				return nil, temporal.NewApplicationErrorWithCause(
+				return nil, activityErrorWithMessage(
 					fmt.Sprintf("file count mismatch: production=%d, staging=%d (auto-reconciliation failed: %v)",
 						productionFileCount, stagingFileCount, err),
 					synchronizeKBActivityError,
@@ -622,7 +557,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 			return &SynchronizeKBActivityResult{
 					Synchronized:       false,
 					ReconciledFileUIDs: reconciledFileUIDs,
-				}, temporal.NewApplicationErrorWithCause(
+				}, activityErrorWithMessage(
 					fmt.Sprintf("file count mismatch: production=%d, staging=%d (reconciliation completed, waiting for processing)",
 						productionFileCount, stagingFileCount),
 					synchronizeKBActivityError,
@@ -768,7 +703,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		return nil, fmt.Errorf("failed to get production KB: %w", err)
 	}
 
-	ownerUID := productionKB.Owner
+	ownerUID := productionKB.NamespaceUID
 
 	// Get ALL files from production KB with proper pagination
 	productionFiles := []repository.KnowledgeBaseFileModel{}
@@ -905,7 +840,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		stagingFile := repository.KnowledgeBaseFileModel{
 			Filename:                  prodFile.Filename,
 			FileType:                  prodFile.FileType,
-			Owner:                     prodFile.Owner,
+			NamespaceUID:              prodFile.NamespaceUID,
 			CreatorUID:                prodFile.CreatorUID,
 			KBUID:                     stagingKBUID,
 			Destination:               prodFile.Destination, // Same source file in MinIO
@@ -1223,13 +1158,9 @@ func (w *Worker) ValidateUpdatedKBActivity(ctx context.Context, param *ValidateU
 	if !success {
 		err := fmt.Errorf("validation failed: %v", errors)
 		return &ValidateUpdatedKBActivityResult{
-				Success: false,
-				Errors:  errors,
-			}, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				validateUpdatedKBActivityError,
-				err,
-			)
+			Success: false,
+			Errors:  errors,
+		}, activityError(err, validateUpdatedKBActivityError)
 	}
 
 	return &ValidateUpdatedKBActivityResult{
@@ -1255,26 +1186,18 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	originalKB, err := w.repository.GetKnowledgeBaseByUIDWithConfig(ctx, param.OriginalKBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get original knowledge base. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityError(err, swapKnowledgeBasesActivityError)
 	}
 
 	stagingKB, err := w.repository.GetKnowledgeBaseByUIDWithConfig(ctx, param.StagingKBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get staging knowledge base. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityError(err, swapKnowledgeBasesActivityError)
 	}
 
 	// Check that collection UIDs are set (not uuid.Nil)
 	if originalKB.ActiveCollectionUID == uuid.Nil || stagingKB.ActiveCollectionUID == uuid.Nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithMessage(
 			"active_collection_uid is unset (uuid.Nil) for original or staging KB",
 			swapKnowledgeBasesActivityError,
 			fmt.Errorf("originalKB.ActiveCollectionUID=%v, stagingKB.ActiveCollectionUID=%v", originalKB.ActiveCollectionUID, stagingKB.ActiveCollectionUID),
@@ -1288,7 +1211,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 
 	originalCollectionExists, err := w.repository.CollectionExists(ctx, originalCollectionName)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithMessage(
 			fmt.Sprintf("Failed to check if original collection exists: %s", originalCollectionName),
 			swapKnowledgeBasesActivityError,
 			err,
@@ -1297,14 +1220,14 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 
 	stagingCollectionExists, err := w.repository.CollectionExists(ctx, stagingCollectionName)
 	if err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithMessage(
 			fmt.Sprintf("Failed to check if staging collection exists: %s", stagingCollectionName),
 			swapKnowledgeBasesActivityError,
 			err,
 		)
 	}
 	if !stagingCollectionExists {
-		return nil, temporal.NewApplicationErrorWithCause(
+		return nil, activityErrorWithMessage(
 			fmt.Sprintf("Staging KB's collection does not exist in Milvus: %s (UID: %s)", stagingCollectionName, stagingKB.ActiveCollectionUID),
 			swapKnowledgeBasesActivityError,
 			fmt.Errorf("collection %s not found", stagingCollectionName),
@@ -1339,31 +1262,23 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			zap.String("stagingKBUID", stagingKB.UID.String()),
 			zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
 
-		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.NamespaceUID, map[string]interface{}{
 			"active_collection_uid": uuid.Nil, // Clear to NULL to avoid unique constraint violation
 		})
 		if err != nil {
 			tx.Rollback()
 			err = errorsx.AddMessage(err, "Unable to clear staging KB collection UID before swap. Please try again.")
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				swapKnowledgeBasesActivityError,
-				err,
-			)
+			return nil, activityError(err, swapKnowledgeBasesActivityError)
 		}
 
 		// Move staging KB's resources → original KB (within transaction)
 		if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, param.StagingKBUID, param.OriginalKBUID); err != nil {
 			tx.Rollback()
-			return nil, temporal.NewApplicationErrorWithCause(
-				"Failed to move staging resources to production",
-				swapKnowledgeBasesActivityError,
-				err,
-			)
+			return nil, activityErrorWithMessage("Failed to move staging resources to production", swapKnowledgeBasesActivityError, err)
 		}
 
 		// Update production KB to point to staging's collection (no conflict now!)
-		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.KBID, originalKB.NamespaceUID, map[string]interface{}{
 			"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection
 			"system_uid":               stagingKB.SystemUID,           // Update system UID (may reference different system with new dimensionality)
 			"staging":                  false,
@@ -1372,21 +1287,17 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		if err != nil {
 			tx.Rollback()
 			err = errorsx.AddMessage(err, "Unable to update production KB metadata and collection pointer. Please try again.")
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				swapKnowledgeBasesActivityError,
-				err,
-			)
+			return nil, activityError(err, swapKnowledgeBasesActivityError)
 		}
 
 		// Clean up any existing rollback KB (within transaction)
-		ownerUID, err := uuid.FromString(originalKB.Owner)
+		ownerUID, err := uuid.FromString(originalKB.NamespaceUID)
 		if err == nil {
 			existingRollback, err := w.repository.GetRollbackKBForProduction(ctx, types.OwnerUIDType(ownerUID), originalKB.KBID)
 			if err == nil && existingRollback != nil {
 				w.log.Info("SwapKnowledgeBasesActivity: Soft-deleting existing rollback KB since original collection doesn't exist",
 					zap.String("rollbackKBUID", existingRollback.UID.String()))
-				_ = w.repository.DeleteKnowledgeBaseTx(ctx, tx, existingRollback.Owner, existingRollback.KBID)
+				_ = w.repository.DeleteKnowledgeBaseTx(ctx, tx, existingRollback.NamespaceUID, existingRollback.KBID)
 			}
 		}
 
@@ -1396,7 +1307,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			zap.String("stagingKBID", stagingKB.KBID))
 
 		// Clear update fields before soft delete
-		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.NamespaceUID, map[string]interface{}{
 			"update_status":      "",  // Clear update status so it doesn't block future updates
 			"update_workflow_id": nil, // Clear workflow ID so API deletion works
 		})
@@ -1405,33 +1316,21 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			w.log.Error("SwapKnowledgeBasesActivity: Failed to clear staging KB update fields",
 				zap.String("stagingKBUID", stagingKB.UID.String()),
 				zap.Error(err))
-			return nil, temporal.NewApplicationErrorWithCause(
-				"Failed to clear staging KB update fields",
-				swapKnowledgeBasesActivityError,
-				err,
-			)
+			return nil, activityErrorWithMessage("Failed to clear staging KB update fields", swapKnowledgeBasesActivityError, err)
 		}
 
-		err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.Owner, stagingKB.KBID)
+		err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.NamespaceUID, stagingKB.KBID)
 		if err != nil {
 			tx.Rollback()
 			w.log.Error("SwapKnowledgeBasesActivity: Failed to soft-delete staging KB",
 				zap.String("stagingKBUID", stagingKB.UID.String()),
 				zap.Error(err))
-			return nil, temporal.NewApplicationErrorWithCause(
-				"Failed to soft-delete staging KB",
-				swapKnowledgeBasesActivityError,
-				err,
-			)
+			return nil, activityErrorWithMessage("Failed to soft-delete staging KB", swapKnowledgeBasesActivityError, err)
 		}
 
 		// COMMIT TRANSACTION - all or nothing!
 		if err := tx.Commit().Error; err != nil {
-			return nil, temporal.NewApplicationErrorWithCause(
-				"Failed to commit simple swap transaction",
-				swapKnowledgeBasesActivityError,
-				err,
-			)
+			return nil, activityErrorWithMessage("Failed to commit simple swap transaction", swapKnowledgeBasesActivityError, err)
 		}
 
 		w.log.Info("SwapKnowledgeBasesActivity: Simple collection assignment completed successfully (no rollback KB created)",
@@ -1448,14 +1347,10 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 
 	// Normal path: Original collection exists, so we need to create rollback KB and do full swap
 	// Step 1: Create/update rollback KB to store old resources
-	ownerUID, err := uuid.FromString(originalKB.Owner)
+	ownerUID, err := uuid.FromString(originalKB.NamespaceUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Invalid owner UID format")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityError(err, swapKnowledgeBasesActivityError)
 	}
 
 	// Check if rollback KB exists from previous update using parent_kb_uid lookup
@@ -1474,7 +1369,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		rollbackKB := &repository.KnowledgeBaseModel{
 			UID:                    rollbackKBUID,
 			KBID:                   rollbackKBUID.String(), // Use UID as KBID (system-generated ID for rollback KB)
-			Owner:                  originalKB.Owner,
+			NamespaceUID:           originalKB.NamespaceUID,
 			CreatorUID:             originalKB.CreatorUID,
 			Tags:                   append(originalKB.Tags, "rollback"),
 			Staging:                true,
@@ -1490,11 +1385,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		_, err = w.repository.CreateKnowledgeBase(ctx, *rollbackKB, nil /* no external service */)
 		if err != nil {
 			err = errorsx.AddMessage(err, "Unable to create rollback KB. Please try again.")
-			return nil, temporal.NewApplicationErrorWithCause(
-				errorsx.MessageOrErr(err),
-				swapKnowledgeBasesActivityError,
-				err,
-			)
+			return nil, activityError(err, swapKnowledgeBasesActivityError)
 		}
 		w.log.Info("SwapKnowledgeBasesActivity: Created new rollback KB",
 			zap.String("rollbackKBUID", rollbackKBUID.String()))
@@ -1525,48 +1416,32 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		zap.String("stagingKBUID", stagingKB.UID.String()),
 		zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
 
-	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.NamespaceUID, map[string]interface{}{
 		"active_collection_uid": uuid.Nil, // Clear to NULL to avoid unique constraint violation
 	})
 	if err != nil {
 		tx.Rollback()
 		err = errorsx.AddMessage(err, "Unable to clear staging KB collection UID before swap. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityError(err, swapKnowledgeBasesActivityError)
 	}
 
 	// Step 2a: Move original KB's resources → temp (within transaction)
 	tempUID := uuid.Must(uuid.NewV4())
 	if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, param.OriginalKBUID, types.KBUIDType(tempUID)); err != nil {
 		tx.Rollback()
-		return nil, temporal.NewApplicationErrorWithCause(
-			"Failed to move original resources to temp",
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage("Failed to move original resources to temp", swapKnowledgeBasesActivityError, err)
 	}
 
 	// Step 2b: Move staging KB's resources → original KB (staging resources become production)
 	if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, param.StagingKBUID, param.OriginalKBUID); err != nil {
 		tx.Rollback()
-		return nil, temporal.NewApplicationErrorWithCause(
-			"Failed to move staging resources to production",
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage("Failed to move staging resources to production", swapKnowledgeBasesActivityError, err)
 	}
 
 	// Step 2c: Move temp resources → rollback KB (old resources saved for rollback)
 	if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, types.KBUIDType(tempUID), rollbackKBUID); err != nil {
 		tx.Rollback()
-		return nil, temporal.NewApplicationErrorWithCause(
-			"Failed to move old resources to rollback",
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage("Failed to move old resources to rollback", swapKnowledgeBasesActivityError, err)
 	}
 
 	// Step 3: Swap collection pointers and metadata (within transaction)
@@ -1575,7 +1450,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		zap.String("originalCollectionUID", originalKB.ActiveCollectionUID.String()),
 		zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
 
-	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.KBID, originalKB.Owner, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.KBID, originalKB.NamespaceUID, map[string]interface{}{
 		"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection (no conflict now!)
 		"system_uid":               stagingKB.SystemUID,           // Update system UID (may reference different system with new dimensionality)
 		"staging":                  false,
@@ -1584,11 +1459,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	if err != nil {
 		tx.Rollback()
 		err = errorsx.AddMessage(err, "Unable to update production KB metadata and collection pointer. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityError(err, swapKnowledgeBasesActivityError)
 	}
 
 	// Update rollback KB to point to original's collection (preserve old dimensionality)
@@ -1596,24 +1467,16 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	if err != nil {
 		tx.Rollback()
 		err = errorsx.AddMessage(err, "Unable to retrieve rollback KB for update. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityError(err, swapKnowledgeBasesActivityError)
 	}
-	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, rollbackKB.KBID, originalKB.Owner, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, rollbackKB.KBID, originalKB.NamespaceUID, map[string]interface{}{
 		"active_collection_uid": originalKB.ActiveCollectionUID, // Keep original collection pointer
 		"system_uid":            originalKB.SystemUID,           // Keep original system UID
 	})
 	if err != nil {
 		tx.Rollback()
 		err = errorsx.AddMessage(err, "Unable to update rollback KB metadata. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityError(err, swapKnowledgeBasesActivityError)
 	}
 
 	// Step 4: Soft-delete staging KB (within transaction)
@@ -1622,7 +1485,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		zap.String("stagingKBID", stagingKB.KBID))
 
 	// Clear update fields before soft delete
-	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.Owner, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.NamespaceUID, map[string]interface{}{
 		"update_status":      "",  // Clear update status so it doesn't block future updates
 		"update_workflow_id": nil, // Clear workflow ID so API deletion works
 	})
@@ -1631,34 +1494,22 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		w.log.Error("SwapKnowledgeBasesActivity: Failed to clear staging KB update fields",
 			zap.String("stagingKBUID", stagingKB.UID.String()),
 			zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
-			"Failed to clear staging KB update fields",
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage("Failed to clear staging KB update fields", swapKnowledgeBasesActivityError, err)
 	}
 
 	// Now perform soft delete
-	err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.Owner, stagingKB.KBID)
+	err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.NamespaceUID, stagingKB.KBID)
 	if err != nil {
 		tx.Rollback()
 		w.log.Error("SwapKnowledgeBasesActivity: Failed to soft-delete staging KB",
 			zap.String("stagingKBUID", stagingKB.UID.String()),
 			zap.Error(err))
-		return nil, temporal.NewApplicationErrorWithCause(
-			"Failed to soft-delete staging KB",
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage("Failed to soft-delete staging KB", swapKnowledgeBasesActivityError, err)
 	}
 
 	// COMMIT TRANSACTION - all or nothing!
 	if err := tx.Commit().Error; err != nil {
-		return nil, temporal.NewApplicationErrorWithCause(
-			"Failed to commit swap transaction",
-			swapKnowledgeBasesActivityError,
-			err,
-		)
+		return nil, activityErrorWithMessage("Failed to commit swap transaction", swapKnowledgeBasesActivityError, err)
 	}
 
 	w.log.Info("SwapKnowledgeBasesActivity: Atomic swap transaction committed successfully")
@@ -1691,11 +1542,7 @@ func (w *Worker) UpdateKnowledgeBaseUpdateStatusActivity(ctx context.Context, pa
 	err := w.repository.UpdateKnowledgeBaseUpdateStatus(ctx, param.KBUID, param.Status, param.WorkflowID, param.ErrorMessage, param.PreviousSystemUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to update knowledge base update status. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			updateKnowledgeBaseUpdateStatusActivityError,
-			err,
-		)
+		return activityError(err, updateKnowledgeBaseUpdateStatusActivityError)
 	}
 
 	return nil
@@ -1715,11 +1562,7 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 			return nil
 		}
 		err = errorsx.AddMessage(err, "Unable to get knowledge base for cleanup. Please try again.")
-		return temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			cleanupOldKnowledgeBaseActivityError,
-			err,
-		)
+		return activityError(err, cleanupOldKnowledgeBaseActivityError)
 	}
 
 	// CRITICAL: Clear update_status and update_workflow_id BEFORE soft-deletion
@@ -1730,17 +1573,13 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 			zap.String("kbUID", param.KBUID.String()),
 			zap.String("previousUpdateStatus", kb.UpdateStatus))
 
-		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.KBID, kb.Owner, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.KBID, kb.NamespaceUID, map[string]interface{}{
 			"update_status":      "",
 			"update_workflow_id": "",
 		})
 		if err != nil {
 			err = errorsx.AddMessage(err, "Unable to clear update status before cleanup. Please try again.")
-			return temporal.NewApplicationErrorWithCause(
-				"Failed to clear update status before cleanup",
-				cleanupOldKnowledgeBaseActivityError,
-				err,
-			)
+			return activityErrorWithMessage("Failed to clear update status before cleanup", cleanupOldKnowledgeBaseActivityError, err)
 		}
 	}
 
@@ -1748,18 +1587,14 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 	if !kb.DeleteTime.Valid {
 		w.log.Info("CleanupOldKnowledgeBaseActivity: Soft-deleting KB",
 			zap.String("kbUID", param.KBUID.String()))
-		_, err = w.repository.DeleteKnowledgeBase(ctx, kb.Owner, kb.KBID)
+		_, err = w.repository.DeleteKnowledgeBase(ctx, kb.NamespaceUID, kb.KBID)
 		if err != nil {
 			// If already deleted, that's okay - continue with collection drop
 			// With row-level locking, DeleteKnowledgeBase will return error if KB is already deleted
 			// (because it checks delete_time IS NULL in the WHERE clause)
 			if !errors.Is(err, gorm.ErrRecordNotFound) && !strings.Contains(err.Error(), "not found") {
 				err = errorsx.AddMessage(err, "Unable to delete knowledge base. Please try again.")
-				return temporal.NewApplicationErrorWithCause(
-					errorsx.MessageOrErr(err),
-					cleanupOldKnowledgeBaseActivityError,
-					err,
-				)
+				return activityError(err, cleanupOldKnowledgeBaseActivityError)
 			}
 			w.log.Info("CleanupOldKnowledgeBaseActivity: KB already soft-deleted during deletion attempt, continuing",
 				zap.String("kbUID", param.KBUID.String()),
@@ -1804,11 +1639,7 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 	if collectionUID == uuid.Nil {
 		// This should never happen after migration 000044 - return error instead of fallback
 		err = fmt.Errorf("active_collection_uid is not set for KB %s", param.KBUID)
-		return temporal.NewApplicationErrorWithCause(
-			"Invalid state: active_collection_uid is nil",
-			cleanupOldKnowledgeBaseActivityError,
-			err,
-		)
+		return activityErrorWithMessage("Invalid state: active_collection_uid is nil", cleanupOldKnowledgeBaseActivityError, err)
 	}
 
 	// Check if collection is in use by other KBs before dropping
@@ -1929,20 +1760,17 @@ func (w *Worker) VerifyKBCleanupActivity(ctx context.Context, param *VerifyKBCle
 		w.log.Warn("VerifyKBCleanupActivity: Error checking KB status",
 			zap.String("kbUID", param.KBUID.String()),
 			zap.Error(err))
-		return temporal.NewApplicationErrorWithCause(
-			"Failed to verify KB cleanup - cannot check KB status",
-			verifyKBCleanupActivityError,
-			err,
-		)
+		return activityErrorWithMessage("Failed to verify KB cleanup - cannot check KB status", verifyKBCleanupActivityError, err)
 	}
 
 	// Check 2: KB should be soft-deleted
 	if !kb.DeleteTime.Valid {
 		w.log.Warn("VerifyKBCleanupActivity: KB is not soft-deleted",
 			zap.String("kbUID", param.KBUID.String()))
-		return temporal.NewApplicationError(
+		return activityErrorWithMessage(
 			"Cleanup verification failed: KB is not soft-deleted",
 			verifyKBCleanupActivityError,
+			fmt.Errorf("KB %s not soft-deleted", param.KBUID),
 		)
 	}
 
@@ -1951,9 +1779,10 @@ func (w *Worker) VerifyKBCleanupActivity(ctx context.Context, param *VerifyKBCle
 		w.log.Warn("VerifyKBCleanupActivity: Update status/workflow ID not cleared",
 			zap.String("kbUID", param.KBUID.String()),
 			zap.String("updateStatus", kb.UpdateStatus))
-		return temporal.NewApplicationError(
+		return activityErrorWithMessage(
 			"Cleanup verification failed: update status not cleared",
 			verifyKBCleanupActivityError,
+			fmt.Errorf("KB %s update status not cleared", param.KBUID),
 		)
 	}
 
@@ -1993,25 +1822,17 @@ func (w *Worker) ListFilesForReprocessingActivity(ctx context.Context, param *Li
 	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get knowledge base. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			listFilesForReprocessingActivityError,
-			err,
-		)
+		return nil, activityError(err, listFilesForReprocessingActivityError)
 	}
 
 	// List all files in the KB
 	fileList, err := w.repository.ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
-		OwnerUID: kb.Owner,
+		OwnerUID: kb.NamespaceUID,
 		KBUID:    param.KBUID.String(),
 	})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to list files for reprocessing. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			listFilesForReprocessingActivityError,
-			err,
-		)
+		return nil, activityError(err, listFilesForReprocessingActivityError)
 	}
 
 	// Extract file UIDs from the result
@@ -2041,11 +1862,7 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	originalFiles, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.OriginalFileUID})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get original file. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			cloneFileToStagingKBActivityError,
-			err,
-		)
+		return nil, activityError(err, cloneFileToStagingKBActivityError)
 	}
 
 	// CRITICAL: Gracefully handle deleted files
@@ -2103,22 +1920,14 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	stagingKB, err := w.repository.GetKnowledgeBaseByUID(ctx, param.StagingKBUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get staging KB. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			cloneFileToStagingKBActivityError,
-			err,
-		)
+		return nil, activityError(err, cloneFileToStagingKBActivityError)
 	}
 
 	// Parse owner UID
-	ownerUID, err := uuid.FromString(stagingKB.Owner)
+	ownerUID, err := uuid.FromString(stagingKB.NamespaceUID)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to parse staging KB owner UID. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			cloneFileToStagingKBActivityError,
-			err,
-		)
+		return nil, activityError(err, cloneFileToStagingKBActivityError)
 	}
 
 	// Create new file record in staging KB
@@ -2133,7 +1942,7 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	newFile := repository.KnowledgeBaseFileModel{
 		Filename:                  originalFile.Filename,
 		FileType:                  originalFile.FileType,
-		Owner:                     types.NamespaceUIDType(ownerUID),
+		NamespaceUID:              types.NamespaceUIDType(ownerUID),
 		KBUID:                     param.StagingKBUID,
 		CreatorUID:                originalFile.CreatorUID,
 		ProcessStatus:             "FILE_PROCESS_STATUS_NOTSTARTED",
@@ -2149,11 +1958,7 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	createdFile, err := w.repository.CreateKnowledgeBaseFile(ctx, newFile, nil)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to create cloned file. Please try again.")
-		return nil, temporal.NewApplicationErrorWithCause(
-			errorsx.MessageOrErr(err),
-			cloneFileToStagingKBActivityError,
-			err,
-		)
+		return nil, activityError(err, cloneFileToStagingKBActivityError)
 	}
 
 	w.log.Info("CloneFileToStagingKBActivity: File cloned successfully",
