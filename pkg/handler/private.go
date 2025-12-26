@@ -15,6 +15,7 @@ import (
 
 	fieldmask_utils "github.com/mennanov/fieldmask-utils"
 
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/x/checkfield"
@@ -94,7 +95,7 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 
 	// External service callback for vector DB collection and ACL
 	callExternalService := func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error {
-		err := h.service.Repository().CreateCollection(ctx, "kb_"+collectionUID.String(), systemConfig.RAG.Embedding.Dimensionality)
+		err := h.service.Repository().CreateCollection(ctx, constant.KBCollectionName(collectionUID), systemConfig.RAG.Embedding.Dimensionality)
 		if err != nil {
 			return fmt.Errorf("creating vector database collection: %w", err)
 		}
