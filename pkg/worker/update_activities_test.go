@@ -500,7 +500,7 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 				UID:                 originalKBUID,
 				KBID:                "test-kb",
 				NamespaceUID:               ownerUID.String(),
-				CreatorUID:          types.CreatorUIDType(ownerUID),
+				CreatorUID:          func() *types.CreatorUIDType { c := types.CreatorUIDType(ownerUID); return &c }(),
 				ActiveCollectionUID: originalCollectionUID,
 			},
 		}, nil)
@@ -596,7 +596,7 @@ func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T)
 				UID:                 originalKBUID,
 				KBID:                "test-kb",
 				NamespaceUID:               ownerUID.String(),
-				CreatorUID:          types.CreatorUIDType(ownerUID),
+				CreatorUID:          func() *types.CreatorUIDType { c := types.CreatorUIDType(ownerUID); return &c }(),
 				ActiveCollectionUID: originalCollectionUID,
 			},
 		}, nil)

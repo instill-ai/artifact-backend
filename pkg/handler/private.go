@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	fieldmask_utils "github.com/mennanov/fieldmask-utils"
 
@@ -46,6 +47,99 @@ func NewPrivateHandler(s artifact.Service, log *zap.Logger) *PrivateHandler {
 		service: s,
 		logger:  log,
 	}
+}
+
+// CreateKnowledgeBaseAdmin creates a system-level knowledge base without a creator.
+// This is used by internal services (e.g., agent-backend) to create shared knowledge bases
+// like "instill-agent" that are not owned by any specific user.
+func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *artifactpb.CreateKnowledgeBaseAdminRequest) (*artifactpb.CreateKnowledgeBaseAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+	logger.Info("CreateKnowledgeBaseAdmin called",
+		zap.String("namespace_id", req.GetNamespaceId()),
+		zap.String("id", req.GetId()))
+
+	// Validate required fields
+	if req.GetNamespaceId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace_id is required")
+	}
+	if req.GetId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "id is required")
+	}
+
+	// Get namespace
+	ns, err := h.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		logger.Error("failed to get namespace", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
+	}
+
+	// Get default system
+	system, err := h.service.Repository().GetDefaultSystem(ctx)
+	if err != nil {
+		logger.Error("failed to get default system", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to get default system: %v", err)
+	}
+
+	systemConfig, err := system.GetConfigJSON()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to parse system config: %v", err)
+	}
+
+	// Determine KB type
+	kbType := req.GetType()
+	if kbType == artifactpb.KnowledgeBaseType_KNOWLEDGE_BASE_TYPE_UNSPECIFIED {
+		kbType = artifactpb.KnowledgeBaseType_KNOWLEDGE_BASE_TYPE_PERSISTENT
+	}
+
+	// External service callback for vector DB collection and ACL
+	callExternalService := func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error {
+		err := h.service.Repository().CreateCollection(ctx, "kb_"+collectionUID.String(), systemConfig.RAG.Embedding.Dimensionality)
+		if err != nil {
+			return fmt.Errorf("creating vector database collection: %w", err)
+		}
+		err = h.service.ACLClient().SetOwner(ctx, "knowledgebase", kbUID, string(ns.NsType), ns.NsUID)
+		if err != nil {
+			return fmt.Errorf("setting knowledge base owner: %w", err)
+		}
+		return nil
+	}
+
+	// Create knowledge base WITHOUT creator (CreatorUID = nil)
+	dbData, err := h.service.Repository().CreateKnowledgeBase(
+		ctx,
+		repository.KnowledgeBaseModel{
+			KBID:              req.GetId(),
+			Description:       req.GetDescription(),
+			Tags:              req.GetTags(),
+			NamespaceUID:      ns.NsUID.String(),
+			CreatorUID:        nil, // No creator for system KBs
+			KnowledgeBaseType: kbType.String(),
+			SystemUID:         system.UID,
+		},
+		callExternalService,
+	)
+	if err != nil {
+		logger.Error("failed to create knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to create knowledge base: %v", err)
+	}
+
+	logger.Info("Created system knowledge base",
+		zap.String("uid", dbData.UID.String()),
+		zap.String("id", dbData.KBID))
+
+	return &artifactpb.CreateKnowledgeBaseAdminResponse{
+		KnowledgeBase: &artifactpb.KnowledgeBase{
+			Name:        fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), dbData.KBID),
+			Uid:         dbData.UID.String(),
+			Id:          dbData.KBID,
+			Description: dbData.Description,
+			Tags:        dbData.Tags,
+			OwnerName:   ns.Name(),
+			OwnerUid:    ns.NsUID.String(),
+			CreateTime:  timestamppb.New(*dbData.CreateTime),
+			UpdateTime:  timestamppb.New(*dbData.UpdateTime),
+		},
+	}, nil
 }
 
 // GetObjectAdmin retrieves the information of an object (admin only).

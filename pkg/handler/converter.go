@@ -2,20 +2,59 @@ package handler
 
 import (
 	"fmt"
+	"strings"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	filetype "github.com/instill-ai/x/file"
 )
+
+// Reserved tag prefixes that users cannot set directly.
+// These are managed by the system.
+var reservedTagPrefixes = []string{
+	"agent:",   // Reserved for agent-backend (e.g., agent:collection:{uid})
+	"instill-", // Reserved for internal system use
+}
+
+// validateUserTags checks that user-provided tags don't use reserved prefixes.
+func validateUserTags(tags []string) error {
+	for _, tag := range tags {
+		for _, prefix := range reservedTagPrefixes {
+			if strings.HasPrefix(tag, prefix) {
+				return status.Errorf(codes.InvalidArgument,
+					"tags with prefix '%s' are reserved for system use", prefix)
+			}
+		}
+	}
+	return nil
+}
+
+// extractCollectionUIDs extracts collection UIDs from tags with prefix "agent:collection:".
+func extractCollectionUIDs(tags []string) []string {
+	const collectionTagPrefix = "agent:collection:"
+	var collectionUIDs []string
+	for _, tag := range tags {
+		if strings.HasPrefix(tag, collectionTagPrefix) {
+			uid := strings.TrimPrefix(tag, collectionTagPrefix)
+			if uid != "" {
+				collectionUIDs = append(collectionUIDs, uid)
+			}
+		}
+	}
+	return collectionUIDs
+}
 
 // convertKBToCatalogPB converts database KnowledgeBase to protobuf KnowledgeBase.
 // Following the pattern from pipeline/model/mgmt backends, the `name` field
 // is computed dynamically rather than stored in the database.
-func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namespace) *artifactpb.KnowledgeBase {
+func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namespace, owner *mgmtpb.Owner, creator *mgmtpb.User) *artifactpb.KnowledgeBase {
 	ownerName := ns.Name()
 
 	knowledgeBase := &artifactpb.KnowledgeBase{
@@ -26,7 +65,16 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 		CreateTime:  timestamppb.New(*kb.CreateTime),
 		UpdateTime:  timestamppb.New(*kb.UpdateTime),
 		OwnerName:   ownerName,
+		OwnerUid:    kb.NamespaceUID,
+		Owner:       owner,
+		Creator:     creator,
 		Tags:        kb.Tags,
+	}
+
+	// Handle nullable creator UID (nil for system-created KBs like instill-agent)
+	if kb.CreatorUID != nil {
+		creatorUIDStr := kb.CreatorUID.String()
+		knowledgeBase.CreatorUid = &creatorUIDStr
 	}
 
 	// Handle optional fields
@@ -40,7 +88,7 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 
 // convertKBFileToPB converts database KnowledgeBaseFile to protobuf File.
 // The `name` field is computed dynamically following other backends' patterns.
-func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Namespace, kb *repository.KnowledgeBaseModel) *artifactpb.File {
+func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Namespace, kb *repository.KnowledgeBaseModel, owner *mgmtpb.Owner, creator *mgmtpb.User) *artifactpb.File {
 	ownerName := ns.Name()
 	fileIDStr := kbf.UID.String()
 
@@ -52,8 +100,11 @@ func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Name
 		Type:             convertFileType(kbf.FileType),
 		CreateTime:       timestamppb.New(*kbf.CreateTime),
 		UpdateTime:       timestamppb.New(*kbf.UpdateTime),
-		NamespaceUid:         kbf.NamespaceUID.String(),
+		OwnerUid:         kbf.NamespaceUID.String(),
+		OwnerName:        ownerName,
+		Owner:            owner,
 		CreatorUid:       kbf.CreatorUID.String(),
+		Creator:          creator,
 		KnowledgeBaseUid: kbf.KBUID.String(),
 		Size:             kbf.Size,
 		ProcessStatus:    convertFileProcessStatus(kbf.ProcessStatus),
@@ -66,6 +117,8 @@ func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Name
 
 	if len(kbf.Tags) > 0 {
 		file.Tags = kbf.Tags
+		// Extract collection UIDs from tags with prefix "agent:collection:"
+		file.CollectionUids = extractCollectionUIDs(kbf.Tags)
 	}
 
 	if kbf.ExternalMetadataUnmarshal != nil {

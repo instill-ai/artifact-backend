@@ -80,6 +80,51 @@ export function isValidOwner(owner, expectedOwner) {
   return deepEqual(owner.user.profile, expectedOwner.profile)
 }
 
+/**
+ * Validate a creator object (User) returned from the API.
+ * The creator is always a User object (not an Owner wrapper).
+ *
+ * @param {object} creator - The creator object from the API response
+ * @param {object} expectedUser - The expected user object (optional, for exact match)
+ * @returns {boolean} True if creator is valid
+ */
+export function isValidCreator(creator, expectedUser = null) {
+  if (creator === null || creator === undefined) {
+    // Creator can be null for system-created resources
+    return true;
+  }
+
+  // Creator should be a User object with required fields
+  if (!("id" in creator)) {
+    console.log("Creator has no id field");
+    return false;
+  }
+
+  if (!("uid" in creator)) {
+    console.log("Creator has no uid field");
+    return false;
+  }
+
+  if (!isUUID(creator.uid)) {
+    console.log("Creator uid is not a valid UUID");
+    return false;
+  }
+
+  // If expected user provided, validate match
+  if (expectedUser !== null) {
+    if (creator.id !== expectedUser.id) {
+      console.log(`Creator id mismatch: ${creator.id} !== ${expectedUser.id}`);
+      return false;
+    }
+    if (creator.uid !== expectedUser.uid) {
+      console.log(`Creator uid mismatch: ${creator.uid} !== ${expectedUser.uid}`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function validateKnowledgeBase(knowledgeBase, isPrivate) {
   if (!("uid" in knowledgeBase)) {
     console.log("Knowledge base has no uid field");
@@ -109,6 +154,46 @@ export function validateKnowledgeBase(knowledgeBase, isPrivate) {
   if (!("updateTime" in knowledgeBase)) {
     console.log("Knowledge base has no update_time field");
     return false;
+  }
+
+  // Validate ownerName field (required)
+  if (!("ownerName" in knowledgeBase)) {
+    console.log("Knowledge base has no ownerName field");
+    return false;
+  }
+
+  // Validate ownerUid field (required, must be UUID)
+  if (!("ownerUid" in knowledgeBase)) {
+    console.log("Knowledge base has no ownerUid field");
+    return false;
+  }
+  if (!isUUID(knowledgeBase.ownerUid)) {
+    console.log("Knowledge base ownerUid is not a valid UUID");
+    return false;
+  }
+
+  // Validate owner object (optional but if present, must be valid)
+  if ("owner" in knowledgeBase && knowledgeBase.owner !== null && knowledgeBase.owner !== undefined) {
+    if (!knowledgeBase.owner.user && !knowledgeBase.owner.organization) {
+      console.log("Knowledge base owner is neither user nor organization");
+      return false;
+    }
+  }
+
+  // Validate creatorUid field (optional, but if present must be UUID)
+  if ("creatorUid" in knowledgeBase && knowledgeBase.creatorUid !== null && knowledgeBase.creatorUid !== undefined) {
+    if (!isUUID(knowledgeBase.creatorUid)) {
+      console.log("Knowledge base creatorUid is not a valid UUID");
+      return false;
+    }
+  }
+
+  // Validate creator object (optional, but if present must be valid User)
+  if ("creator" in knowledgeBase && knowledgeBase.creator !== null && knowledgeBase.creator !== undefined) {
+    if (!isValidCreator(knowledgeBase.creator)) {
+      console.log("Knowledge base creator is not a valid User object");
+      return false;
+    }
   }
 
   return true;
@@ -155,6 +240,63 @@ export function validateFile(file, isPrivate) {
     return false;
   }
 
+  // Validate ownerUid field (required, must be UUID)
+  if (!("ownerUid" in file)) {
+    console.log("File has no ownerUid field");
+    return false;
+  }
+  if (!isUUID(file.ownerUid)) {
+    console.log("File ownerUid is not a valid UUID");
+    return false;
+  }
+
+  // Validate ownerName field (required)
+  if (!("ownerName" in file)) {
+    console.log("File has no ownerName field");
+    return false;
+  }
+
+  // Validate owner object (optional but if present, must be valid)
+  if ("owner" in file && file.owner !== null && file.owner !== undefined) {
+    if (!file.owner.user && !file.owner.organization) {
+      console.log("File owner is neither user nor organization");
+      return false;
+    }
+  }
+
+  // Validate creatorUid field (required, must be UUID)
+  if (!("creatorUid" in file)) {
+    console.log("File has no creatorUid field");
+    return false;
+  }
+  if (!isUUID(file.creatorUid)) {
+    console.log("File creatorUid is not a valid UUID");
+    return false;
+  }
+
+  // Validate creator object (optional, but if present must be valid User)
+  if ("creator" in file && file.creator !== null && file.creator !== undefined) {
+    if (!isValidCreator(file.creator)) {
+      console.log("File creator is not a valid User object");
+      return false;
+    }
+  }
+
+  // Validate collectionUids field (optional, should be array if present)
+  if ("collectionUids" in file && file.collectionUids !== null && file.collectionUids !== undefined) {
+    if (!Array.isArray(file.collectionUids)) {
+      console.log("File collectionUids is not an array");
+      return false;
+    }
+    // Each element should be a valid UUID
+    for (const uid of file.collectionUids) {
+      if (!isUUID(uid)) {
+        console.log(`File collectionUids contains invalid UUID: ${uid}`);
+        return false;
+      }
+    }
+  }
+
   return true;
 }
 
@@ -187,6 +329,46 @@ export function validateKnowledgeBaseGRPC(knowledgeBase, isPrivate) {
   if (!("updateTime" in knowledgeBase)) {
     console.log("Knowledge base has no updateTime field");
     return false;
+  }
+
+  // Validate ownerName field (required)
+  if (!("ownerName" in knowledgeBase)) {
+    console.log("Knowledge base has no ownerName field");
+    return false;
+  }
+
+  // Validate ownerUid field (required, must be UUID)
+  if (!("ownerUid" in knowledgeBase)) {
+    console.log("Knowledge base has no ownerUid field");
+    return false;
+  }
+  if (!isUUID(knowledgeBase.ownerUid)) {
+    console.log("Knowledge base ownerUid is not a valid UUID");
+    return false;
+  }
+
+  // Validate owner object (optional but if present, must be valid)
+  if ("owner" in knowledgeBase && knowledgeBase.owner !== null && knowledgeBase.owner !== undefined) {
+    if (!knowledgeBase.owner.user && !knowledgeBase.owner.organization) {
+      console.log("Knowledge base owner is neither user nor organization");
+      return false;
+    }
+  }
+
+  // Validate creatorUid field (optional, but if present must be UUID)
+  if ("creatorUid" in knowledgeBase && knowledgeBase.creatorUid !== null && knowledgeBase.creatorUid !== undefined) {
+    if (!isUUID(knowledgeBase.creatorUid)) {
+      console.log("Knowledge base creatorUid is not a valid UUID");
+      return false;
+    }
+  }
+
+  // Validate creator object (optional, but if present must be valid User)
+  if ("creator" in knowledgeBase && knowledgeBase.creator !== null && knowledgeBase.creator !== undefined) {
+    if (!isValidCreator(knowledgeBase.creator)) {
+      console.log("Knowledge base creator is not a valid User object");
+      return false;
+    }
   }
 
   return true;
@@ -231,6 +413,63 @@ export function validateFileGRPC(file, isPrivate) {
   if (!("updateTime" in file)) {
     console.log("File has no updateTime field");
     return false;
+  }
+
+  // Validate ownerUid field (required, must be UUID)
+  if (!("ownerUid" in file)) {
+    console.log("File has no ownerUid field");
+    return false;
+  }
+  if (!isUUID(file.ownerUid)) {
+    console.log("File ownerUid is not a valid UUID");
+    return false;
+  }
+
+  // Validate ownerName field (required)
+  if (!("ownerName" in file)) {
+    console.log("File has no ownerName field");
+    return false;
+  }
+
+  // Validate owner object (optional but if present, must be valid)
+  if ("owner" in file && file.owner !== null && file.owner !== undefined) {
+    if (!file.owner.user && !file.owner.organization) {
+      console.log("File owner is neither user nor organization");
+      return false;
+    }
+  }
+
+  // Validate creatorUid field (required, must be UUID)
+  if (!("creatorUid" in file)) {
+    console.log("File has no creatorUid field");
+    return false;
+  }
+  if (!isUUID(file.creatorUid)) {
+    console.log("File creatorUid is not a valid UUID");
+    return false;
+  }
+
+  // Validate creator object (optional, but if present must be valid User)
+  if ("creator" in file && file.creator !== null && file.creator !== undefined) {
+    if (!isValidCreator(file.creator)) {
+      console.log("File creator is not a valid User object");
+      return false;
+    }
+  }
+
+  // Validate collectionUids field (optional, should be array if present)
+  if ("collectionUids" in file && file.collectionUids !== null && file.collectionUids !== undefined) {
+    if (!Array.isArray(file.collectionUids)) {
+      console.log("File collectionUids is not an array");
+      return false;
+    }
+    // Each element should be a valid UUID
+    for (const uid of file.collectionUids) {
+      if (!isUUID(uid)) {
+        console.log(`File collectionUids contains invalid UUID: ${uid}`);
+        return false;
+      }
+    }
   }
 
   return true;

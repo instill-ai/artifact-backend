@@ -17,6 +17,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	constantx "github.com/instill-ai/x/constant"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
@@ -138,8 +139,8 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 			KBID:              req.Id,
 			Description:       req.Description,
 			Tags:              req.Tags,
-			NamespaceUID:             ns.NsUID.String(),
-			CreatorUID:        creatorUUID,
+			NamespaceUID:      ns.NsUID.String(),
+			CreatorUID:        &creatorUUID,
 			KnowledgeBaseType: req.GetType().String(),
 			SystemUID:         system.UID,
 		},
@@ -151,13 +152,21 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 
 	activeCollectionUID := dbData.ActiveCollectionUID.String()
 
+	// Fetch owner and creator objects
+	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+	creator, _ := ph.service.FetchUserByUID(ctx, authUID)
+
 	knowledgeBase := &artifactpb.KnowledgeBase{
 		Name:                fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), dbData.KBID),
 		Uid:                 dbData.UID.String(),
 		Id:                  dbData.KBID,
 		Description:         dbData.Description,
 		Tags:                dbData.Tags,
-		OwnerName:           dbData.NamespaceUID,
+		OwnerName:           ns.Name(),
+		OwnerUid:            ns.NsUID.String(),
+		Owner:               owner,
+		CreatorUid:          &authUID,
+		Creator:             creator,
 		CreateTime:          timestamppb.New(*dbData.CreateTime),
 		UpdateTime:          timestamppb.New(*dbData.UpdateTime),
 		DownstreamApps:      []string{},
@@ -239,9 +248,22 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 		logger.Error("failed to get token counts", zap.Error(err))
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
+
+	// Fetch owner object once (same namespace for all KBs in this request)
+	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+
 	kbs := make([]*artifactpb.KnowledgeBase, len(dbData))
 	for i, kb := range dbData {
 		activeCollectionUID := kb.ActiveCollectionUID.String()
+
+		// Fetch creator object if creator_uid is set
+		var creator *mgmtpb.User
+		var creatorUIDStr *string
+		if kb.CreatorUID != nil {
+			uid := kb.CreatorUID.String()
+			creatorUIDStr = &uid
+			creator, _ = ph.service.FetchUserByUID(ctx, uid)
+		}
 
 		kbs[i] = &artifactpb.KnowledgeBase{
 			Uid:                 kb.UID.String(),
@@ -251,7 +273,11 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			Tags:                kb.Tags,
 			CreateTime:          timestamppb.New(*kb.CreateTime),
 			UpdateTime:          timestamppb.New(*kb.UpdateTime),
-			OwnerName:           kb.NamespaceUID,
+			OwnerName:           ns.Name(),
+			OwnerUid:            ns.NsUID.String(),
+			Owner:               owner,
+			CreatorUid:          creatorUIDStr,
+			Creator:             creator,
 			DownstreamApps:      []string{},
 			TotalFiles:          uint32(fileCounts[kb.UID]),
 			TotalTokens:         uint32(tokenCounts[kb.UID]),
@@ -351,6 +377,16 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
 	}
 
+	// Fetch owner and creator objects
+	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+	var creator *mgmtpb.User
+	var creatorUIDStr *string
+	if kb.CreatorUID != nil {
+		uid := kb.CreatorUID.String()
+		creatorUIDStr = &uid
+		creator, _ = ph.service.FetchUserByUID(ctx, uid)
+	}
+
 	// populate response
 	knowledgeBase := &artifactpb.KnowledgeBase{
 		Name:           fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), kb.KBID),
@@ -360,7 +396,11 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		Tags:           kb.Tags,
 		CreateTime:     timestamppb.New(*kb.CreateTime),
 		UpdateTime:     timestamppb.New(*kb.UpdateTime),
-		OwnerName:      kb.NamespaceUID,
+		OwnerName:      ns.Name(),
+		OwnerUid:       ns.NsUID.String(),
+		Owner:          owner,
+		CreatorUid:     creatorUIDStr,
+		Creator:        creator,
 		DownstreamApps: []string{},
 		TotalFiles:     uint32(fileCounts[kb.UID]),
 		TotalTokens:    uint32(tokenCounts[kb.UID]),
@@ -551,8 +591,15 @@ func (ph *PublicHandler) GetKnowledgeBase(ctx context.Context, req *artifactpb.G
 		return nil, fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized)
 	}
 
+	// Fetch owner and creator objects
+	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+	var creator *mgmtpb.User
+	if kb.CreatorUID != nil {
+		creator, _ = ph.service.FetchUserByUID(ctx, kb.CreatorUID.String())
+	}
+
 	// Convert to protobuf using the new converter
-	pbKnowledgeBase := convertKBToCatalogPB(kb, ns)
+	pbKnowledgeBase := convertKBToCatalogPB(kb, ns, owner, creator)
 
 	return &artifactpb.GetKnowledgeBaseResponse{
 		KnowledgeBase: pbKnowledgeBase,

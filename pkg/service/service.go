@@ -25,6 +25,8 @@ type Service interface {
 	CheckNamespacePermission(context.Context, *resource.Namespace) error
 	SearchChunks(context.Context, types.OwnerUIDType, *artifactpb.SearchChunksRequest, [][]float32) ([]SimChunk, error)
 	GetNamespaceByNsID(context.Context, string) (*resource.Namespace, error)
+	FetchUserByUID(context.Context, string) (*mgmtpb.User, error)
+	FetchOwnerByNamespace(context.Context, *resource.Namespace) (*mgmtpb.Owner, error)
 	GetChunksByFile(context.Context, *repository.KnowledgeBaseFileModel) (types.SourceTableType, types.SourceUIDType, []repository.TextChunkModel, []string, error)
 	GetConvertedFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
 	GetTextChunkFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)

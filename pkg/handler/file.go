@@ -122,12 +122,17 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		)
 	}
 
+	// Validate user-provided tags don't use reserved prefixes
+	if err := validateUserTags(req.GetFile().GetTags()); err != nil {
+		return nil, err
+	}
+
 	// upload file to minio and database
 	// Inherit RAG version from parent knowledge base
 	kbFile := repository.KnowledgeBaseFileModel{
 		Filename:                  req.GetFile().GetFilename(),
 		FileType:                  req.File.Type.String(),
-		NamespaceUID:                     ns.NsUID,
+		NamespaceUID:              ns.NsUID,
 		KBUID:                     kb.UID,
 		ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
 		ExternalMetadataUnmarshal: md,
@@ -471,12 +476,19 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			zap.Bool("hasDualProcessing", dualTarget != nil && dualTarget.IsNeeded))
 	}
 
+	// Fetch owner and creator objects
+	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+	creator, _ := ph.service.FetchUserByUID(ctx, res.CreatorUID.String())
+
 	return &artifactpb.CreateFileResponse{
 		File: &artifactpb.File{
 			Uid:                res.UID.String(),
 			Id:                 res.UID.String(),
-			NamespaceUid:           res.NamespaceUID.String(),
+			OwnerUid:           res.NamespaceUID.String(),
+			OwnerName:          ns.Name(),
+			Owner:              owner,
 			CreatorUid:         res.CreatorUID.String(),
+			Creator:            creator,
 			KnowledgeBaseUid:   res.KBUID.String(),
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, res.UID.String()),
 			Filename:           res.Filename,
@@ -490,6 +502,8 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			ExternalMetadata:   res.PublicExternalMetadataUnmarshal(),
 			ObjectUid:          req.File.ObjectUid,
 			ConvertingPipeline: res.ConvertingPipeline(),
+			Tags:               res.Tags,
+			CollectionUids:     extractCollectionUIDs(res.Tags),
 		},
 	}, nil
 }
@@ -605,6 +619,9 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		)
 	}
 
+	// Fetch owner once (same for all files in this KB)
+	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+
 	files := make([]*artifactpb.File, 0, len(kbFileList.Files))
 	for _, kbFile := range kbFileList.Files {
 		objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.Destination, "/")[1], "obj-"))
@@ -665,11 +682,17 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			downloadURL = response.GetDownloadUrl()
 		}
 
+		// Fetch creator for this file (owner is the same for all files in this KB)
+		creator, _ := ph.service.FetchUserByUID(ctx, kbFile.CreatorUID.String())
+
 		file := &artifactpb.File{
 			Uid:                kbFile.UID.String(),
 			Id:                 kbFile.UID.String(),
-			NamespaceUid:           kbFile.NamespaceUID.String(),
+			OwnerUid:           kbFile.NamespaceUID.String(),
+			OwnerName:          ns.Name(),
+			Owner:              owner,
 			CreatorUid:         kbFile.CreatorUID.String(),
+			Creator:            creator,
 			KnowledgeBaseUid:   kbFile.KBUID.String(),
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, kbFile.UID.String()),
 			Filename:           kbFile.Filename,
@@ -685,6 +708,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
 			Tags:               []string(kbFile.Tags),
+			CollectionUids:     extractCollectionUIDs(kbFile.Tags),
 		}
 
 		// Include status message (error or success message)
@@ -1542,6 +1566,10 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 				// Update external metadata
 				updates[repository.KnowledgeBaseFileColumn.ExternalMetadata] = req.File.ExternalMetadata
 			case "tags":
+				// Validate user-provided tags don't use reserved prefixes
+				if err := validateUserTags(req.File.Tags); err != nil {
+					return nil, err
+				}
 				// Update tags
 				updates[repository.KnowledgeBaseFileColumn.Tags] = req.File.Tags
 			default:
@@ -1584,8 +1612,12 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 		}
 	}
 
+	// Fetch owner and creator objects
+	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+	creator, _ := ph.service.FetchUserByUID(ctx, updatedFile.CreatorUID.String())
+
 	// Convert to protobuf
-	pbFile := convertKBFileToPB(updatedFile, ns, kb)
+	pbFile := convertKBFileToPB(updatedFile, ns, kb, owner, creator)
 
 	return &artifactpb.UpdateFileResponse{
 		File: pbFile,
@@ -1739,8 +1771,12 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 		zap.String("filename", file.Filename),
 		zap.String("kbUID", kb.UID.String()))
 
+	// Fetch owner and creator objects
+	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+	creator, _ := ph.service.FetchUserByUID(ctx, updatedFile.CreatorUID.String())
+
 	// Convert to protobuf response with updated file status
-	pbFile := convertKBFileToPB(&updatedFile, ns, kb)
+	pbFile := convertKBFileToPB(&updatedFile, ns, kb, owner, creator)
 
 	return &artifactpb.ReprocessFileResponse{
 		File:    pbFile,

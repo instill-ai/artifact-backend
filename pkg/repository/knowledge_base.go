@@ -130,17 +130,18 @@ type KnowledgeBaseWithConfig struct {
 
 // KnowledgeBaseModel defines the structure of a knowledge base
 type KnowledgeBaseModel struct {
-	UID         types.KBUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
-	KBID        string          `gorm:"column:id;size:255;not null" json:"kb_id"`
-	Description string          `gorm:"column:description;size:1023" json:"description"`
-	Tags        TagsArray       `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
-	NamespaceUID string         `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
-	CreateTime  *time.Time      `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime  *time.Time      `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
-	DeleteTime  gorm.DeletedAt  `gorm:"column:delete_time;index" json:"delete_time"`
-	// creator
-	CreatorUID types.CreatorUIDType `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
-	Usage      int64                `gorm:"column:usage;not null;default:0" json:"usage"`
+	UID          types.KBUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
+	KBID         string          `gorm:"column:id;size:255;not null" json:"kb_id"`
+	Description  string          `gorm:"column:description;size:1023" json:"description"`
+	Tags         TagsArray       `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
+	NamespaceUID string          `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
+	CreateTime   *time.Time      `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime   *time.Time      `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
+	DeleteTime   gorm.DeletedAt  `gorm:"column:delete_time;index" json:"delete_time"`
+	// creator - nullable for system-created knowledge bases (e.g., instill-agent)
+	// Use pointer to allow NULL in database
+	CreatorUID *types.CreatorUIDType `gorm:"column:creator_uid;type:uuid" json:"creator_uid"`
+	Usage      int64                 `gorm:"column:usage;not null;default:0" json:"usage"`
 	// this type is defined in artifact/artifact/v1alpha/knowledge_base.proto
 	KnowledgeBaseType string `gorm:"column:knowledge_base_type;size:255" json:"knowledge_base_type"`
 

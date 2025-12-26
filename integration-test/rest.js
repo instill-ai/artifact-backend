@@ -19,32 +19,36 @@ export let options = {
   // When running in parallel with other test files, without staggering all scenarios
   // start simultaneously which causes rate limiting
   scenarios: {
-    // Basic CRUD operations (0-4s stagger)
+    // Basic CRUD operations (0-6s stagger)
     test_02_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_CreateKnowledgeBase', startTime: '0s' },
     test_03_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_ListKnowledgeBases', startTime: '1s' },
     test_04_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_GetKnowledgeBase', startTime: '2s' },
     test_05_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_UpdateKnowledgeBase', startTime: '3s' },
     test_06_delete_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_DeleteKnowledgeBase', startTime: '4s' },
+    test_23_owner_creator_fields: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_23_OwnerCreatorFields', startTime: '5s' },
+    test_24_reserved_tags_validation: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_24_ReservedTagsValidation', startTime: '6s' },
 
-    // End-to-end tests (5-6s stagger)
-    test_07_cleanup_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_CleanupFiles', startTime: '5s' },
-    test_08_e2e_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_E2EKnowledgeBase', startTime: '6s' },
+    // End-to-end tests (7-8s stagger)
+    test_07_cleanup_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_CleanupFiles', startTime: '7s' },
+    test_08_e2e_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_E2EKnowledgeBase', startTime: '8s' },
 
-    // JWT/Auth tests (7-17s stagger)
-    test_09_jwt_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_JWT_CreateKnowledgeBase', startTime: '7s' },
-    test_10_jwt_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_JWT_ListKnowledgeBases', startTime: '8s' },
-    test_11_jwt_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_JWT_GetKnowledgeBase', startTime: '9s' },
-    test_12_jwt_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_JWT_UpdateKnowledgeBase', startTime: '10s' },
-    test_13_jwt_create_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_JWT_CreateFile', startTime: '11s' },
-    test_14_jwt_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_JWT_ListFiles', startTime: '12s' },
-    test_15_jwt_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_JWT_GetFile', startTime: '13s' },
-    test_16_jwt_get_file_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_JWT_GetFileContent', startTime: '14s' },
-    test_17_jwt_get_file_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_JWT_GetFileSummary', startTime: '15s' },
-    test_18_jwt_list_chunks: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_JWT_ListChunks', startTime: '16s' },
-    test_19_jwt_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_JWT_GetFileCache', startTime: '17s' },
-    test_20_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GetFileCache', startTime: '18s' },
-    test_21_get_file_cache_renewal: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GetFileCacheRenewal', startTime: '19s' },
-    test_22_get_file_cache_large_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_GetFileCacheLargeFile', startTime: '20s' },
+    // JWT/Auth tests (9-19s stagger)
+    test_09_jwt_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_JWT_CreateKnowledgeBase', startTime: '9s' },
+    test_10_jwt_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_JWT_ListKnowledgeBases', startTime: '10s' },
+    test_11_jwt_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_JWT_GetKnowledgeBase', startTime: '11s' },
+    test_12_jwt_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_JWT_UpdateKnowledgeBase', startTime: '12s' },
+    test_13_jwt_create_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_JWT_CreateFile', startTime: '13s' },
+    test_14_jwt_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_JWT_ListFiles', startTime: '14s' },
+    test_15_jwt_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_JWT_GetFile', startTime: '15s' },
+    test_16_jwt_get_file_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_JWT_GetFileContent', startTime: '16s' },
+    test_17_jwt_get_file_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_JWT_GetFileSummary', startTime: '17s' },
+    test_18_jwt_list_chunks: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_JWT_ListChunks', startTime: '18s' },
+    test_19_jwt_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_JWT_GetFileCache', startTime: '19s' },
+
+    // File cache tests (20-22s stagger)
+    test_20_get_file_cache: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GetFileCache', startTime: '20s' },
+    test_21_get_file_cache_renewal: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GetFileCacheRenewal', startTime: '21s' },
+    test_22_get_file_cache_large_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_GetFileCacheLargeFile', startTime: '22s' },
   },
 };
 
@@ -170,6 +174,19 @@ export function TEST_02_CreateKnowledgeBase(data) {
         cat && typeof createTime === 'string' && createTime.length > 0,
       "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base updateTime": () =>
         cat && typeof updateTime === 'string' && updateTime.length > 0,
+      // Owner/Creator field validations
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base ownerUid is valid UUID": () =>
+        cat && helper.isUUID(cat.ownerUid),
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base ownerName matches namespace": () =>
+        cat && cat.ownerName === `users/${data.expectedOwner.id}`,
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base creatorUid is valid UUID": () =>
+        cat && helper.isUUID(cat.creatorUid),
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base creatorUid matches user": () =>
+        cat && cat.creatorUid === data.expectedOwner.uid,
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base has valid owner object": () =>
+        cat && cat.owner && cat.owner.user && cat.owner.user.id === data.expectedOwner.id,
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base has valid creator object": () =>
+        cat && helper.isValidCreator(cat.creator, data.expectedOwner),
     });
 
     // Cleanup
@@ -477,7 +494,15 @@ export function TEST_08_E2EKnowledgeBase(data) {
       const tags = uploadReqs[i].tags;
       const fJson = (function () { try { return resp.json(); } catch (e) { return {}; } })();
       const file = (fJson && fJson.file) || {};
-      check(resp, { [`E2E: File uploaded (${s.originalName})`]: (r) => r.status === 200 });
+      check(resp, {
+        [`E2E: File uploaded (${s.originalName})`]: (r) => r.status === 200,
+        [`E2E: File has valid structure (${s.originalName})`]: () => file && helper.validateFile(file, false),
+        [`E2E: File ownerUid is valid UUID (${s.originalName})`]: () => file && helper.isUUID(file.ownerUid),
+        [`E2E: File ownerName matches namespace (${s.originalName})`]: () => file && file.ownerName === `users/${data.expectedOwner.id}`,
+        [`E2E: File creatorUid is valid UUID (${s.originalName})`]: () => file && helper.isUUID(file.creatorUid),
+        [`E2E: File creatorUid matches user (${s.originalName})`]: () => file && file.creatorUid === data.expectedOwner.uid,
+        [`E2E: File has valid creator object (${s.originalName})`]: () => file && helper.isValidCreator(file.creator, data.expectedOwner),
+      });
       if (file && file.uid) {
         uploaded.push({ fileUid: file.uid, fileId: file.id, filename: filename, type: s.type, tags: tags });
       } else {
@@ -565,6 +590,11 @@ export function TEST_08_E2EKnowledgeBase(data) {
               fileData && fileData.filename === f.filename &&
               fileData.processStatus === "FILE_PROCESS_STATUS_COMPLETED" &&
               fileData.totalChunks > 0 && fileData.totalTokens > 0,
+            // Owner/Creator validations on file list
+            [`E2E: Listed file has valid ownerUid (${f.type})`]: () => fileData && helper.isUUID(fileData.ownerUid),
+            [`E2E: Listed file ownerName matches namespace (${f.type})`]: () => fileData && fileData.ownerName === `users/${data.expectedOwner.id}`,
+            [`E2E: Listed file has valid creatorUid (${f.type})`]: () => fileData && helper.isUUID(fileData.creatorUid),
+            [`E2E: Listed file has valid creator (${f.type})`]: () => fileData && helper.isValidCreator(fileData.creator, data.expectedOwner),
           });
         } catch (e) {
           console.log(`E2E: Error verifying metadata for ${f.filename} (${f.type}): ${e}`);
@@ -1415,5 +1445,336 @@ export function TEST_22_GetFileCacheLargeFile(data) {
     }
 
     deleteKBAuthenticated(data, created.id);
+  });
+}
+
+// ============================================================================
+// TEST GROUP 23: Owner and Creator Fields Validation
+// ============================================================================
+export function TEST_23_OwnerCreatorFields(data) {
+  const groupName = "Artifact API: Owner and Creator Fields Validation";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // Create knowledge base
+    // Note: KB ID must be <= 32 chars. dbIDPrefix already includes "test-" prefix
+    const kbReqBody = {
+      id: data.dbIDPrefix + "oc-" + randomString(8),
+      description: "Test knowledge base for owner/creator validation",
+      tags: ["test", "owner-creator"],
+      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+    };
+
+    const kbRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+      JSON.stringify(kbReqBody),
+      data.header
+    );
+    let kbJson; try { kbJson = kbRes.json(); } catch (e) { kbJson = {}; }
+    const kb = kbJson.knowledgeBase || {};
+
+    // Validate knowledge base owner/creator fields
+    check(kbRes, {
+      "KB: Response status is 200": (r) => r.status === 200,
+      "KB: ownerUid is valid UUID": () => kb && helper.isUUID(kb.ownerUid),
+      "KB: ownerUid matches user uid": () => kb && kb.ownerUid === data.expectedOwner.uid,
+      "KB: ownerName matches namespace path": () => kb && kb.ownerName === `users/${data.expectedOwner.id}`,
+      "KB: owner object exists and is valid": () => kb && kb.owner && kb.owner.user,
+      "KB: owner.user.id matches expected user": () => kb && kb.owner && kb.owner.user && kb.owner.user.id === data.expectedOwner.id,
+      "KB: owner.user.uid matches expected uid": () => kb && kb.owner && kb.owner.user && kb.owner.user.uid === data.expectedOwner.uid,
+      "KB: creatorUid is valid UUID": () => kb && helper.isUUID(kb.creatorUid),
+      "KB: creatorUid matches user uid": () => kb && kb.creatorUid === data.expectedOwner.uid,
+      "KB: creator object exists and is valid": () => kb && helper.isValidCreator(kb.creator, data.expectedOwner),
+      "KB: creator.id matches expected user": () => kb && kb.creator && kb.creator.id === data.expectedOwner.id,
+      "KB: creator.uid matches expected uid": () => kb && kb.creator && kb.creator.uid === data.expectedOwner.uid,
+    });
+
+    if (!kb || !kb.id) {
+      console.log("Owner/Creator test: Failed to create knowledge base, skipping file tests");
+      return;
+    }
+
+    // Create a file in the knowledge base
+    const fileReqBody = {
+      filename: data.dbIDPrefix + "owner-creator-test.txt",
+      type: "TYPE_TEXT",
+      content: constant.docSampleTxt,
+      tags: ["test-file"]
+    };
+
+    const fileRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
+      JSON.stringify(fileReqBody),
+      data.header
+    );
+    let fileJson; try { fileJson = fileRes.json(); } catch (e) { fileJson = {}; }
+    const file = fileJson.file || {};
+
+    // Validate file owner/creator fields
+    check(fileRes, {
+      "File: Response status is 200": (r) => r.status === 200,
+      "File: ownerUid is valid UUID": () => file && helper.isUUID(file.ownerUid),
+      "File: ownerUid matches user uid": () => file && file.ownerUid === data.expectedOwner.uid,
+      "File: ownerName matches namespace path": () => file && file.ownerName === `users/${data.expectedOwner.id}`,
+      "File: owner object exists and is valid": () => file && file.owner && file.owner.user,
+      "File: owner.user.id matches expected user": () => file && file.owner && file.owner.user && file.owner.user.id === data.expectedOwner.id,
+      "File: creatorUid is valid UUID": () => file && helper.isUUID(file.creatorUid),
+      "File: creatorUid matches user uid": () => file && file.creatorUid === data.expectedOwner.uid,
+      "File: creator object exists and is valid": () => file && helper.isValidCreator(file.creator, data.expectedOwner),
+      "File: creator.id matches expected user": () => file && file.creator && file.creator.id === data.expectedOwner.id,
+      "File: creator.uid matches expected uid": () => file && file.creator && file.creator.uid === data.expectedOwner.uid,
+      "File: collectionUids is array (or undefined)": () => file && (!file.collectionUids || Array.isArray(file.collectionUids)),
+    });
+
+    // Verify owner/creator fields persist after fetching the knowledge base
+    const getKbRes = http.request(
+      "GET",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}`,
+      null,
+      data.header
+    );
+    let getKbJson; try { getKbJson = getKbRes.json(); } catch (e) { getKbJson = {}; }
+    const fetchedKb = getKbJson.knowledgeBase || {};
+
+    check(getKbRes, {
+      "Get KB: Response status is 200": (r) => r.status === 200,
+      "Get KB: ownerUid is preserved": () => fetchedKb && fetchedKb.ownerUid === data.expectedOwner.uid,
+      "Get KB: ownerName is preserved": () => fetchedKb && fetchedKb.ownerName === `users/${data.expectedOwner.id}`,
+      "Get KB: creatorUid is preserved": () => fetchedKb && fetchedKb.creatorUid === data.expectedOwner.uid,
+      "Get KB: owner object is populated": () => fetchedKb && fetchedKb.owner && fetchedKb.owner.user,
+      "Get KB: creator object is populated": () => fetchedKb && fetchedKb.creator && fetchedKb.creator.id === data.expectedOwner.id,
+    });
+
+    // Verify owner/creator fields persist when listing knowledge bases
+    const listKbRes = http.request(
+      "GET",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+      null,
+      data.header
+    );
+    let listKbJson; try { listKbJson = listKbRes.json(); } catch (e) { listKbJson = {}; }
+    const kbList = Array.isArray(listKbJson.knowledgeBases) ? listKbJson.knowledgeBases : [];
+    const listedKb = kbList.find(k => k.id === kb.id);
+
+    check(listKbRes, {
+      "List KB: Response status is 200": (r) => r.status === 200,
+      "List KB: Our KB is in the list": () => listedKb !== undefined,
+      "List KB: ownerUid is preserved": () => listedKb && listedKb.ownerUid === data.expectedOwner.uid,
+      "List KB: ownerName is preserved": () => listedKb && listedKb.ownerName === `users/${data.expectedOwner.id}`,
+      "List KB: owner object is populated": () => listedKb && listedKb.owner && listedKb.owner.user,
+      "List KB: owner.user.id matches": () => listedKb && listedKb.owner && listedKb.owner.user && listedKb.owner.user.id === data.expectedOwner.id,
+      "List KB: creatorUid is preserved": () => listedKb && listedKb.creatorUid === data.expectedOwner.uid,
+      "List KB: creator object is populated": () => listedKb && helper.isValidCreator(listedKb.creator, data.expectedOwner),
+    });
+
+    // Verify owner/creator fields persist when fetching the file
+    if (file && file.uid) {
+      const getFileRes = http.request(
+        "GET",
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files/${file.uid}`,
+        null,
+        data.header
+      );
+      let getFileJson; try { getFileJson = getFileRes.json(); } catch (e) { getFileJson = {}; }
+      const fetchedFile = getFileJson.file || {};
+
+      check(getFileRes, {
+        "Get File: Response status is 200": (r) => r.status === 200,
+        "Get File: ownerUid is preserved": () => fetchedFile && fetchedFile.ownerUid === data.expectedOwner.uid,
+        "Get File: ownerName is preserved": () => fetchedFile && fetchedFile.ownerName === `users/${data.expectedOwner.id}`,
+        "Get File: creatorUid is preserved": () => fetchedFile && fetchedFile.creatorUid === data.expectedOwner.uid,
+        "Get File: owner object is populated": () => fetchedFile && fetchedFile.owner && fetchedFile.owner.user,
+        "Get File: creator object is populated": () => fetchedFile && fetchedFile.creator && fetchedFile.creator.id === data.expectedOwner.id,
+      });
+
+      // Verify owner/creator fields persist when listing files
+      const listFilesRes = http.request(
+        "GET",
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
+        null,
+        data.header
+      );
+      let listFilesJson; try { listFilesJson = listFilesRes.json(); } catch (e) { listFilesJson = {}; }
+      const fileList = Array.isArray(listFilesJson.files) ? listFilesJson.files : [];
+      const listedFile = fileList.find(f => f.uid === file.uid);
+
+      check(listFilesRes, {
+        "List Files: Response status is 200": (r) => r.status === 200,
+        "List Files: Our file is in the list": () => listedFile !== undefined,
+        "List Files: ownerUid is preserved": () => listedFile && listedFile.ownerUid === data.expectedOwner.uid,
+        "List Files: ownerName is preserved": () => listedFile && listedFile.ownerName === `users/${data.expectedOwner.id}`,
+        "List Files: owner object is populated": () => listedFile && listedFile.owner && listedFile.owner.user,
+        "List Files: owner.user.id matches": () => listedFile && listedFile.owner && listedFile.owner.user && listedFile.owner.user.id === data.expectedOwner.id,
+        "List Files: creatorUid is preserved": () => listedFile && listedFile.creatorUid === data.expectedOwner.uid,
+        "List Files: creator object is populated": () => listedFile && helper.isValidCreator(listedFile.creator, data.expectedOwner),
+      });
+    }
+
+    // Cleanup
+    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}`, null, data.header);
+  });
+}
+
+// ============================================================================
+// TEST GROUP 24: Reserved Tags Validation and CollectionUIDs
+// ============================================================================
+export function TEST_24_ReservedTagsValidation(data) {
+  const groupName = "Artifact API: Reserved Tags Validation and CollectionUIDs";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // Create knowledge base for testing
+    // Note: KB ID must be <= 32 chars. dbIDPrefix already includes "test-" prefix
+    const kbReqBody = {
+      id: data.dbIDPrefix + "tg-" + randomString(8),
+      description: "Test knowledge base for reserved tags validation",
+      tags: ["test"],
+      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+    };
+
+    const kbRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
+      JSON.stringify(kbReqBody),
+      data.header
+    );
+    let kbJson; try { kbJson = kbRes.json(); } catch (e) { kbJson = {}; }
+    const kb = kbJson.knowledgeBase || {};
+
+    if (!kb || !kb.id) {
+      console.log("Reserved tags test: Failed to create knowledge base, skipping tests");
+      return;
+    }
+
+    // Test 1: Create file with normal tags - should succeed
+    const normalTagsBody = {
+      filename: data.dbIDPrefix + "normal-tags.txt",
+      type: "TYPE_TEXT",
+      content: constant.docSampleTxt,
+      tags: ["user-tag", "another-tag", "my-custom-tag"]
+    };
+
+    const normalRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
+      JSON.stringify(normalTagsBody),
+      data.header
+    );
+    let normalJson; try { normalJson = normalRes.json(); } catch (e) { normalJson = {}; }
+    const normalFile = normalJson.file || {};
+
+    check(normalRes, {
+      "Normal tags: File created successfully (200)": (r) => r.status === 200,
+      "Normal tags: File has correct tags": () => normalFile && Array.isArray(normalFile.tags) && normalFile.tags.length === 3,
+      "Normal tags: collectionUids is empty array": () => normalFile && Array.isArray(normalFile.collectionUids) && normalFile.collectionUids.length === 0,
+    });
+
+    // Test 2: Try to create file with agent:collection: prefix - should be rejected
+    const agentTagBody = {
+      filename: data.dbIDPrefix + "agent-tag.txt",
+      type: "TYPE_TEXT",
+      content: constant.docSampleTxt,
+      tags: ["user-tag", "agent:collection:fake-uid-12345"]
+    };
+
+    const agentRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
+      JSON.stringify(agentTagBody),
+      data.header
+    );
+
+    check(agentRes, {
+      "Reserved agent: tag: Request rejected (400)": (r) => r.status === 400,
+      "Reserved agent: tag: Error message mentions reserved": (r) => {
+        try {
+          const body = r.json();
+          const msg = body.message || body.error || JSON.stringify(body);
+          return msg.toLowerCase().includes("reserved");
+        } catch (e) {
+          return false;
+        }
+      },
+    });
+
+    // Test 3: Try to create file with instill- prefix - should be rejected
+    const instillTagBody = {
+      filename: data.dbIDPrefix + "instill-tag.txt",
+      type: "TYPE_TEXT",
+      content: constant.docSampleTxt,
+      tags: ["user-tag", "instill-internal-system-tag"]
+    };
+
+    const instillRes = http.request(
+      "POST",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
+      JSON.stringify(instillTagBody),
+      data.header
+    );
+
+    check(instillRes, {
+      "Reserved instill- tag: Request rejected (400)": (r) => r.status === 400,
+      "Reserved instill- tag: Error message mentions reserved": (r) => {
+        try {
+          const body = r.json();
+          const msg = body.message || body.error || JSON.stringify(body);
+          return msg.toLowerCase().includes("reserved");
+        } catch (e) {
+          return false;
+        }
+      },
+    });
+
+    // Test 4: Try to UPDATE file with reserved tags - should be rejected
+    if (normalFile && normalFile.uid) {
+      const updateBody = {
+        tags: ["user-tag", "agent:collection:another-fake-uid"]
+      };
+
+      const updateRes = http.request(
+        "PATCH",
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files/${normalFile.uid}?updateMask=tags`,
+        JSON.stringify(updateBody),
+        data.header
+      );
+
+      check(updateRes, {
+        "Update with reserved tag: Request rejected (400)": (r) => r.status === 400,
+        "Update with reserved tag: Error message mentions reserved": (r) => {
+          try {
+            const body = r.json();
+            const msg = body.message || body.error || JSON.stringify(body);
+            return msg.toLowerCase().includes("reserved");
+          } catch (e) {
+            return false;
+          }
+        },
+      });
+
+      // Test 5: Update file with normal tags - should succeed
+      const normalUpdateBody = {
+        tags: ["updated-tag", "new-tag"]
+      };
+
+      const normalUpdateRes = http.request(
+        "PATCH",
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files/${normalFile.uid}?updateMask=tags`,
+        JSON.stringify(normalUpdateBody),
+        data.header
+      );
+      let normalUpdateJson; try { normalUpdateJson = normalUpdateRes.json(); } catch (e) { normalUpdateJson = {}; }
+      const updatedFile = normalUpdateJson.file || {};
+
+      check(normalUpdateRes, {
+        "Update with normal tags: Succeeds (200)": (r) => r.status === 200,
+        "Update with normal tags: Tags updated correctly": () => updatedFile && Array.isArray(updatedFile.tags) && updatedFile.tags.includes("updated-tag"),
+        "Update with normal tags: collectionUids still empty": () => updatedFile && Array.isArray(updatedFile.collectionUids) && updatedFile.collectionUids.length === 0,
+      });
+    }
+
+    // Cleanup
+    http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}`, null, data.header);
   });
 }
