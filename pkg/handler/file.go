@@ -370,7 +370,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		targetFile := repository.KnowledgeBaseFileModel{
 			Filename:                  res.Filename,
 			FileType:                  res.FileType,
-			NamespaceUID:                     res.NamespaceUID,
+			NamespaceUID:              res.NamespaceUID,
 			CreatorUID:                res.CreatorUID,
 			KBUID:                     dualTarget.TargetKB.UID, // Different KB (staging or rollback)
 			Destination:               res.Destination,         // Same source file
