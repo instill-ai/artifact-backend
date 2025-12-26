@@ -469,10 +469,16 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseID
 				WorkflowExecutionTimeout: 24 * time.Hour,
 			}
 
+			// Use creator UID as requester, or owner UID if no creator (system KB)
+			requesterUID := types.RequesterUIDType(ownerUID)
+			if kb.CreatorUID != nil {
+				requesterUID = types.RequesterUIDType(*kb.CreatorUID)
+			}
+
 			_, err = w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.UpdateKnowledgeBaseWorkflow, UpdateKnowledgeBaseWorkflowParam{
 				OriginalKBUID:         kb.UID,
 				UserUID:               types.UserUIDType(ownerUID),
-				RequesterUID:          types.RequesterUIDType(kb.CreatorUID),
+				RequesterUID:          requesterUID,
 				SystemID:              systemID,
 				RollbackRetentionDays: config.Config.RAG.Update.RollbackRetentionDays,
 				FileBatchSize:         config.Config.RAG.Update.FileBatchSize,

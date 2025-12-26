@@ -49,6 +49,7 @@ export let options = {
     test_14_get_object: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_GetObject' },
     test_15_get_object_url: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_GetObjectURL' },
     test_16_update_object: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_UpdateObject' },
+    test_17_create_kb_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_CreateKnowledgeBaseAdmin' },
   },
 };
 
@@ -594,5 +595,83 @@ export function TEST_16_UpdateObject(data) {
     });
 
     privateClient.close();
+  });
+}
+
+// ============================================================================
+// TEST 17: CreateKnowledgeBaseAdmin (Private gRPC)
+// Tests creating a system knowledge base without a creator
+// ============================================================================
+export function TEST_17_CreateKnowledgeBaseAdmin(data) {
+  const groupName = "Artifact API: Create Knowledge Base Admin (private gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    if (constant.apiGatewayMode) {
+      check(true, { "skipped: apiGatewayMode enabled": () => true });
+      return;
+    }
+
+    privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const systemKbId = `system-kb-${dbIDPrefix}`;
+
+    // Create a system knowledge base without a creator using the admin endpoint
+    // Admin endpoints can set reserved tags that public APIs cannot (agent:, instill-)
+    var createRes = privateClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
+      {
+        namespace_id: constant.defaultUserId,
+        id: systemKbId,
+        description: "System knowledge base created via admin endpoint (no creator)",
+        tags: ["instill-internal", "agent:system", "system-kb"],
+        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+      },
+      data.metadata
+    );
+    check(createRes, {
+      "CreateKnowledgeBaseAdmin returns StatusOK": (r) => r.status === grpc.StatusOK,
+      "CreateKnowledgeBaseAdmin returns knowledge_base": (r) => !!r.message && !!r.message.knowledge_base,
+      "CreateKnowledgeBaseAdmin returns correct id": (r) => r.message?.knowledge_base?.id === systemKbId,
+      "CreateKnowledgeBaseAdmin has no creator_uid": (r) => !r.message?.knowledge_base?.creator_uid || r.message?.knowledge_base?.creator_uid === "",
+      "CreateKnowledgeBaseAdmin can use reserved tags": (r) => {
+        const tags = r.message?.knowledge_base?.tags || [];
+        return tags.includes("instill-internal") && tags.includes("agent:system");
+      },
+    });
+
+    // Verify the KB exists by getting it via public API
+    if (createRes.status === grpc.StatusOK) {
+      var getRes = publicClient.invoke(
+        "artifact.artifact.v1alpha.ArtifactPublicService/GetKnowledgeBase",
+        {
+          namespace_id: constant.defaultUserId,
+          knowledge_base_id: systemKbId,
+        },
+        data.metadata
+      );
+      check(getRes, {
+        "GetKnowledgeBase returns StatusOK": (r) => r.status === grpc.StatusOK,
+        "GetKnowledgeBase returns the system KB": (r) => r.message?.knowledge_base?.id === systemKbId,
+        "System KB has no creator_uid (null/empty)": (r) => !r.message?.knowledge_base?.creator_uid || r.message?.knowledge_base?.creator_uid === "",
+      });
+
+      // Cleanup: Delete the test KB
+      var deleteRes = publicClient.invoke(
+        "artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
+        {
+          namespace_id: constant.defaultUserId,
+          knowledge_base_id: systemKbId,
+        },
+        data.metadata
+      );
+      check(deleteRes, {
+        "DeleteKnowledgeBase cleanup succeeds": (r) => r.status === grpc.StatusOK,
+      });
+    }
+
+    privateClient.close();
+    publicClient.close();
   });
 }
