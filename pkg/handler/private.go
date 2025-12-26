@@ -21,6 +21,7 @@ import (
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	constantx "github.com/instill-ai/x/constant"
 	logx "github.com/instill-ai/x/log"
 )
@@ -139,6 +140,164 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 			CreateTime:  timestamppb.New(*dbData.CreateTime),
 			UpdateTime:  timestamppb.New(*dbData.UpdateTime),
 		},
+	}, nil
+}
+
+// UpdateKnowledgeBaseAdmin updates a knowledge base with system-reserved tags (admin only).
+// Unlike the public UpdateKnowledgeBase, this endpoint:
+// - Does NOT validate reserved tag prefixes (allows "instill-", "agent:" etc.)
+// - Does NOT require ACL checks (admin-only access)
+func (h *PrivateHandler) UpdateKnowledgeBaseAdmin(ctx context.Context, req *artifactpb.UpdateKnowledgeBaseAdminRequest) (*artifactpb.UpdateKnowledgeBaseAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+	logger.Info("UpdateKnowledgeBaseAdmin called",
+		zap.String("namespace_id", req.GetNamespaceId()),
+		zap.String("knowledge_base_id", req.GetKnowledgeBaseId()))
+
+	// Validate required fields
+	if req.GetNamespaceId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace_id is required")
+	}
+	if req.GetKnowledgeBaseId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "knowledge_base_id is required")
+	}
+
+	// Get namespace
+	ns, err := h.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		logger.Error("failed to get namespace", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
+	}
+
+	// Get existing knowledge base
+	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetKnowledgeBaseId())
+	if err != nil {
+		logger.Error("failed to get knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
+	}
+
+	// Build update model - admin can set any tags including reserved ones
+	updateModel := repository.KnowledgeBaseModel{}
+	if req.UpdateMask != nil {
+		for _, path := range req.UpdateMask.Paths {
+			switch path {
+			case "description":
+				updateModel.Description = req.GetKnowledgeBase().GetDescription()
+			case "tags":
+				// Admin endpoint: NO validation of reserved tags
+				updateModel.Tags = req.GetKnowledgeBase().GetTags()
+			}
+		}
+	}
+
+	// Update knowledge base
+	updatedKB, err := h.service.Repository().UpdateKnowledgeBase(
+		ctx,
+		req.GetKnowledgeBaseId(),
+		ns.NsUID.String(),
+		updateModel,
+	)
+	if err != nil {
+		logger.Error("failed to update knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to update knowledge base: %v", err)
+	}
+
+	// Fetch owner for response
+	owner, _ := h.service.FetchOwnerByNamespace(ctx, ns)
+
+	logger.Info("UpdateKnowledgeBaseAdmin completed",
+		zap.String("uid", kb.UID.String()),
+		zap.String("id", kb.KBID))
+
+	return &artifactpb.UpdateKnowledgeBaseAdminResponse{
+		KnowledgeBase: convertKBToCatalogPB(updatedKB, ns, owner, nil),
+	}, nil
+}
+
+// UpdateFileAdmin updates a file with system-reserved tags (admin only).
+// Unlike the public UpdateFile, this endpoint:
+// - Does NOT validate reserved tag prefixes (allows "agent:collection:{uid}" etc.)
+// - Does NOT require ACL checks (admin-only access)
+func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.UpdateFileAdminRequest) (*artifactpb.UpdateFileAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+	logger.Info("UpdateFileAdmin called",
+		zap.String("namespace_id", req.GetNamespaceId()),
+		zap.String("knowledge_base_id", req.GetKnowledgeBaseId()),
+		zap.String("file_id", req.GetFileId()))
+
+	// Validate required fields
+	if req.GetNamespaceId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace_id is required")
+	}
+	if req.GetKnowledgeBaseId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "knowledge_base_id is required")
+	}
+	if req.GetFileId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "file_id is required")
+	}
+
+	// Get namespace
+	ns, err := h.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	if err != nil {
+		logger.Error("failed to get namespace", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
+	}
+
+	// Get knowledge base
+	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetKnowledgeBaseId())
+	if err != nil {
+		logger.Error("failed to get knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
+	}
+
+	// Get file
+	fileUID := uuid.FromStringOrNil(req.GetFileId())
+	kbFiles, err := h.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
+	if err != nil || len(kbFiles) == 0 {
+		logger.Error("failed to get file", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "file not found")
+	}
+	kbFile := kbFiles[0]
+
+	// Build update map based on field mask - admin can set any tags including reserved ones
+	updates := make(map[string]any)
+	if req.UpdateMask != nil {
+		for _, path := range req.UpdateMask.Paths {
+			switch path {
+			case "tags":
+				// Admin endpoint: NO validation of reserved tags
+				updates[repository.KnowledgeBaseFileColumn.Tags] = req.GetFile().GetTags()
+			case "external_metadata":
+				updates[repository.KnowledgeBaseFileColumn.ExternalMetadata] = req.GetFile().GetExternalMetadata()
+			}
+		}
+	}
+
+	if len(updates) == 0 {
+		logger.Warn("no fields to update")
+		return nil, status.Error(codes.InvalidArgument, "no fields to update")
+	}
+
+	// Update file
+	updatedFile, err := h.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), updates)
+	if err != nil {
+		logger.Error("failed to update file", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to update file: %v", err)
+	}
+
+	// Fetch owner for response
+	owner, _ := h.service.FetchOwnerByNamespace(ctx, ns)
+
+	// Fetch creator if available
+	var creator *mgmtpb.User
+	if updatedFile.CreatorUID != uuid.Nil {
+		creator, _ = h.service.FetchUserByUID(ctx, updatedFile.CreatorUID.String())
+	}
+
+	logger.Info("UpdateFileAdmin completed",
+		zap.String("file_uid", updatedFile.UID.String()))
+
+	return &artifactpb.UpdateFileAdminResponse{
+		File: convertKBFileToPB(updatedFile, ns, kb, owner, creator),
 	}, nil
 }
 

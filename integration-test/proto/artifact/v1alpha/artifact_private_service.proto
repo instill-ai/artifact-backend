@@ -18,6 +18,12 @@ service ArtifactPrivateService {
   // "instill-agent" that are not owned by any specific user.
   rpc CreateKnowledgeBaseAdmin(CreateKnowledgeBaseAdminRequest) returns (CreateKnowledgeBaseAdminResponse);
 
+  // Update a knowledge base with system-reserved tags (admin only)
+  rpc UpdateKnowledgeBaseAdmin(UpdateKnowledgeBaseAdminRequest) returns (UpdateKnowledgeBaseAdminResponse);
+
+  // Update a file with system-reserved tags (admin only)
+  rpc UpdateFileAdmin(UpdateFileAdminRequest) returns (UpdateFileAdminResponse);
+
   // Get Object (admin only)
   rpc GetObjectAdmin(GetObjectAdminRequest) returns (GetObjectAdminResponse);
 

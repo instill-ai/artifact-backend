@@ -50,6 +50,8 @@ export let options = {
     test_15_get_object_url: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_GetObjectURL' },
     test_16_update_object: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_UpdateObject' },
     test_17_create_kb_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_CreateKnowledgeBaseAdmin' },
+    test_18_update_kb_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_UpdateKnowledgeBaseAdmin' },
+    test_19_update_file_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_UpdateFileAdmin' },
   },
 };
 
@@ -670,6 +672,237 @@ export function TEST_17_CreateKnowledgeBaseAdmin(data) {
         "DeleteKnowledgeBase cleanup succeeds": (r) => r.status === grpc.StatusOK,
       });
     }
+
+    privateClient.close();
+    publicClient.close();
+  });
+}
+
+// ============================================================================
+// TEST 18: UpdateKnowledgeBaseAdmin (Private gRPC)
+// Tests updating a knowledge base with reserved tags via admin endpoint
+// ============================================================================
+export function TEST_18_UpdateKnowledgeBaseAdmin(data) {
+  const groupName = "Artifact API: Update Knowledge Base Admin (private gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    if (constant.apiGatewayMode) {
+      check(true, { "skipped: apiGatewayMode enabled": () => true });
+      return;
+    }
+
+    privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const testKbId = `admin-update-kb-${dbIDPrefix}`;
+
+    // First create a system KB using admin endpoint
+    var createRes = privateClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
+      {
+        namespace_id: constant.defaultUserId,
+        id: testKbId,
+        description: "KB for testing UpdateKnowledgeBaseAdmin",
+        tags: ["initial-tag"],
+        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+      },
+      data.metadata
+    );
+    check(createRes, {
+      "CreateKnowledgeBaseAdmin for update test succeeds": (r) => r.status === grpc.StatusOK,
+    });
+
+    if (createRes.status !== grpc.StatusOK) {
+      privateClient.close();
+      publicClient.close();
+      return;
+    }
+
+    // Update with reserved tags using admin endpoint - should succeed
+    var updateRes = privateClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPrivateService/UpdateKnowledgeBaseAdmin",
+      {
+        namespace_id: constant.defaultUserId,
+        knowledge_base_id: testKbId,
+        knowledge_base: {
+          tags: ["instill-internal", "agent:system", "user-tag"],
+        },
+        update_mask: { paths: ["tags"] },
+      },
+      data.metadata
+    );
+    check(updateRes, {
+      "UpdateKnowledgeBaseAdmin returns StatusOK": (r) => r.status === grpc.StatusOK,
+      "UpdateKnowledgeBaseAdmin returns knowledge_base": (r) => !!r.message?.knowledge_base,
+      "UpdateKnowledgeBaseAdmin can set reserved tags": (r) => {
+        const tags = r.message?.knowledge_base?.tags || [];
+        return tags.includes("instill-internal") && tags.includes("agent:system");
+      },
+    });
+
+    // Verify public API cannot set reserved tags
+    var publicUpdateRes = publicClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPublicService/UpdateKnowledgeBase",
+      {
+        namespace_id: constant.defaultUserId,
+        knowledge_base_id: testKbId,
+        knowledge_base: {
+          tags: ["instill-blocked-tag"],
+        },
+        update_mask: { paths: ["tags"] },
+      },
+      data.metadata
+    );
+    check(publicUpdateRes, {
+      "Public UpdateKnowledgeBase with reserved tag fails": (r) => r.status !== grpc.StatusOK,
+    });
+
+    // Cleanup
+    var deleteRes = publicClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
+      {
+        namespace_id: constant.defaultUserId,
+        knowledge_base_id: testKbId,
+      },
+      data.metadata
+    );
+    check(deleteRes, {
+      "DeleteKnowledgeBase cleanup succeeds": (r) => r.status === grpc.StatusOK,
+    });
+
+    privateClient.close();
+    publicClient.close();
+  });
+}
+
+// ============================================================================
+// TEST 19: UpdateFileAdmin (Private gRPC)
+// Tests updating a file with reserved tags via admin endpoint
+// ============================================================================
+export function TEST_19_UpdateFileAdmin(data) {
+  const groupName = "Artifact API: Update File Admin (private gRPC)";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    if (constant.apiGatewayMode) {
+      check(true, { "skipped: apiGatewayMode enabled": () => true });
+      return;
+    }
+
+    privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
+    publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
+
+    const testKbId = `admin-file-kb-${dbIDPrefix}`;
+
+    // Create a KB for file testing
+    var createKbRes = privateClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
+      {
+        namespace_id: constant.defaultUserId,
+        id: testKbId,
+        description: "KB for testing UpdateFileAdmin",
+        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+      },
+      data.metadata
+    );
+    check(createKbRes, {
+      "CreateKnowledgeBaseAdmin for file test succeeds": (r) => r.status === grpc.StatusOK,
+    });
+
+    if (createKbRes.status !== grpc.StatusOK) {
+      privateClient.close();
+      publicClient.close();
+      return;
+    }
+
+    // Create a file using public API
+    var createFileRes = publicClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
+      {
+        namespace_id: constant.defaultUserId,
+        knowledge_base_id: testKbId,
+        file: {
+          filename: "test-admin-update.txt",
+          type: "TYPE_TEXT",
+        },
+      },
+      data.metadata
+    );
+    check(createFileRes, {
+      "CreateFile for admin update test succeeds": (r) => r.status === grpc.StatusOK,
+    });
+
+    if (createFileRes.status !== grpc.StatusOK) {
+      // Cleanup KB
+      publicClient.invoke(
+        "artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
+        { namespace_id: constant.defaultUserId, knowledge_base_id: testKbId },
+        data.metadata
+      );
+      privateClient.close();
+      publicClient.close();
+      return;
+    }
+
+    const fileUid = createFileRes.message?.file?.uid;
+
+    // Update file with reserved tags using admin endpoint - should succeed
+    var updateFileRes = privateClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPrivateService/UpdateFileAdmin",
+      {
+        namespace_id: constant.defaultUserId,
+        knowledge_base_id: testKbId,
+        file_id: fileUid,
+        file: {
+          tags: ["agent:collection:fake-uid-123", "user-tag"],
+        },
+        update_mask: { paths: ["tags"] },
+      },
+      data.metadata
+    );
+    check(updateFileRes, {
+      "UpdateFileAdmin returns StatusOK": (r) => r.status === grpc.StatusOK,
+      "UpdateFileAdmin returns file": (r) => !!r.message?.file,
+      "UpdateFileAdmin can set agent: reserved tags": (r) => {
+        const tags = r.message?.file?.tags || [];
+        return tags.includes("agent:collection:fake-uid-123");
+      },
+    });
+
+    // Verify public API cannot set reserved tags on files
+    var publicUpdateRes = publicClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPublicService/UpdateFile",
+      {
+        namespace_id: constant.defaultUserId,
+        knowledge_base_id: testKbId,
+        file_id: fileUid,
+        file: {
+          tags: ["agent:blocked-tag"],
+        },
+        update_mask: { paths: ["tags"] },
+      },
+      data.metadata
+    );
+    check(publicUpdateRes, {
+      "Public UpdateFile with reserved tag fails": (r) => r.status !== grpc.StatusOK,
+    });
+
+    // Cleanup
+    publicClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile",
+      {
+        namespace_id: constant.defaultUserId,
+        knowledge_base_id: testKbId,
+        file_id: fileUid,
+      },
+      data.metadata
+    );
+    publicClient.invoke(
+      "artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
+      { namespace_id: constant.defaultUserId, knowledge_base_id: testKbId },
+      data.metadata
+    );
 
     privateClient.close();
     publicClient.close();
