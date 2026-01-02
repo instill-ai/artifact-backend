@@ -312,6 +312,14 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		)
 	}
 
+	// Validate update_mask is provided
+	if req.UpdateMask == nil || len(req.UpdateMask.Paths) == 0 {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: update_mask is required", errorsx.ErrInvalidArgument),
+			"Update mask is required. Please specify which fields to update.",
+		)
+	}
+
 	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
 	if err != nil {
 		logger.Error(
@@ -346,15 +354,28 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		)
 	}
 
+	// Build update model based on field mask
+	updateModel := repository.KnowledgeBaseModel{}
+	for _, path := range req.UpdateMask.Paths {
+		switch path {
+		case "description":
+			updateModel.Description = req.GetKnowledgeBase().GetDescription()
+		case "tags":
+			updateModel.Tags = req.GetKnowledgeBase().GetTags()
+		default:
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("%w: unsupported field path: %s", errorsx.ErrInvalidArgument, path),
+				fmt.Sprintf("Unsupported field path: %s. Only 'description' and 'tags' can be updated.", path),
+			)
+		}
+	}
+
 	// update knowledge base
 	kb, err = ph.service.Repository().UpdateKnowledgeBase(
 		ctx,
 		req.GetKnowledgeBaseId(),
 		ns.NsUID.String(),
-		repository.KnowledgeBaseModel{
-			Description: req.GetKnowledgeBase().GetDescription(),
-			Tags:        req.GetKnowledgeBase().GetTags(),
-		},
+		updateModel,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("updating knowledge base: %w", err)
