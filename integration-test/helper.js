@@ -703,25 +703,47 @@ export function verifyConvertedFileType(kbUID, fileUID, expectedExtension) {
 
 /**
  * Get the expected standard file extension for a given file type
- * Maps file types to their standardized formats (PDF, PNG, OGG, MP4)
+ * Maps file types to their standardized formats based on Gemini-native support:
+ * - Gemini-native formats keep their original extension
+ * - Non-native formats are converted to standard formats (PDF, PNG, OGG, MP4)
  *
  * @param {string} fileType - File type (e.g., 'TYPE_PNG', 'TYPE_DOC', 'TYPE_MP3')
- * @returns {string|null} Expected extension ('pdf', 'png', 'ogg', 'mp4') or null if not standardizable
+ * @returns {string|null} Expected extension or null if not standardizable
  */
 export function getStandardFileExtension(fileType) {
+  // Documents - all convert to PDF (only PDF is Gemini-native)
   const documentTypes = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX",
     "TYPE_XLS", "TYPE_XLSX", "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
-  const imageTypes = ["TYPE_PNG", "TYPE_JPEG", "TYPE_GIF", "TYPE_BMP", "TYPE_TIFF",
-    "TYPE_AVIF", "TYPE_HEIC", "TYPE_HEIF", "TYPE_WEBP"];
-  const audioTypes = ["TYPE_MP3", "TYPE_WAV", "TYPE_AAC", "TYPE_OGG", "TYPE_FLAC",
-    "TYPE_AIFF", "TYPE_M4A", "TYPE_WMA", "TYPE_WEBM_AUDIO"];
-  const videoTypes = ["TYPE_MP4", "TYPE_MPEG", "TYPE_MOV", "TYPE_AVI", "TYPE_FLV",
-    "TYPE_WMV", "TYPE_MKV", "TYPE_WEBM_VIDEO"];
-
   if (documentTypes.includes(fileType)) return 'pdf';
-  if (imageTypes.includes(fileType)) return 'png';
-  if (audioTypes.includes(fileType)) return 'ogg';
-  if (videoTypes.includes(fileType)) return 'mp4';
+
+  // Images - Gemini-native formats (PNG, JPEG, WEBP, HEIC, HEIF) keep original extension
+  // Non-native (GIF, BMP, TIFF, AVIF) convert to PNG
+  const geminiNativeImages = {
+    "TYPE_PNG": "png", "TYPE_JPEG": "jpg", "TYPE_WEBP": "webp",
+    "TYPE_HEIC": "heic", "TYPE_HEIF": "heif"
+  };
+  if (geminiNativeImages[fileType]) return geminiNativeImages[fileType];
+  const convertibleImages = ["TYPE_GIF", "TYPE_BMP", "TYPE_TIFF", "TYPE_AVIF"];
+  if (convertibleImages.includes(fileType)) return 'png';
+
+  // Audio - Gemini-native formats (WAV, MP3, AIFF, AAC, OGG, FLAC) keep original extension
+  // Non-native (M4A, WMA, WEBM_AUDIO) convert to OGG
+  const geminiNativeAudio = {
+    "TYPE_WAV": "wav", "TYPE_MP3": "mp3", "TYPE_AIFF": "aiff",
+    "TYPE_AAC": "aac", "TYPE_OGG": "ogg", "TYPE_FLAC": "flac"
+  };
+  if (geminiNativeAudio[fileType]) return geminiNativeAudio[fileType];
+  const convertibleAudio = ["TYPE_M4A", "TYPE_WMA", "TYPE_WEBM_AUDIO"];
+  if (convertibleAudio.includes(fileType)) return 'ogg';
+
+  // Video - Gemini-native formats (MP4, MPEG, MOV, AVI, FLV, WMV, WEBM_VIDEO) keep original extension
+  // Non-native (MKV) converts to MP4
+  const geminiNativeVideo = {
+    "TYPE_MP4": "mp4", "TYPE_MPEG": "mpeg", "TYPE_MOV": "mov",
+    "TYPE_AVI": "avi", "TYPE_FLV": "flv", "TYPE_WMV": "wmv", "TYPE_WEBM_VIDEO": "webm"
+  };
+  if (geminiNativeVideo[fileType]) return geminiNativeVideo[fileType];
+  if (fileType === "TYPE_MKV") return 'mp4';
 
   return null; // Not a standardizable type
 }
@@ -1387,7 +1409,7 @@ export function verifyRollbackKB(knowledgeBaseId, ownerUid) {
     const prodQuery = `
       SELECT uid
       FROM knowledge_base
-      WHERE id = $1 AND owner = $2 AND staging = false AND delete_time IS NULL
+      WHERE id = $1 AND namespace_uid = $2 AND staging = false AND delete_time IS NULL
     `;
     const prodResults = safeQuery(prodQuery, knowledgeBaseId, ownerUid);
     if (!prodResults || prodResults.length === 0) {
@@ -1425,7 +1447,7 @@ export function verifyStagingKB(knowledgeBaseId, ownerUid) {
     const prodQuery = `
       SELECT uid
       FROM knowledge_base
-      WHERE id = $1 AND owner = $2 AND staging = false AND delete_time IS NULL
+      WHERE id = $1 AND namespace_uid = $2 AND staging = false AND delete_time IS NULL
     `;
     const prodResults = safeQuery(prodQuery, knowledgeBaseId, ownerUid);
     if (!prodResults || prodResults.length === 0) {
@@ -1461,7 +1483,7 @@ export function getKnowledgeBaseByIdAndOwner(knowledgeBaseId, ownerUid) {
   try {
     const query = `
       SELECT * FROM knowledge_base
-      WHERE id = $1 AND owner = $2
+      WHERE id = $1 AND namespace_uid = $2
     `;
     const results = safeQuery(query, knowledgeBaseId, ownerUid);
     return results ? results.map(row => normalizeDBRow(row)) : [];
@@ -1657,7 +1679,7 @@ export function getKnowledgeBasesByPattern(pattern, ownerUid) {
     const query = `
       SELECT uid, id, staging, update_status, delete_time, rollback_retention_until
       FROM knowledge_base
-      WHERE owner = $1 AND id LIKE $2
+      WHERE namespace_uid = $1 AND id LIKE $2
       ORDER BY create_time ASC
     `;
     return safeQuery(query, ownerUid, pattern);

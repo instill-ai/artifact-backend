@@ -6,6 +6,11 @@
 include .env
 export
 
+# Integration test defaults (for running from host)
+API_GATEWAY_PROTOCOL ?= http
+API_GATEWAY_URL ?= localhost:8080
+DB_HOST ?= localhost
+
 #============================================================================
 
 .PHONY: dev
@@ -89,6 +94,12 @@ unit-test:       				## Run unit test
 
 .PHONY: integration-test
 integration-test:		## Run integration tests (parallel by default, sequential if CI=true)
+	@if [ -n "${API_GATEWAY_URL}" ]; then \
+		echo "✓ Running tests through API Gateway: ${API_GATEWAY_URL}"; \
+	else \
+		echo "⚠ WARNING: No API_GATEWAY_URL set - using default localhost:8080"; \
+	fi
+	@echo "  DB_HOST: ${DB_HOST}"
 ifeq ($(CI),true)
 	@echo "Running integration tests sequentially (CI mode)..."
 	@rm -f /tmp/artifact-integration-test.log
@@ -118,6 +129,7 @@ ifeq ($(CI),true)
 else
 	@echo "Running integration tests in parallel..."
 	@rm -f /tmp/artifact-integration-test.log
+	# Batch 1: Core REST tests + grpc.js (isolated from other gRPC tests to avoid conflicts)
 	@parallel --halt now,fail=1 --tag --line-buffer \
 		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
@@ -125,23 +137,31 @@ else
 		{} --no-usage-report" ::: \
 		integration-test/rest.js \
 		integration-test/rest-object-storage.js \
-		integration-test/rest-file-type.js 2>&1 | tee -a /tmp/artifact-integration-test.log
+		integration-test/grpc.js 2>&1 | tee -a /tmp/artifact-integration-test.log
+	# Batch 2: File processing tests (heavy AI workload)
 	@parallel --halt now,fail=1 --tag --line-buffer \
 		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
 		-e DB_HOST=${DB_HOST} \
 		{} --no-usage-report" ::: \
+		integration-test/rest-file-type.js \
 		integration-test/rest-db.js \
-		integration-test/rest-ai-client.js \
+		integration-test/rest-ai-client.js 2>&1 | tee -a /tmp/artifact-integration-test.log
+	# Batch 3: E2E and KB management tests
+	@parallel --halt now,fail=1 --tag --line-buffer \
+		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
+		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
+		-e DB_HOST=${DB_HOST} \
+		{} --no-usage-report" ::: \
 		integration-test/rest-kb-e2e-file-process.js \
 		integration-test/rest-file-reprocess.js \
 		integration-test/rest-kb-delete.js 2>&1 | tee -a /tmp/artifact-integration-test.log
+	# Batch 4: gRPC system tests (may modify system config, run separately from grpc.js)
 	@parallel --halt now,fail=1 --tag --line-buffer \
 		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
 		-e DB_HOST=${DB_HOST} \
 		{} --no-usage-report" ::: \
-		integration-test/grpc.js \
 		integration-test/grpc-kb-update.js \
 		integration-test/grpc-system-config-update.js \
 		integration-test/grpc-system-admin.js 2>&1 | tee -a /tmp/artifact-integration-test.log
