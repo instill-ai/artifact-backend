@@ -350,8 +350,8 @@ export function setup() {
             for (const kb of knowledgeBases) {
                 const kbId = kb.id;
                 // Match patterns: test-{prefix}workflow-{random} or test-{prefix}prepare-{random}
-                if (catId && catId.match(/test-[a-z0-9]+-(workflow|prepare)-/)) {
-                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${userResp.json().user.id}/knowledge-bases/${catId}`, null, header);
+                if (kbId && kbId.match(/test-[a-z0-9]+-(workflow|prepare)-/)) {
+                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${userResp.json().user.id}/knowledge-bases/${kbId}`, null, header);
                     if (delResp.status === 200 || delResp.status === 204) {
                         cleanedCount++;
                     }
@@ -4772,7 +4772,7 @@ function TestResourceCleanup(client, data) {
         const queryAllKBs = `
             SELECT id, delete_time
             FROM knowledge_base
-            WHERE owner = $1 AND id LIKE $2
+            WHERE namespace_uid = $1 AND id LIKE $2
         `;
         const allRelatedKBs = helper.safeQuery(queryAllKBs, data.expectedOwner.uid, `${knowledgeBaseId}%`);
         const activeKBs = allRelatedKBs ? allRelatedKBs.filter(kb => kb.delete_time === null) : [];
@@ -6355,7 +6355,7 @@ function TestMultipleKBUpdates(client, data) {
         // Poll each rollback KB for cleanup (increased to 120s now that queue is empty)
         for (let i = 0; i < numKBs; i++) {
             const rollbackKBUID = helper.safeQuery(
-                `SELECT uid FROM knowledge_base WHERE id = $1 AND owner = $2`,
+                `SELECT uid FROM knowledge_base WHERE id = $1 AND namespace_uid = $2`,
                 rollbackKBIDs[i],
                 data.expectedOwner.uid
             );
@@ -6384,7 +6384,7 @@ function TestMultipleKBUpdates(client, data) {
         // Get file UIDs for the first KB to verify resource cleanup
         const firstKBFiles = helper.safeQuery(
             `SELECT uid FROM file WHERE kb_uid IN (
-                SELECT uid FROM knowledge_base WHERE id = $1 AND owner = $2
+                SELECT uid FROM knowledge_base WHERE id = $1 AND namespace_uid = $2
             ) LIMIT 1`,
             rollbackKBIDs[0],
             data.expectedOwner.uid

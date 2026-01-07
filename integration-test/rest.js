@@ -263,29 +263,28 @@ export function TEST_05_UpdateKnowledgeBase(data) {
     const created = (cRes.json() || {}).knowledgeBase || {};
 
     const newDescription = randomString(50);
+    // With proto `body: "knowledge_base"`, body should be just the KB fields directly
+    // and updateMask should be a query parameter
     const reqBody = {
-      knowledgeBase: {
-        description: newDescription,
-        tags: ["test", "integration", "updated"]
-      },
-      updateMask: "description,tags"
+      description: newDescription,
+      tags: ["test", "integration", "updated"]
     };
 
     const resOrigin = http.request(
-      "PUT",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}`,
+      "PATCH",
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}?updateMask=description,tags`,
       JSON.stringify(reqBody),
       data.header
     );
     const json = (function () { try { return resOrigin.json(); } catch (e) { return {}; } })();
     const cat2 = json.knowledgeBase || {};
     check(resOrigin, {
-      "PUT /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response status is 200": (r) => r.status === 200,
-      "PUT /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base id": () =>
+      "PATCH /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response status is 200": (r) => r.status === 200,
+      "PATCH /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base id": () =>
         cat2.id === created.id,
-      "PUT /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base description updated": () =>
+      "PATCH /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base description updated": () =>
         cat2.description === newDescription,
-      "PUT /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base is valid": () =>
+      "PATCH /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base is valid": () =>
         helper.validateKnowledgeBase(cat2, false),
     });
 
@@ -898,10 +897,10 @@ export function TEST_12_JWT_UpdateKnowledgeBase(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const created = createKBAuthenticated(data);
-    const body = { knowledgeBase: { description: "x" }, updateMask: "description" };
-    const res = http.request("PUT", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
-    logUnexpected(res, "JWT: PUT knowledge base");
-    check(res, { "JWT: PUT knowledge base 401": (r) => r.status === 401 });
+    const body = { description: "x" };
+    const res = http.request("PATCH", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}?updateMask=description`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    logUnexpected(res, "JWT: PATCH knowledge base");
+    check(res, { "JWT: PATCH knowledge base 401": (r) => r.status === 401 });
     deleteKBAuthenticated(data, created.id);
   });
 }

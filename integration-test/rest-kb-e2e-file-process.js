@@ -213,19 +213,18 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     });
 
     // Step 3: Update knowledge base metadata
+    // With proto `body: "knowledge_base"`, body should be just the KB fields directly
+    // and updateMask should be a query parameter
     const newDesc = "Updated E2E test knowledge base - testing metadata update";
     const newTags = ["test", "integration", "e2e", "updated"];
     const updateBody = {
-      knowledgeBase: {
-        description: newDesc,
-        tags: newTags,
-      },
-      updateMask: "description,tags"
+      description: newDesc,
+      tags: newTags,
     };
 
     const uRes = http.request(
-      "PUT",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
+      "PATCH",
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}?updateMask=description,tags`,
       JSON.stringify(updateBody),
       data.header
     );
