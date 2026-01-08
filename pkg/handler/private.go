@@ -56,17 +56,26 @@ func NewPrivateHandler(s artifact.Service, log *zap.Logger) *PrivateHandler {
 // like "instill-agent" that are not owned by any specific user.
 func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *artifactpb.CreateKnowledgeBaseAdminRequest) (*artifactpb.CreateKnowledgeBaseAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger.Info("CreateKnowledgeBaseAdmin called",
-		zap.String("namespace_id", req.GetNamespaceId()),
-		zap.String("id", req.GetId()))
 
 	// Validate required fields
 	if req.GetNamespaceId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "namespace_id is required")
 	}
-	if req.GetId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "id is required")
+
+	kb := req.GetKnowledgeBase()
+	if kb == nil {
+		return nil, status.Error(codes.InvalidArgument, "knowledge_base is required")
 	}
+
+	// For admin requests, id is required (not auto-generated)
+	kbID := kb.GetId()
+	if kbID == "" {
+		return nil, status.Error(codes.InvalidArgument, "knowledge_base.id is required for admin requests")
+	}
+
+	logger.Info("CreateKnowledgeBaseAdmin called",
+		zap.String("namespace_id", req.GetNamespaceId()),
+		zap.String("id", kbID))
 
 	// Get namespace
 	ns, err := h.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
@@ -88,9 +97,15 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 	}
 
 	// Determine KB type
-	kbType := req.GetType()
+	kbType := kb.GetType()
 	if kbType == artifactpb.KnowledgeBaseType_KNOWLEDGE_BASE_TYPE_UNSPECIFIED {
 		kbType = artifactpb.KnowledgeBaseType_KNOWLEDGE_BASE_TYPE_PERSISTENT
+	}
+
+	// Use display_name from request, fallback to id if not set
+	displayName := kb.GetDisplayName()
+	if displayName == "" {
+		displayName = kbID
 	}
 
 	// External service callback for vector DB collection and ACL
@@ -110,9 +125,10 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 	dbData, err := h.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
-			KBID:              req.GetId(),
-			Description:       req.GetDescription(),
-			Tags:              req.GetTags(),
+			KBID:              kbID,
+			DisplayName:       displayName,
+			Description:       kb.GetDescription(),
+			Tags:              kb.GetTags(),
 			NamespaceUID:      ns.NsUID.String(),
 			CreatorUID:        nil, // No creator for system KBs
 			KnowledgeBaseType: kbType.String(),
@@ -121,6 +137,11 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 		callExternalService,
 	)
 	if err != nil {
+		// Handle "already exists" gracefully - it's expected in race conditions
+		if strings.Contains(err.Error(), "already exists") {
+			logger.Debug("knowledge base already exists (expected for system KBs)", zap.String("id", kbID))
+			return nil, status.Errorf(codes.AlreadyExists, "knowledge base already exists: %s", kbID)
+		}
 		logger.Error("failed to create knowledge base", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to create knowledge base: %v", err)
 	}
@@ -134,6 +155,7 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 			Name:        fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), dbData.KBID),
 			Uid:         dbData.UID.String(),
 			Id:          dbData.KBID,
+			DisplayName: displayName,
 			Description: dbData.Description,
 			Tags:        dbData.Tags,
 			OwnerName:   ns.Name(),

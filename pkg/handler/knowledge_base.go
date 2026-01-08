@@ -59,15 +59,29 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	}
 
-	// check id if it is empty
-	if req.Id == "" {
-		return nil, fmt.Errorf("knowledge base id is required. err: %w", errorsx.ErrInvalidArgument)
+	// Extract fields from the knowledge_base object
+	kb := req.GetKnowledgeBase()
+	if kb == nil {
+		return nil, fmt.Errorf("knowledge_base is required. err: %w", errorsx.ErrInvalidArgument)
 	}
-	nameOk := isValidName(req.Id)
+
+	// Validate display_name is provided
+	if kb.GetDisplayName() == "" {
+		return nil, fmt.Errorf("knowledge_base.display_name is required. err: %w", errorsx.ErrInvalidArgument)
+	}
+
+	// Generate id from display_name if not provided
+	kbID := kb.GetId()
+	if kbID == "" {
+		// Generate URL-safe slug from display_name
+		kbID = generateSlugFromDisplayName(kb.GetDisplayName())
+	}
+
+	nameOk := isValidName(kbID)
 	if !nameOk {
 		msg := "the knowledge base id should be lowercase without any space or special character besides the hyphen, " +
 			"it can not start with number or hyphen, and should be less than 32 characters. id: %v. err: %w"
-		return nil, fmt.Errorf(msg, req.Id, errorsx.ErrInvalidArgument)
+		return nil, fmt.Errorf(msg, kbID, errorsx.ErrInvalidArgument)
 	}
 
 	creatorUUID, err := uuid.FromString(authUID)
@@ -81,18 +95,10 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	// RAG configurations including AI model family, embedding vector dimensionality,
 	// chunking method, and other RAG-related settings
 	var system *repository.SystemModel
-	if req.SystemId != nil && *req.SystemId != "" {
-		// Get system record from system table using the specified ID
-		// This retrieves both the UID (for FK) and config (for dimensionality)
-		system, err = ph.service.Repository().GetSystem(ctx, *req.SystemId)
-	} else {
-		// No system_id specified, use the default system
-		system, err = ph.service.Repository().GetDefaultSystem(ctx)
-	}
+	// Note: SystemId is no longer a direct field - it would need to be added to KnowledgeBase message
+	// For now, we always use the default system
+	system, err = ph.service.Repository().GetDefaultSystem(ctx)
 	if err != nil {
-		if req.SystemId != nil && *req.SystemId != "" {
-			return nil, fmt.Errorf("getting system for ID %q: %w", *req.SystemId, err)
-		}
 		return nil, fmt.Errorf("getting default system: %w", err)
 	}
 
@@ -127,8 +133,9 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	}
 
 	// if knowledge base type is not set, set it to persistent
-	if req.GetType() == artifactpb.KnowledgeBaseType_KNOWLEDGE_BASE_TYPE_UNSPECIFIED {
-		req.Type = artifactpb.KnowledgeBaseType_KNOWLEDGE_BASE_TYPE_PERSISTENT
+	kbType := kb.GetType()
+	if kbType == artifactpb.KnowledgeBaseType_KNOWLEDGE_BASE_TYPE_UNSPECIFIED {
+		kbType = artifactpb.KnowledgeBaseType_KNOWLEDGE_BASE_TYPE_PERSISTENT
 	}
 
 	// create knowledge base
@@ -136,12 +143,13 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	dbData, err := ph.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
-			KBID:              req.Id,
-			Description:       req.Description,
-			Tags:              req.Tags,
+			KBID:              kbID,
+			DisplayName:       kb.GetDisplayName(),
+			Description:       kb.GetDescription(),
+			Tags:              kb.GetTags(),
 			NamespaceUID:      ns.NsUID.String(),
 			CreatorUID:        &creatorUUID,
-			KnowledgeBaseType: req.GetType().String(),
+			KnowledgeBaseType: kbType.String(),
 			SystemUID:         system.UID,
 		},
 		callExternalService,
@@ -156,10 +164,17 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
 	creator, _ := ph.service.FetchUserByUID(ctx, authUID)
 
+	// Use display_name from DB, fallback to id if not set
+	displayName := dbData.DisplayName
+	if displayName == "" {
+		displayName = dbData.KBID
+	}
+
 	knowledgeBase := &artifactpb.KnowledgeBase{
 		Name:                fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), dbData.KBID),
 		Uid:                 dbData.UID.String(),
 		Id:                  dbData.KBID,
+		DisplayName:         displayName,
 		Description:         dbData.Description,
 		Tags:                dbData.Tags,
 		OwnerName:           ns.Name(),
@@ -265,10 +280,17 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			creator, _ = ph.service.FetchUserByUID(ctx, uid)
 		}
 
+		// Use display_name from DB, fallback to id if not set
+		kbDisplayName := kb.DisplayName
+		if kbDisplayName == "" {
+			kbDisplayName = kb.KBID
+		}
+
 		kbs[i] = &artifactpb.KnowledgeBase{
 			Uid:                 kb.UID.String(),
 			Name:                fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), kb.KBID),
 			Id:                  kb.KBID,
+			DisplayName:         kbDisplayName,
 			Description:         kb.Description,
 			Tags:                kb.Tags,
 			CreateTime:          timestamppb.New(*kb.CreateTime),
@@ -648,4 +670,32 @@ func isValidName(name string) bool {
 	re := regexp.MustCompile(pattern)
 	// Match the name against the regular expression
 	return re.MatchString(name)
+}
+
+// generateSlugFromDisplayName generates a URL-safe slug from a display name
+// e.g. "My Knowledge Base" -> "my-knowledge-base"
+func generateSlugFromDisplayName(displayName string) string {
+	// Convert to lowercase
+	slug := strings.ToLower(displayName)
+	// Replace spaces with dashes
+	slug = strings.ReplaceAll(slug, " ", "-")
+	// Remove characters that are not alphanumeric, dash, or underscore
+	re := regexp.MustCompile(`[^a-z0-9-_]`)
+	slug = re.ReplaceAllString(slug, "")
+	// Remove consecutive dashes
+	re = regexp.MustCompile(`-+`)
+	slug = re.ReplaceAllString(slug, "-")
+	// Remove leading/trailing dashes
+	slug = strings.Trim(slug, "-")
+	// Ensure it starts with a letter
+	if len(slug) > 0 && (slug[0] >= '0' && slug[0] <= '9') {
+		slug = "kb-" + slug
+	}
+	// Truncate to 32 characters
+	if len(slug) > 32 {
+		slug = slug[:32]
+		// Remove trailing dash if truncation created one
+		slug = strings.TrimRight(slug, "-")
+	}
+	return slug
 }

@@ -967,14 +967,14 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 
 // StandardizeFileTypeActivityParam defines the parameters for StandardizeFileTypeActivity
 type StandardizeFileTypeActivityParam struct {
-	FileUID     types.FileUIDType    // File unique identifier
-	KBUID       types.KBUIDType      // Knowledge base unique identifier
-	Bucket      string               // MinIO bucket containing the file
-	Destination string               // MinIO path to the file
-	FileType    artifactpb.File_Type // Original file type to convert from
-	Filename    string               // Filename for identification
-	Pipelines   []pipeline.Release   // indexing-convert-file-type pipeline
-	Metadata    *structpb.Struct     // Request metadata for authentication
+	FileUID         types.FileUIDType    // File unique identifier
+	KBUID           types.KBUIDType      // Knowledge base unique identifier
+	Bucket          string               // MinIO bucket containing the file
+	Destination     string               // MinIO path to the file
+	FileType        artifactpb.File_Type // Original file type to convert from
+	FileDisplayName string               // File display name for identification
+	Pipelines       []pipeline.Release   // indexing-convert-file-type pipeline
+	Metadata        *structpb.Struct     // Request metadata for authentication
 }
 
 // StandardizeFileTypeActivityResult defines the result of StandardizeFileTypeActivity
@@ -994,7 +994,7 @@ type StandardizeFileTypeActivityResult struct {
 func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *StandardizeFileTypeActivityParam) (*StandardizeFileTypeActivityResult, error) {
 	w.log.Info("StandardizeFileTypeActivity: Checking if file needs standardization",
 		zap.String("fileType", param.FileType.String()),
-		zap.String("filename", param.Filename))
+		zap.String("fileDisplayName", param.FileDisplayName))
 
 	// Check if file needs conversion
 	needsConversion, targetFormat, _ := filetype.NeedFileTypeConversion(param.FileType)
@@ -1274,13 +1274,13 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 
 // CacheFileContextActivityParam defines the parameters for CacheFileContextActivity
 type CacheFileContextActivityParam struct {
-	FileUID     types.FileUIDType    // File unique identifier
-	KBUID       types.KBUIDType      // Knowledge base unique identifier
-	Bucket      string               // MinIO bucket (original or converted file)
-	Destination string               // MinIO path (original or converted file)
-	FileType    artifactpb.File_Type // File type for content type determination
-	Filename    string               // Filename for cache display name
-	Metadata    *structpb.Struct     // Request metadata for authentication
+	FileUID         types.FileUIDType    // File unique identifier
+	KBUID           types.KBUIDType      // Knowledge base unique identifier
+	Bucket          string               // MinIO bucket (original or converted file)
+	Destination     string               // MinIO path (original or converted file)
+	FileType        artifactpb.File_Type // File type for content type determination
+	FileDisplayName string               // File display name for cache display name
+	Metadata        *structpb.Struct     // Request metadata for authentication
 }
 
 // CacheFileContextActivityResult defines the result of CacheFileContextActivity
@@ -1358,9 +1358,9 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 	// Note: Cache creation is optional - if it fails, we continue without cache
 	cacheOutput, err := w.aiClient.CreateCache(authCtx, []ai.FileContent{
 		{
-			Content:  content,
-			FileType: param.FileType,
-			Filename: param.Filename,
+			Content:         content,
+			FileType:        param.FileType,
+			FileDisplayName: param.FileDisplayName,
 		},
 	}, cacheTTL)
 	if err != nil {
@@ -1427,14 +1427,14 @@ func (w *Worker) DeleteCacheActivity(ctx context.Context, param *DeleteCacheActi
 
 // ProcessContentActivityParam defines input for ProcessContentActivity
 type ProcessContentActivityParam struct {
-	FileUID     types.FileUIDType    // File unique identifier
-	KBUID       types.KBUIDType      // Knowledge base unique identifier
-	Bucket      string               // MinIO bucket
-	Destination string               // MinIO path
-	FileType    artifactpb.File_Type // File type
-	Filename    string               // File name
-	Metadata    *structpb.Struct     // Request metadata
-	CacheName   string               // AI cache name
+	FileUID         types.FileUIDType    // File unique identifier
+	KBUID           types.KBUIDType      // Knowledge base unique identifier
+	Bucket          string               // MinIO bucket
+	Destination     string               // MinIO path
+	FileType        artifactpb.File_Type // File type
+	FileDisplayName string               // File display name
+	Metadata        *structpb.Struct     // Request metadata
+	CacheName       string               // AI cache name
 }
 
 // ProcessContentActivityResult defines output from ProcessContentActivity
@@ -1668,7 +1668,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					authCtx,
 					rawFileContent,
 					param.FileType,
-					param.Filename,
+					param.FileDisplayName,
 					w.getGenerateContentPrompt(),
 				)
 				if err != nil {
@@ -1793,7 +1793,7 @@ type ProcessSummaryActivityParam struct {
 	KBUID           types.KBUIDType      // Knowledge base unique identifier
 	Bucket          string               // MinIO bucket
 	Destination     string               // MinIO path
-	Filename        string               // File name
+	FileDisplayName string               // File display name
 	FileType        artifactpb.File_Type // File type
 	Metadata        *structpb.Struct     // Request metadata
 	CacheName       string               // Optional: AI cache name (used for Gemini route to reuse cached file context; empty for OpenAI route which doesn't support caching)
@@ -1950,10 +1950,10 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 
 		var summarizationErr error
 
-		// Build prompt with filename context
+		// Build prompt with file display name context
 		summaryPrompt := gemini.GetGenerateSummaryPrompt()
-		if param.Filename != "" {
-			summaryPrompt = strings.ReplaceAll(gemini.GetGenerateSummaryPrompt(), "[filename]", param.Filename)
+		if param.FileDisplayName != "" {
+			summaryPrompt = strings.ReplaceAll(gemini.GetGenerateSummaryPrompt(), "[filename]", param.FileDisplayName)
 		}
 
 		// Use the file type from parameter (already converted in workflow)
@@ -1987,7 +1987,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 				authCtx,
 				content,
 				fileType,
-				param.Filename,
+				param.FileDisplayName,
 				summaryPrompt,
 			)
 			if err != nil {
@@ -2168,9 +2168,9 @@ func ExtractPageDelimiters(markdown string, logger *zap.Logger, logContext map[s
 
 // FindTargetFileByNameActivityParam contains parameters for finding a file by name in a target KB
 type FindTargetFileByNameActivityParam struct {
-	TargetKBUID    types.KBUIDType // Target KB UID to search in
-	TargetOwnerUID string          // Target KB owner UID
-	Filename       string          // File name to search for
+	TargetKBUID     types.KBUIDType // Target KB UID to search in
+	TargetOwnerUID  string          // Target KB owner UID
+	FileDisplayName string          // File display name to search for
 }
 
 // FindTargetFileByNameActivityResult contains the found file information
@@ -2187,7 +2187,7 @@ const findTargetFileByNameActivityError = "findTargetFileByNameActivityError"
 func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTargetFileByNameActivityParam) (*FindTargetFileByNameActivityResult, error) {
 	w.log.Info("FindTargetFileByNameActivity: Searching for file",
 		zap.String("targetKBUID", param.TargetKBUID.String()),
-		zap.String("filename", param.Filename))
+		zap.String("fileDisplayName", param.FileDisplayName))
 
 	// List all files in the target KB and filter by name
 	// Note: We don't paginate since dual-processing typically involves a small number of files
@@ -2210,7 +2210,7 @@ func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTa
 
 	// Find the file with matching name
 	for _, file := range files.Files {
-		if file.Filename == param.Filename {
+		if file.DisplayName == param.FileDisplayName {
 			result.Found = true
 			result.FileUID = file.UID
 			w.log.Info("FindTargetFileByNameActivity: File found",

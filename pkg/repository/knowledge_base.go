@@ -132,6 +132,7 @@ type KnowledgeBaseWithConfig struct {
 type KnowledgeBaseModel struct {
 	UID          types.KBUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
 	KBID         string          `gorm:"column:id;size:255;not null" json:"kb_id"`
+	DisplayName  string          `gorm:"column:display_name;size:255" json:"display_name"`
 	Description  string          `gorm:"column:description;size:1023" json:"description"`
 	Tags         TagsArray       `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
 	NamespaceUID string          `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
@@ -363,7 +364,7 @@ func (r *repository) ListKnowledgeBases(ctx context.Context, owner string) ([]Kn
 	// GORM's DeletedAt automatically filters out soft-deleted records
 	// Filter for staging=false to exclude staging/rollback KBs from user-facing APIs
 	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.Staging)
-	if err := r.db.WithContext(ctx).Where(whereString, owner, false).Find(&knowledgeBases).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(whereString, owner, false).Order("update_time DESC").Find(&knowledgeBases).Error; err != nil {
 		return nil, err
 	}
 

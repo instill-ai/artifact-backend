@@ -15,6 +15,7 @@ import (
 	mm_service "github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
 	"github.com/redis/go-redis/v9"
 )
@@ -100,6 +101,20 @@ type ServiceMock struct {
 	afterExecuteKnowledgeBaseUpdateAdminCounter  uint64
 	beforeExecuteKnowledgeBaseUpdateAdminCounter uint64
 	ExecuteKnowledgeBaseUpdateAdminMock          mServiceMockExecuteKnowledgeBaseUpdateAdmin
+
+	funcFetchOwnerByNamespace          func(ctx context.Context, np1 *resource.Namespace) (op1 *mgmtpb.Owner, err error)
+	funcFetchOwnerByNamespaceOrigin    string
+	inspectFuncFetchOwnerByNamespace   func(ctx context.Context, np1 *resource.Namespace)
+	afterFetchOwnerByNamespaceCounter  uint64
+	beforeFetchOwnerByNamespaceCounter uint64
+	FetchOwnerByNamespaceMock          mServiceMockFetchOwnerByNamespace
+
+	funcFetchUserByUID          func(ctx context.Context, s1 string) (up1 *mgmtpb.User, err error)
+	funcFetchUserByUIDOrigin    string
+	inspectFuncFetchUserByUID   func(ctx context.Context, s1 string)
+	afterFetchUserByUIDCounter  uint64
+	beforeFetchUserByUIDCounter uint64
+	FetchUserByUIDMock          mServiceMockFetchUserByUID
 
 	funcGetChunksByFile          func(ctx context.Context, kp1 *repository.KnowledgeBaseFileModel) (s1 types.SourceTableType, s2 types.SourceUIDType, ta1 []repository.TextChunkModel, sa1 []string, err error)
 	funcGetChunksByFileOrigin    string
@@ -323,6 +338,12 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 
 	m.ExecuteKnowledgeBaseUpdateAdminMock = mServiceMockExecuteKnowledgeBaseUpdateAdmin{mock: m}
 	m.ExecuteKnowledgeBaseUpdateAdminMock.callArgs = []*ServiceMockExecuteKnowledgeBaseUpdateAdminParams{}
+
+	m.FetchOwnerByNamespaceMock = mServiceMockFetchOwnerByNamespace{mock: m}
+	m.FetchOwnerByNamespaceMock.callArgs = []*ServiceMockFetchOwnerByNamespaceParams{}
+
+	m.FetchUserByUIDMock = mServiceMockFetchUserByUID{mock: m}
+	m.FetchUserByUIDMock.callArgs = []*ServiceMockFetchUserByUIDParams{}
 
 	m.GetChunksByFileMock = mServiceMockGetChunksByFile{mock: m}
 	m.GetChunksByFileMock.callArgs = []*ServiceMockGetChunksByFileParams{}
@@ -4293,6 +4314,692 @@ func (m *ServiceMock) MinimockExecuteKnowledgeBaseUpdateAdminInspect() {
 	if !m.ExecuteKnowledgeBaseUpdateAdminMock.invocationsDone() && afterExecuteKnowledgeBaseUpdateAdminCounter > 0 {
 		m.t.Errorf("Expected %d calls to ServiceMock.ExecuteKnowledgeBaseUpdateAdmin at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.ExecuteKnowledgeBaseUpdateAdminMock.expectedInvocations), m.ExecuteKnowledgeBaseUpdateAdminMock.expectedInvocationsOrigin, afterExecuteKnowledgeBaseUpdateAdminCounter)
+	}
+}
+
+type mServiceMockFetchOwnerByNamespace struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockFetchOwnerByNamespaceExpectation
+	expectations       []*ServiceMockFetchOwnerByNamespaceExpectation
+
+	callArgs []*ServiceMockFetchOwnerByNamespaceParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockFetchOwnerByNamespaceExpectation specifies expectation struct of the Service.FetchOwnerByNamespace
+type ServiceMockFetchOwnerByNamespaceExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockFetchOwnerByNamespaceParams
+	paramPtrs          *ServiceMockFetchOwnerByNamespaceParamPtrs
+	expectationOrigins ServiceMockFetchOwnerByNamespaceExpectationOrigins
+	results            *ServiceMockFetchOwnerByNamespaceResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockFetchOwnerByNamespaceParams contains parameters of the Service.FetchOwnerByNamespace
+type ServiceMockFetchOwnerByNamespaceParams struct {
+	ctx context.Context
+	np1 *resource.Namespace
+}
+
+// ServiceMockFetchOwnerByNamespaceParamPtrs contains pointers to parameters of the Service.FetchOwnerByNamespace
+type ServiceMockFetchOwnerByNamespaceParamPtrs struct {
+	ctx *context.Context
+	np1 **resource.Namespace
+}
+
+// ServiceMockFetchOwnerByNamespaceResults contains results of the Service.FetchOwnerByNamespace
+type ServiceMockFetchOwnerByNamespaceResults struct {
+	op1 *mgmtpb.Owner
+	err error
+}
+
+// ServiceMockFetchOwnerByNamespaceOrigins contains origins of expectations of the Service.FetchOwnerByNamespace
+type ServiceMockFetchOwnerByNamespaceExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originNp1 string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) Optional() *mServiceMockFetchOwnerByNamespace {
+	mmFetchOwnerByNamespace.optional = true
+	return mmFetchOwnerByNamespace
+}
+
+// Expect sets up expected params for Service.FetchOwnerByNamespace
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) Expect(ctx context.Context, np1 *resource.Namespace) *mServiceMockFetchOwnerByNamespace {
+	if mmFetchOwnerByNamespace.mock.funcFetchOwnerByNamespace != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("ServiceMock.FetchOwnerByNamespace mock is already set by Set")
+	}
+
+	if mmFetchOwnerByNamespace.defaultExpectation == nil {
+		mmFetchOwnerByNamespace.defaultExpectation = &ServiceMockFetchOwnerByNamespaceExpectation{}
+	}
+
+	if mmFetchOwnerByNamespace.defaultExpectation.paramPtrs != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("ServiceMock.FetchOwnerByNamespace mock is already set by ExpectParams functions")
+	}
+
+	mmFetchOwnerByNamespace.defaultExpectation.params = &ServiceMockFetchOwnerByNamespaceParams{ctx, np1}
+	mmFetchOwnerByNamespace.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmFetchOwnerByNamespace.expectations {
+		if minimock.Equal(e.params, mmFetchOwnerByNamespace.defaultExpectation.params) {
+			mmFetchOwnerByNamespace.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmFetchOwnerByNamespace.defaultExpectation.params)
+		}
+	}
+
+	return mmFetchOwnerByNamespace
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.FetchOwnerByNamespace
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) ExpectCtxParam1(ctx context.Context) *mServiceMockFetchOwnerByNamespace {
+	if mmFetchOwnerByNamespace.mock.funcFetchOwnerByNamespace != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("ServiceMock.FetchOwnerByNamespace mock is already set by Set")
+	}
+
+	if mmFetchOwnerByNamespace.defaultExpectation == nil {
+		mmFetchOwnerByNamespace.defaultExpectation = &ServiceMockFetchOwnerByNamespaceExpectation{}
+	}
+
+	if mmFetchOwnerByNamespace.defaultExpectation.params != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("ServiceMock.FetchOwnerByNamespace mock is already set by Expect")
+	}
+
+	if mmFetchOwnerByNamespace.defaultExpectation.paramPtrs == nil {
+		mmFetchOwnerByNamespace.defaultExpectation.paramPtrs = &ServiceMockFetchOwnerByNamespaceParamPtrs{}
+	}
+	mmFetchOwnerByNamespace.defaultExpectation.paramPtrs.ctx = &ctx
+	mmFetchOwnerByNamespace.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmFetchOwnerByNamespace
+}
+
+// ExpectNp1Param2 sets up expected param np1 for Service.FetchOwnerByNamespace
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) ExpectNp1Param2(np1 *resource.Namespace) *mServiceMockFetchOwnerByNamespace {
+	if mmFetchOwnerByNamespace.mock.funcFetchOwnerByNamespace != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("ServiceMock.FetchOwnerByNamespace mock is already set by Set")
+	}
+
+	if mmFetchOwnerByNamespace.defaultExpectation == nil {
+		mmFetchOwnerByNamespace.defaultExpectation = &ServiceMockFetchOwnerByNamespaceExpectation{}
+	}
+
+	if mmFetchOwnerByNamespace.defaultExpectation.params != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("ServiceMock.FetchOwnerByNamespace mock is already set by Expect")
+	}
+
+	if mmFetchOwnerByNamespace.defaultExpectation.paramPtrs == nil {
+		mmFetchOwnerByNamespace.defaultExpectation.paramPtrs = &ServiceMockFetchOwnerByNamespaceParamPtrs{}
+	}
+	mmFetchOwnerByNamespace.defaultExpectation.paramPtrs.np1 = &np1
+	mmFetchOwnerByNamespace.defaultExpectation.expectationOrigins.originNp1 = minimock.CallerInfo(1)
+
+	return mmFetchOwnerByNamespace
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.FetchOwnerByNamespace
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) Inspect(f func(ctx context.Context, np1 *resource.Namespace)) *mServiceMockFetchOwnerByNamespace {
+	if mmFetchOwnerByNamespace.mock.inspectFuncFetchOwnerByNamespace != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("Inspect function is already set for ServiceMock.FetchOwnerByNamespace")
+	}
+
+	mmFetchOwnerByNamespace.mock.inspectFuncFetchOwnerByNamespace = f
+
+	return mmFetchOwnerByNamespace
+}
+
+// Return sets up results that will be returned by Service.FetchOwnerByNamespace
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) Return(op1 *mgmtpb.Owner, err error) *ServiceMock {
+	if mmFetchOwnerByNamespace.mock.funcFetchOwnerByNamespace != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("ServiceMock.FetchOwnerByNamespace mock is already set by Set")
+	}
+
+	if mmFetchOwnerByNamespace.defaultExpectation == nil {
+		mmFetchOwnerByNamespace.defaultExpectation = &ServiceMockFetchOwnerByNamespaceExpectation{mock: mmFetchOwnerByNamespace.mock}
+	}
+	mmFetchOwnerByNamespace.defaultExpectation.results = &ServiceMockFetchOwnerByNamespaceResults{op1, err}
+	mmFetchOwnerByNamespace.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmFetchOwnerByNamespace.mock
+}
+
+// Set uses given function f to mock the Service.FetchOwnerByNamespace method
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) Set(f func(ctx context.Context, np1 *resource.Namespace) (op1 *mgmtpb.Owner, err error)) *ServiceMock {
+	if mmFetchOwnerByNamespace.defaultExpectation != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("Default expectation is already set for the Service.FetchOwnerByNamespace method")
+	}
+
+	if len(mmFetchOwnerByNamespace.expectations) > 0 {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("Some expectations are already set for the Service.FetchOwnerByNamespace method")
+	}
+
+	mmFetchOwnerByNamespace.mock.funcFetchOwnerByNamespace = f
+	mmFetchOwnerByNamespace.mock.funcFetchOwnerByNamespaceOrigin = minimock.CallerInfo(1)
+	return mmFetchOwnerByNamespace.mock
+}
+
+// When sets expectation for the Service.FetchOwnerByNamespace which will trigger the result defined by the following
+// Then helper
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) When(ctx context.Context, np1 *resource.Namespace) *ServiceMockFetchOwnerByNamespaceExpectation {
+	if mmFetchOwnerByNamespace.mock.funcFetchOwnerByNamespace != nil {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("ServiceMock.FetchOwnerByNamespace mock is already set by Set")
+	}
+
+	expectation := &ServiceMockFetchOwnerByNamespaceExpectation{
+		mock:               mmFetchOwnerByNamespace.mock,
+		params:             &ServiceMockFetchOwnerByNamespaceParams{ctx, np1},
+		expectationOrigins: ServiceMockFetchOwnerByNamespaceExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmFetchOwnerByNamespace.expectations = append(mmFetchOwnerByNamespace.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.FetchOwnerByNamespace return parameters for the expectation previously defined by the When method
+func (e *ServiceMockFetchOwnerByNamespaceExpectation) Then(op1 *mgmtpb.Owner, err error) *ServiceMock {
+	e.results = &ServiceMockFetchOwnerByNamespaceResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.FetchOwnerByNamespace should be invoked
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) Times(n uint64) *mServiceMockFetchOwnerByNamespace {
+	if n == 0 {
+		mmFetchOwnerByNamespace.mock.t.Fatalf("Times of ServiceMock.FetchOwnerByNamespace mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmFetchOwnerByNamespace.expectedInvocations, n)
+	mmFetchOwnerByNamespace.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmFetchOwnerByNamespace
+}
+
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) invocationsDone() bool {
+	if len(mmFetchOwnerByNamespace.expectations) == 0 && mmFetchOwnerByNamespace.defaultExpectation == nil && mmFetchOwnerByNamespace.mock.funcFetchOwnerByNamespace == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmFetchOwnerByNamespace.mock.afterFetchOwnerByNamespaceCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmFetchOwnerByNamespace.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// FetchOwnerByNamespace implements mm_service.Service
+func (mmFetchOwnerByNamespace *ServiceMock) FetchOwnerByNamespace(ctx context.Context, np1 *resource.Namespace) (op1 *mgmtpb.Owner, err error) {
+	mm_atomic.AddUint64(&mmFetchOwnerByNamespace.beforeFetchOwnerByNamespaceCounter, 1)
+	defer mm_atomic.AddUint64(&mmFetchOwnerByNamespace.afterFetchOwnerByNamespaceCounter, 1)
+
+	mmFetchOwnerByNamespace.t.Helper()
+
+	if mmFetchOwnerByNamespace.inspectFuncFetchOwnerByNamespace != nil {
+		mmFetchOwnerByNamespace.inspectFuncFetchOwnerByNamespace(ctx, np1)
+	}
+
+	mm_params := ServiceMockFetchOwnerByNamespaceParams{ctx, np1}
+
+	// Record call args
+	mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.mutex.Lock()
+	mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.callArgs = append(mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.callArgs, &mm_params)
+	mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.mutex.Unlock()
+
+	for _, e := range mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.defaultExpectation.Counter, 1)
+		mm_want := mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.defaultExpectation.params
+		mm_want_ptrs := mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockFetchOwnerByNamespaceParams{ctx, np1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmFetchOwnerByNamespace.t.Errorf("ServiceMock.FetchOwnerByNamespace got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.np1 != nil && !minimock.Equal(*mm_want_ptrs.np1, mm_got.np1) {
+				mmFetchOwnerByNamespace.t.Errorf("ServiceMock.FetchOwnerByNamespace got unexpected parameter np1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.defaultExpectation.expectationOrigins.originNp1, *mm_want_ptrs.np1, mm_got.np1, minimock.Diff(*mm_want_ptrs.np1, mm_got.np1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmFetchOwnerByNamespace.t.Errorf("ServiceMock.FetchOwnerByNamespace got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmFetchOwnerByNamespace.FetchOwnerByNamespaceMock.defaultExpectation.results
+		if mm_results == nil {
+			mmFetchOwnerByNamespace.t.Fatal("No results are set for the ServiceMock.FetchOwnerByNamespace")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmFetchOwnerByNamespace.funcFetchOwnerByNamespace != nil {
+		return mmFetchOwnerByNamespace.funcFetchOwnerByNamespace(ctx, np1)
+	}
+	mmFetchOwnerByNamespace.t.Fatalf("Unexpected call to ServiceMock.FetchOwnerByNamespace. %v %v", ctx, np1)
+	return
+}
+
+// FetchOwnerByNamespaceAfterCounter returns a count of finished ServiceMock.FetchOwnerByNamespace invocations
+func (mmFetchOwnerByNamespace *ServiceMock) FetchOwnerByNamespaceAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmFetchOwnerByNamespace.afterFetchOwnerByNamespaceCounter)
+}
+
+// FetchOwnerByNamespaceBeforeCounter returns a count of ServiceMock.FetchOwnerByNamespace invocations
+func (mmFetchOwnerByNamespace *ServiceMock) FetchOwnerByNamespaceBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmFetchOwnerByNamespace.beforeFetchOwnerByNamespaceCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.FetchOwnerByNamespace.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmFetchOwnerByNamespace *mServiceMockFetchOwnerByNamespace) Calls() []*ServiceMockFetchOwnerByNamespaceParams {
+	mmFetchOwnerByNamespace.mutex.RLock()
+
+	argCopy := make([]*ServiceMockFetchOwnerByNamespaceParams, len(mmFetchOwnerByNamespace.callArgs))
+	copy(argCopy, mmFetchOwnerByNamespace.callArgs)
+
+	mmFetchOwnerByNamespace.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockFetchOwnerByNamespaceDone returns true if the count of the FetchOwnerByNamespace invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockFetchOwnerByNamespaceDone() bool {
+	if m.FetchOwnerByNamespaceMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.FetchOwnerByNamespaceMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.FetchOwnerByNamespaceMock.invocationsDone()
+}
+
+// MinimockFetchOwnerByNamespaceInspect logs each unmet expectation
+func (m *ServiceMock) MinimockFetchOwnerByNamespaceInspect() {
+	for _, e := range m.FetchOwnerByNamespaceMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.FetchOwnerByNamespace at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterFetchOwnerByNamespaceCounter := mm_atomic.LoadUint64(&m.afterFetchOwnerByNamespaceCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.FetchOwnerByNamespaceMock.defaultExpectation != nil && afterFetchOwnerByNamespaceCounter < 1 {
+		if m.FetchOwnerByNamespaceMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.FetchOwnerByNamespace at\n%s", m.FetchOwnerByNamespaceMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.FetchOwnerByNamespace at\n%s with params: %#v", m.FetchOwnerByNamespaceMock.defaultExpectation.expectationOrigins.origin, *m.FetchOwnerByNamespaceMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcFetchOwnerByNamespace != nil && afterFetchOwnerByNamespaceCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.FetchOwnerByNamespace at\n%s", m.funcFetchOwnerByNamespaceOrigin)
+	}
+
+	if !m.FetchOwnerByNamespaceMock.invocationsDone() && afterFetchOwnerByNamespaceCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.FetchOwnerByNamespace at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.FetchOwnerByNamespaceMock.expectedInvocations), m.FetchOwnerByNamespaceMock.expectedInvocationsOrigin, afterFetchOwnerByNamespaceCounter)
+	}
+}
+
+type mServiceMockFetchUserByUID struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockFetchUserByUIDExpectation
+	expectations       []*ServiceMockFetchUserByUIDExpectation
+
+	callArgs []*ServiceMockFetchUserByUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockFetchUserByUIDExpectation specifies expectation struct of the Service.FetchUserByUID
+type ServiceMockFetchUserByUIDExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockFetchUserByUIDParams
+	paramPtrs          *ServiceMockFetchUserByUIDParamPtrs
+	expectationOrigins ServiceMockFetchUserByUIDExpectationOrigins
+	results            *ServiceMockFetchUserByUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockFetchUserByUIDParams contains parameters of the Service.FetchUserByUID
+type ServiceMockFetchUserByUIDParams struct {
+	ctx context.Context
+	s1  string
+}
+
+// ServiceMockFetchUserByUIDParamPtrs contains pointers to parameters of the Service.FetchUserByUID
+type ServiceMockFetchUserByUIDParamPtrs struct {
+	ctx *context.Context
+	s1  *string
+}
+
+// ServiceMockFetchUserByUIDResults contains results of the Service.FetchUserByUID
+type ServiceMockFetchUserByUIDResults struct {
+	up1 *mgmtpb.User
+	err error
+}
+
+// ServiceMockFetchUserByUIDOrigins contains origins of expectations of the Service.FetchUserByUID
+type ServiceMockFetchUserByUIDExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originS1  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) Optional() *mServiceMockFetchUserByUID {
+	mmFetchUserByUID.optional = true
+	return mmFetchUserByUID
+}
+
+// Expect sets up expected params for Service.FetchUserByUID
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) Expect(ctx context.Context, s1 string) *mServiceMockFetchUserByUID {
+	if mmFetchUserByUID.mock.funcFetchUserByUID != nil {
+		mmFetchUserByUID.mock.t.Fatalf("ServiceMock.FetchUserByUID mock is already set by Set")
+	}
+
+	if mmFetchUserByUID.defaultExpectation == nil {
+		mmFetchUserByUID.defaultExpectation = &ServiceMockFetchUserByUIDExpectation{}
+	}
+
+	if mmFetchUserByUID.defaultExpectation.paramPtrs != nil {
+		mmFetchUserByUID.mock.t.Fatalf("ServiceMock.FetchUserByUID mock is already set by ExpectParams functions")
+	}
+
+	mmFetchUserByUID.defaultExpectation.params = &ServiceMockFetchUserByUIDParams{ctx, s1}
+	mmFetchUserByUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmFetchUserByUID.expectations {
+		if minimock.Equal(e.params, mmFetchUserByUID.defaultExpectation.params) {
+			mmFetchUserByUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmFetchUserByUID.defaultExpectation.params)
+		}
+	}
+
+	return mmFetchUserByUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.FetchUserByUID
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) ExpectCtxParam1(ctx context.Context) *mServiceMockFetchUserByUID {
+	if mmFetchUserByUID.mock.funcFetchUserByUID != nil {
+		mmFetchUserByUID.mock.t.Fatalf("ServiceMock.FetchUserByUID mock is already set by Set")
+	}
+
+	if mmFetchUserByUID.defaultExpectation == nil {
+		mmFetchUserByUID.defaultExpectation = &ServiceMockFetchUserByUIDExpectation{}
+	}
+
+	if mmFetchUserByUID.defaultExpectation.params != nil {
+		mmFetchUserByUID.mock.t.Fatalf("ServiceMock.FetchUserByUID mock is already set by Expect")
+	}
+
+	if mmFetchUserByUID.defaultExpectation.paramPtrs == nil {
+		mmFetchUserByUID.defaultExpectation.paramPtrs = &ServiceMockFetchUserByUIDParamPtrs{}
+	}
+	mmFetchUserByUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmFetchUserByUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmFetchUserByUID
+}
+
+// ExpectS1Param2 sets up expected param s1 for Service.FetchUserByUID
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) ExpectS1Param2(s1 string) *mServiceMockFetchUserByUID {
+	if mmFetchUserByUID.mock.funcFetchUserByUID != nil {
+		mmFetchUserByUID.mock.t.Fatalf("ServiceMock.FetchUserByUID mock is already set by Set")
+	}
+
+	if mmFetchUserByUID.defaultExpectation == nil {
+		mmFetchUserByUID.defaultExpectation = &ServiceMockFetchUserByUIDExpectation{}
+	}
+
+	if mmFetchUserByUID.defaultExpectation.params != nil {
+		mmFetchUserByUID.mock.t.Fatalf("ServiceMock.FetchUserByUID mock is already set by Expect")
+	}
+
+	if mmFetchUserByUID.defaultExpectation.paramPtrs == nil {
+		mmFetchUserByUID.defaultExpectation.paramPtrs = &ServiceMockFetchUserByUIDParamPtrs{}
+	}
+	mmFetchUserByUID.defaultExpectation.paramPtrs.s1 = &s1
+	mmFetchUserByUID.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmFetchUserByUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.FetchUserByUID
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) Inspect(f func(ctx context.Context, s1 string)) *mServiceMockFetchUserByUID {
+	if mmFetchUserByUID.mock.inspectFuncFetchUserByUID != nil {
+		mmFetchUserByUID.mock.t.Fatalf("Inspect function is already set for ServiceMock.FetchUserByUID")
+	}
+
+	mmFetchUserByUID.mock.inspectFuncFetchUserByUID = f
+
+	return mmFetchUserByUID
+}
+
+// Return sets up results that will be returned by Service.FetchUserByUID
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) Return(up1 *mgmtpb.User, err error) *ServiceMock {
+	if mmFetchUserByUID.mock.funcFetchUserByUID != nil {
+		mmFetchUserByUID.mock.t.Fatalf("ServiceMock.FetchUserByUID mock is already set by Set")
+	}
+
+	if mmFetchUserByUID.defaultExpectation == nil {
+		mmFetchUserByUID.defaultExpectation = &ServiceMockFetchUserByUIDExpectation{mock: mmFetchUserByUID.mock}
+	}
+	mmFetchUserByUID.defaultExpectation.results = &ServiceMockFetchUserByUIDResults{up1, err}
+	mmFetchUserByUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmFetchUserByUID.mock
+}
+
+// Set uses given function f to mock the Service.FetchUserByUID method
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) Set(f func(ctx context.Context, s1 string) (up1 *mgmtpb.User, err error)) *ServiceMock {
+	if mmFetchUserByUID.defaultExpectation != nil {
+		mmFetchUserByUID.mock.t.Fatalf("Default expectation is already set for the Service.FetchUserByUID method")
+	}
+
+	if len(mmFetchUserByUID.expectations) > 0 {
+		mmFetchUserByUID.mock.t.Fatalf("Some expectations are already set for the Service.FetchUserByUID method")
+	}
+
+	mmFetchUserByUID.mock.funcFetchUserByUID = f
+	mmFetchUserByUID.mock.funcFetchUserByUIDOrigin = minimock.CallerInfo(1)
+	return mmFetchUserByUID.mock
+}
+
+// When sets expectation for the Service.FetchUserByUID which will trigger the result defined by the following
+// Then helper
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) When(ctx context.Context, s1 string) *ServiceMockFetchUserByUIDExpectation {
+	if mmFetchUserByUID.mock.funcFetchUserByUID != nil {
+		mmFetchUserByUID.mock.t.Fatalf("ServiceMock.FetchUserByUID mock is already set by Set")
+	}
+
+	expectation := &ServiceMockFetchUserByUIDExpectation{
+		mock:               mmFetchUserByUID.mock,
+		params:             &ServiceMockFetchUserByUIDParams{ctx, s1},
+		expectationOrigins: ServiceMockFetchUserByUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmFetchUserByUID.expectations = append(mmFetchUserByUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.FetchUserByUID return parameters for the expectation previously defined by the When method
+func (e *ServiceMockFetchUserByUIDExpectation) Then(up1 *mgmtpb.User, err error) *ServiceMock {
+	e.results = &ServiceMockFetchUserByUIDResults{up1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.FetchUserByUID should be invoked
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) Times(n uint64) *mServiceMockFetchUserByUID {
+	if n == 0 {
+		mmFetchUserByUID.mock.t.Fatalf("Times of ServiceMock.FetchUserByUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmFetchUserByUID.expectedInvocations, n)
+	mmFetchUserByUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmFetchUserByUID
+}
+
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) invocationsDone() bool {
+	if len(mmFetchUserByUID.expectations) == 0 && mmFetchUserByUID.defaultExpectation == nil && mmFetchUserByUID.mock.funcFetchUserByUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmFetchUserByUID.mock.afterFetchUserByUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmFetchUserByUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// FetchUserByUID implements mm_service.Service
+func (mmFetchUserByUID *ServiceMock) FetchUserByUID(ctx context.Context, s1 string) (up1 *mgmtpb.User, err error) {
+	mm_atomic.AddUint64(&mmFetchUserByUID.beforeFetchUserByUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmFetchUserByUID.afterFetchUserByUIDCounter, 1)
+
+	mmFetchUserByUID.t.Helper()
+
+	if mmFetchUserByUID.inspectFuncFetchUserByUID != nil {
+		mmFetchUserByUID.inspectFuncFetchUserByUID(ctx, s1)
+	}
+
+	mm_params := ServiceMockFetchUserByUIDParams{ctx, s1}
+
+	// Record call args
+	mmFetchUserByUID.FetchUserByUIDMock.mutex.Lock()
+	mmFetchUserByUID.FetchUserByUIDMock.callArgs = append(mmFetchUserByUID.FetchUserByUIDMock.callArgs, &mm_params)
+	mmFetchUserByUID.FetchUserByUIDMock.mutex.Unlock()
+
+	for _, e := range mmFetchUserByUID.FetchUserByUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.up1, e.results.err
+		}
+	}
+
+	if mmFetchUserByUID.FetchUserByUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmFetchUserByUID.FetchUserByUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmFetchUserByUID.FetchUserByUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmFetchUserByUID.FetchUserByUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockFetchUserByUIDParams{ctx, s1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmFetchUserByUID.t.Errorf("ServiceMock.FetchUserByUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmFetchUserByUID.FetchUserByUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmFetchUserByUID.t.Errorf("ServiceMock.FetchUserByUID got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmFetchUserByUID.FetchUserByUIDMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmFetchUserByUID.t.Errorf("ServiceMock.FetchUserByUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmFetchUserByUID.FetchUserByUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmFetchUserByUID.FetchUserByUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmFetchUserByUID.t.Fatal("No results are set for the ServiceMock.FetchUserByUID")
+		}
+		return (*mm_results).up1, (*mm_results).err
+	}
+	if mmFetchUserByUID.funcFetchUserByUID != nil {
+		return mmFetchUserByUID.funcFetchUserByUID(ctx, s1)
+	}
+	mmFetchUserByUID.t.Fatalf("Unexpected call to ServiceMock.FetchUserByUID. %v %v", ctx, s1)
+	return
+}
+
+// FetchUserByUIDAfterCounter returns a count of finished ServiceMock.FetchUserByUID invocations
+func (mmFetchUserByUID *ServiceMock) FetchUserByUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmFetchUserByUID.afterFetchUserByUIDCounter)
+}
+
+// FetchUserByUIDBeforeCounter returns a count of ServiceMock.FetchUserByUID invocations
+func (mmFetchUserByUID *ServiceMock) FetchUserByUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmFetchUserByUID.beforeFetchUserByUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.FetchUserByUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmFetchUserByUID *mServiceMockFetchUserByUID) Calls() []*ServiceMockFetchUserByUIDParams {
+	mmFetchUserByUID.mutex.RLock()
+
+	argCopy := make([]*ServiceMockFetchUserByUIDParams, len(mmFetchUserByUID.callArgs))
+	copy(argCopy, mmFetchUserByUID.callArgs)
+
+	mmFetchUserByUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockFetchUserByUIDDone returns true if the count of the FetchUserByUID invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockFetchUserByUIDDone() bool {
+	if m.FetchUserByUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.FetchUserByUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.FetchUserByUIDMock.invocationsDone()
+}
+
+// MinimockFetchUserByUIDInspect logs each unmet expectation
+func (m *ServiceMock) MinimockFetchUserByUIDInspect() {
+	for _, e := range m.FetchUserByUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.FetchUserByUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterFetchUserByUIDCounter := mm_atomic.LoadUint64(&m.afterFetchUserByUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.FetchUserByUIDMock.defaultExpectation != nil && afterFetchUserByUIDCounter < 1 {
+		if m.FetchUserByUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.FetchUserByUID at\n%s", m.FetchUserByUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.FetchUserByUID at\n%s with params: %#v", m.FetchUserByUIDMock.defaultExpectation.expectationOrigins.origin, *m.FetchUserByUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcFetchUserByUID != nil && afterFetchUserByUIDCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.FetchUserByUID at\n%s", m.funcFetchUserByUIDOrigin)
+	}
+
+	if !m.FetchUserByUIDMock.invocationsDone() && afterFetchUserByUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.FetchUserByUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.FetchUserByUIDMock.expectedInvocations), m.FetchUserByUIDMock.expectedInvocationsOrigin, afterFetchUserByUIDCounter)
 	}
 }
 
@@ -13638,6 +14345,10 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockExecuteKnowledgeBaseUpdateAdminInspect()
 
+			m.MinimockFetchOwnerByNamespaceInspect()
+
+			m.MinimockFetchUserByUIDInspect()
+
 			m.MinimockGetChunksByFileInspect()
 
 			m.MinimockGetConvertedFilePathsByFileUIDInspect()
@@ -13723,6 +14434,8 @@ func (m *ServiceMock) minimockDone() bool {
 		m.MinimockDeleteSystemAdminDone() &&
 		m.MinimockEmbedTextsDone() &&
 		m.MinimockExecuteKnowledgeBaseUpdateAdminDone() &&
+		m.MinimockFetchOwnerByNamespaceDone() &&
+		m.MinimockFetchUserByUIDDone() &&
 		m.MinimockGetChunksByFileDone() &&
 		m.MinimockGetConvertedFilePathsByFileUIDDone() &&
 		m.MinimockGetDefaultSystemAdminDone() &&

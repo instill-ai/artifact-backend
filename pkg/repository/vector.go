@@ -27,8 +27,8 @@ type VectorEmbedding struct {
 	EmbeddingUID string
 	Vector       []float32
 	FileUID      types.FileUIDType
-	Filename     string
-	ContentType  string // MIME type (e.g., "text/markdown", "application/pdf")
+	FileDisplayName string
+	ContentType     string // MIME type (e.g., "text/markdown", "application/pdf")
 	ChunkType    string // Chunk classification ("content", "summary", "augmented")
 	Tags         []string
 	Text         string // Original text content for BM25 sparse vector generation
@@ -232,7 +232,7 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 		sourceUIDs[i] = embedding.SourceUID
 		embeddingUIDs[i] = embedding.EmbeddingUID
 		fileUIDs[i] = embedding.FileUID.String()
-		fileNames[i] = embedding.Filename
+		fileNames[i] = embedding.FileDisplayName
 		fileTypes[i] = embedding.ContentType
 		contentTypes[i] = embedding.ChunkType
 		tags[i] = embedding.Tags
@@ -665,9 +665,9 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 		scores := result.Scores
 
 		// Extract metadata fields if available
-		var fileUIDs, fileNames, fileTypes, contentTypes []string
+		var fileUIDs, fileDisplayNames, fileTypes, contentTypes []string
 		if hasMetadata {
-			fileNames, err = getStringData(result.GetColumn(kbCollectionFieldFileName))
+			fileDisplayNames, err = getStringData(result.GetColumn(kbCollectionFieldFileName))
 			if err != nil {
 				return nil, fmt.Errorf("getting file name column value: %w", err)
 			}
@@ -703,7 +703,7 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 				Vector:       vectorData.Data()[i],
 			}
 			if hasMetadata {
-				emb.Filename = fileNames[i]
+				emb.FileDisplayName = fileDisplayNames[i]
 				emb.ContentType = fileTypes[i]  // MIME type from file_type field
 				emb.ChunkType = contentTypes[i] // chunk type from content_type field
 				if hasFileUID {

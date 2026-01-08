@@ -91,11 +91,14 @@ type KnowledgeBaseFile interface {
 // KnowledgeBaseFileModel is the model for the knowledge base file table
 type KnowledgeBaseFileModel struct {
 	UID types.FileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
+	// ID is a URL-safe slug (defaults to uid for files)
+	ID string `gorm:"column:id;size:255;not null" json:"id"`
 	// NamespaceUID is the namespace that owns this file
 	NamespaceUID types.NamespaceUIDType `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
-	KBUID      types.KBUIDType        `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
-	CreatorUID types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
-	Filename   string                 `gorm:"column:filename;size:255;not null" json:"filename"`
+	KBUID        types.KBUIDType        `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
+	CreatorUID   types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
+	DisplayName  string                 `gorm:"column:display_name;size:255;not null" json:"display_name"`
+	Description  string                 `gorm:"column:description" json:"description"`
 	// FileType stores the FileType enum string (e.g., "TYPE_PDF", "TYPE_TEXT")
 	FileType string `gorm:"column:file_type;not null" json:"file_type"`
 	// Destination is the path in the MinIO bucket
@@ -167,7 +170,7 @@ type KnowledgeBaseFileColumns struct {
 	Owner            string
 	KnowledgeBaseUID string
 	CreatorUID       string
-	Filename         string
+	DisplayName      string
 	FileType         string
 	Destination      string
 	ProcessStatus    string
@@ -188,7 +191,7 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	Owner:            "owner",
 	KnowledgeBaseUID: "kb_uid",
 	CreatorUID:       "creator_uid",
-	Filename:         "filename",
+	DisplayName:      "display_name",
 	FileType:         "file_type",
 	Destination:      "destination",
 	ProcessStatus:    "process_status",
@@ -318,7 +321,13 @@ func (kf *KnowledgeBaseFileModel) UsageMetadataUnmarshalFunc() error {
 }
 
 // BeforeCreate is a GORM hook that marshals the ExtraMetaData, ExternalMetadata, and UsageMetadata fields
+// and sets default ID if not provided
 func (kf *KnowledgeBaseFileModel) BeforeCreate(tx *gorm.DB) (err error) {
+	// Set default ID if not provided (use UID as default)
+	if kf.ID == "" {
+		kf.ID = kf.UID.String()
+		tx.Statement.SetColumn("ID", kf.ID)
+	}
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
 	}
@@ -496,12 +505,12 @@ func (r *repository) ListKnowledgeBaseFiles(ctx context.Context, params Knowledg
 			return nil, fmt.Errorf("invalid next page token")
 		}
 
-		q = q.Where("create_time <= ?", kbfs[0].CreateTime)
+		q = q.Where("update_time <= ?", kbfs[0].UpdateTime)
 	}
 
 	// TODO INS-8162: the repository method (and the upstream handler) should
 	// take an `ordering` parameter so clients can choose the sorting.
-	q = q.Order("create_time DESC")
+	q = q.Order("update_time DESC")
 
 	// Fetch the records
 	if err := q.Find(&kbs).Error; err != nil {
@@ -848,7 +857,7 @@ func (r *repository) GetKnowledgeBaseFilesByName(
 	// GORM's DeletedAt automatically filters out soft-deleted files, so no manual check needed
 	where := fmt.Sprintf("%v = ? AND %v = ?",
 		KnowledgeBaseFileColumn.KnowledgeBaseUID,
-		KnowledgeBaseFileColumn.Filename)
+		KnowledgeBaseFileColumn.DisplayName)
 
 	if err := r.db.WithContext(ctx).
 		Where(where, kbUID, filename).
@@ -908,7 +917,7 @@ func (r *repository) GetSourceByFileUID(ctx context.Context, fileUID types.FileU
 
 	return &SourceMeta{
 		OriginalFileUID:  file.UID,
-		OriginalFileName: file.Filename,
+		OriginalFileName: file.DisplayName,
 		Dest:             convertedFile.Destination,
 		CreateTime:       *convertedFile.CreateTime,
 		UpdateTime:       *convertedFile.UpdateTime,
@@ -1060,7 +1069,7 @@ func (r *repository) DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context
 func (r *repository) GetKnowledgebaseFileByKBUIDAndFileID(ctx context.Context, kbUID types.KBUIDType, fileID string) (*KnowledgeBaseFileModel, error) {
 	var file KnowledgeBaseFileModel
 	where := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL",
-		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Filename, KnowledgeBaseFileColumn.DeleteTime)
+		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.DisplayName, KnowledgeBaseFileColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(where, kbUID, fileID).First(&file).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("file not found by knowledge base ID: %v and file ID: %v", kbUID, fileID)

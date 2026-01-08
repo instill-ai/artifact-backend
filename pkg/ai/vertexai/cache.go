@@ -26,7 +26,7 @@ func (c *Client) CreateCache(ctx context.Context, files []ai.FileContent, ttl ti
 	// Use unified batch cache approach for all cases
 	displayName := fmt.Sprintf("cache-%d-files", len(files))
 	if len(files) == 1 {
-		displayName = fmt.Sprintf("cache-%s", files[0].Filename)
+		displayName = fmt.Sprintf("cache-%s", files[0].FileDisplayName)
 	}
 
 	output, err := c.createBatchCache(ctx, GetModel(), files, ttl, displayName)
@@ -180,7 +180,7 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 		// Upload to object storage (GCS)
 		// Generate unique path for file
 		fileUID := uuid.Must(uuid.NewV4())
-		objectPath := path.Join("vertexai-cache", fileUID.String(), file.Filename)
+		objectPath := path.Join("vertexai-cache", fileUID.String(), file.FileDisplayName)
 
 		// Convert to base64 for object.Storage interface
 		base64Content := base64.StdEncoding.EncodeToString(file.Content)
@@ -191,8 +191,8 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 				_ = c.storage.DeleteFile(ctx, "", uri)
 			}
 			return nil, errorsx.AddMessage(
-				fmt.Errorf("failed to upload file %s to object storage: %w", file.Filename, err),
-				fmt.Sprintf("Unable to upload file %s for caching.", file.Filename),
+				fmt.Errorf("failed to upload file %s to object storage: %w", file.FileDisplayName, err),
+				fmt.Sprintf("Unable to upload file %s for caching.", file.FileDisplayName),
 			)
 		}
 
