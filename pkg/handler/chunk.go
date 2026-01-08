@@ -414,13 +414,13 @@ func (ph *PublicHandler) SearchChunks(
 	}
 
 	// Fetch file names
-	fileUIDMapName := make(map[types.FileUIDType]string)
+	fileUIDMapDisplayName := make(map[types.FileUIDType]string)
 	for _, chunk := range chunks {
-		fileUIDMapName[chunk.FileUID] = ""
+		fileUIDMapDisplayName[chunk.FileUID] = ""
 	}
 
-	fileUids := make([]types.FileUIDType, 0, len(fileUIDMapName))
-	for fileUID := range fileUIDMapName {
+	fileUids := make([]types.FileUIDType, 0, len(fileUIDMapDisplayName))
+	for fileUID := range fileUIDMapDisplayName {
 		fileUids = append(fileUids, fileUID)
 	}
 
@@ -428,7 +428,7 @@ func (ph *PublicHandler) SearchChunks(
 		ctx,
 		fileUids,
 		repository.KnowledgeBaseFileColumn.UID,
-		repository.KnowledgeBaseFileColumn.Filename,
+		repository.KnowledgeBaseFileColumn.DisplayName,
 	)
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -438,7 +438,7 @@ func (ph *PublicHandler) SearchChunks(
 	}
 
 	for _, file := range files {
-		fileUIDMapName[file.UID] = file.Filename
+		fileUIDMapDisplayName[file.UID] = file.DisplayName
 	}
 
 	// Build response with new protobuf format
@@ -453,7 +453,7 @@ func (ph *PublicHandler) SearchChunks(
 			ChunkId:         chunk.UID.String(), // Use ChunkId (new field name)
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
-			SourceFile:      fileUIDMapName[chunk.FileUID],
+			SourceFile:      fileUIDMapDisplayName[chunk.FileUID],
 			ChunkMetadata:   convertToProtoChunk(chunk, req.GetNamespaceId(), req.GetKnowledgeBaseId(), chunk.FileUID.String()),
 		}
 		simChunks = append(simChunks, pbChunk)

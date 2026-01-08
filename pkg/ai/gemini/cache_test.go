@@ -128,7 +128,7 @@ func TestCreateCache_Validation(t *testing.T) {
 				{
 					Content:  []byte{},
 					FileType: artifactpb.File_TYPE_PDF,
-					Filename: "test.pdf",
+					FileDisplayName: "test.pdf",
 				},
 			},
 			5*time.Minute,
@@ -146,12 +146,12 @@ func TestCreateCache_Validation(t *testing.T) {
 				{
 					Content:  []byte("valid content"),
 					FileType: artifactpb.File_TYPE_PDF,
-					Filename: "test1.pdf",
+					FileDisplayName: "test1.pdf",
 				},
 				{
 					Content:  []byte{}, // empty content
 					FileType: artifactpb.File_TYPE_PDF,
-					Filename: "test2.pdf",
+					FileDisplayName: "test2.pdf",
 				},
 			},
 			5*time.Minute,
@@ -171,7 +171,7 @@ func TestCreateCache_DisplayName(t *testing.T) {
 			{
 				Content:  []byte("test content"),
 				FileType: artifactpb.File_TYPE_PDF,
-				Filename: "my-document.pdf",
+				FileDisplayName: "my-document.pdf",
 			},
 		}
 
@@ -212,12 +212,12 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 			{
 				Content:  []byte("valid"),
 				FileType: artifactpb.File_TYPE_PDF,
-				Filename: "test1.pdf",
+				FileDisplayName: "test1.pdf",
 			},
 			{
 				Content:  []byte{}, // empty
 				FileType: artifactpb.File_TYPE_PDF,
-				Filename: "test2.pdf",
+				FileDisplayName: "test2.pdf",
 			},
 		}
 		_, err := client.createBatchCache(context.Background(), GetModel(), files, time.Hour, "test")
@@ -231,7 +231,7 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 			{
 				Content:  []byte("test"),
 				FileType: artifactpb.File_TYPE_PDF,
-				Filename: "test.pdf",
+				FileDisplayName: "test.pdf",
 			},
 		}
 
@@ -245,7 +245,7 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 			{
 				Content:  []byte("test"),
 				FileType: artifactpb.File_TYPE_PDF,
-				Filename: "test.pdf",
+				FileDisplayName: "test.pdf",
 			},
 		}
 

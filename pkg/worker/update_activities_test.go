@@ -240,7 +240,7 @@ func TestCleanupOldKnowledgeBaseActivity_Success(t *testing.T) {
 		Then(&repository.KnowledgeBaseModel{
 			UID:                 kbUID,
 			KBID:                "test-kb",
-			NamespaceUID:               uuid.Must(uuid.NewV4()).String(),
+			NamespaceUID:        uuid.Must(uuid.NewV4()).String(),
 			ActiveCollectionUID: activeCollectionUID,
 			DeleteTime:          gorm.DeletedAt{},
 		}, nil)
@@ -301,7 +301,7 @@ func TestListFilesForReprocessingActivity_Success(t *testing.T) {
 	mockRepository.GetKnowledgeBaseByUIDMock.
 		When(minimock.AnyContext, kbUID).
 		Then(&repository.KnowledgeBaseModel{
-			UID:   kbUID,
+			UID:          kbUID,
 			NamespaceUID: uuid.Must(uuid.NewV4()).String(),
 		}, nil)
 	mockRepository.ListKnowledgeBaseFilesMock.
@@ -348,7 +348,7 @@ func TestCloneFileToStagingKBActivity_Success(t *testing.T) {
 		Then([]repository.KnowledgeBaseFileModel{
 			{
 				UID:         originalFileUID,
-				Filename:    "test.pdf",
+				DisplayName: "test.pdf",
 				FileType:    "application/pdf",
 				Destination: "kb/file/test.pdf",
 				Size:        1024,
@@ -358,14 +358,14 @@ func TestCloneFileToStagingKBActivity_Success(t *testing.T) {
 	mockRepository.GetKnowledgeBaseByUIDMock.
 		When(minimock.AnyContext, stagingKBUID).
 		Then(&repository.KnowledgeBaseModel{
-			UID:   stagingKBUID,
+			UID:          stagingKBUID,
 			NamespaceUID: ownerUID.String(),
 		}, nil)
 	mockRepository.CreateKnowledgeBaseFileMock.
 		Set(func(ctx context.Context, model repository.KnowledgeBaseFileModel, externalServiceCall func(fileUID string) error) (*repository.KnowledgeBaseFileModel, error) {
 			return &repository.KnowledgeBaseFileModel{
-				UID:      newFileUID,
-				Filename: "test.pdf",
+				UID:             newFileUID,
+				DisplayName: "test.pdf",
 			}, nil
 		})
 
@@ -499,7 +499,7 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 originalKBUID,
 				KBID:                "test-kb",
-				NamespaceUID:               ownerUID.String(),
+				NamespaceUID:        ownerUID.String(),
 				CreatorUID:          func() *types.CreatorUIDType { c := types.CreatorUIDType(ownerUID); return &c }(),
 				ActiveCollectionUID: originalCollectionUID,
 			},
@@ -512,7 +512,7 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 stagingKBUID,
 				KBID:                "test-kb-staging",
-				NamespaceUID:               ownerUID.String(),
+				NamespaceUID:        ownerUID.String(),
 				ActiveCollectionUID: stagingCollectionUID,
 			},
 		}, nil)
@@ -595,7 +595,7 @@ func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T)
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 originalKBUID,
 				KBID:                "test-kb",
-				NamespaceUID:               ownerUID.String(),
+				NamespaceUID:        ownerUID.String(),
 				CreatorUID:          func() *types.CreatorUIDType { c := types.CreatorUIDType(ownerUID); return &c }(),
 				ActiveCollectionUID: originalCollectionUID,
 			},
@@ -608,7 +608,7 @@ func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T)
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 stagingKBUID,
 				KBID:                "test-kb-staging",
-				NamespaceUID:               ownerUID.String(),
+				NamespaceUID:        ownerUID.String(),
 				ActiveCollectionUID: stagingCollectionUID,
 			},
 		}, nil)
@@ -681,8 +681,8 @@ func TestSynchronizeKBActivity_FilesStillProcessing(t *testing.T) {
 	mockRepository.GetKnowledgeBaseByUIDMock.
 		When(minimock.AnyContext, originalKBUID).
 		Then(&repository.KnowledgeBaseModel{
-			UID:   originalKBUID,
-			KBID:  "test-kb",
+			UID:          originalKBUID,
+			KBID:         "test-kb",
 			NamespaceUID: ownerUID.String(),
 		}, nil)
 
@@ -730,8 +730,8 @@ func TestSynchronizeKBActivity_Success(t *testing.T) {
 	mockRepository.GetKnowledgeBaseByUIDMock.
 		When(minimock.AnyContext, originalKBUID).
 		Then(&repository.KnowledgeBaseModel{
-			UID:   originalKBUID,
-			KBID:  "test-kb",
+			UID:          originalKBUID,
+			KBID:         "test-kb",
 			NamespaceUID: ownerUID.String(),
 		}, nil)
 

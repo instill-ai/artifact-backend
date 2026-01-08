@@ -31,7 +31,7 @@ func (c *Client) CreateCache(ctx context.Context, files []ai.FileContent, ttl ti
 	// Use unified batch cache approach for all cases (handles single and multiple files)
 	displayName := fmt.Sprintf("cache-%d-files", len(files))
 	if len(files) == 1 {
-		displayName = fmt.Sprintf("cache-%s", files[0].Filename)
+		displayName = fmt.Sprintf("cache-%s", files[0].FileDisplayName)
 	}
 
 	output, err := c.createBatchCache(ctx, GetModel(), files, ttl, displayName)
@@ -292,8 +292,8 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 			part, uploadedFileName, err = c.uploadAndWaitForFile(ctx, file.Content, mimeType)
 			if err != nil {
 				return nil, errorsx.AddMessage(
-					fmt.Errorf("failed to upload file %s for batch caching: %w", file.Filename, err),
-					fmt.Sprintf("Unable to upload file %s for processing optimization.", file.Filename),
+					fmt.Errorf("failed to upload file %s for batch caching: %w", file.FileDisplayName, err),
+					fmt.Sprintf("Unable to upload file %s for processing optimization.", file.FileDisplayName),
 				)
 			}
 			uploadedFileNames = append(uploadedFileNames, uploadedFileName)

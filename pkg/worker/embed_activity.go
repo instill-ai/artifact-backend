@@ -308,7 +308,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 					EmbeddingUID: emb.UID.String(),
 					Vector:       emb.Vector,
 					FileUID:      emb.FileUID,
-					Filename:     file.Filename,
+					FileDisplayName: file.DisplayName,
 					ContentType:  emb.ContentType,
 					ChunkType:    emb.ChunkType,
 					Tags:         emb.Tags,

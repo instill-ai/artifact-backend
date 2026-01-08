@@ -98,7 +98,7 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 
 		sp.Filenames = make([]string, 0, len(files))
 		for _, file := range files {
-			sp.Filenames = append(sp.Filenames, file.Filename)
+			sp.Filenames = append(sp.Filenames, file.DisplayName)
 		}
 	}
 

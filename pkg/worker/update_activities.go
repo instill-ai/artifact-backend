@@ -750,19 +750,19 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 	// Build map of staging files by name - use slice to detect duplicates
 	stagingFilesByName := make(map[string][]repository.KnowledgeBaseFileModel)
 	for _, stagingFile := range stagingFiles {
-		stagingFilesByName[stagingFile.Filename] = append(stagingFilesByName[stagingFile.Filename], stagingFile)
+		stagingFilesByName[stagingFile.DisplayName] = append(stagingFilesByName[stagingFile.DisplayName], stagingFile)
 	}
 
 	// Build map of production files by name
 	productionFileMap := make(map[string]*repository.KnowledgeBaseFileModel)
 	for i := range productionFiles {
-		productionFileMap[productionFiles[i].Filename] = &productionFiles[i]
+		productionFileMap[productionFiles[i].DisplayName] = &productionFiles[i]
 	}
 
 	// Find files in production but missing in staging
 	var missingInStaging []repository.KnowledgeBaseFileModel
 	for _, prodFile := range productionFiles {
-		if _, exists := stagingFilesByName[prodFile.Filename]; !exists {
+		if _, exists := stagingFilesByName[prodFile.DisplayName]; !exists {
 			missingInStaging = append(missingInStaging, prodFile)
 		}
 	}
@@ -772,7 +772,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 	for _, stagingFileList := range stagingFilesByName {
 		// Use first file in list for name comparison
 		if len(stagingFileList) > 0 {
-			if _, exists := productionFileMap[stagingFileList[0].Filename]; !exists {
+			if _, exists := productionFileMap[stagingFileList[0].DisplayName]; !exists {
 				missingInProduction = append(missingInProduction, stagingFileList[0])
 			}
 		}
@@ -806,7 +806,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 	// Create missing files in staging
 	for _, prodFile := range missingInStaging {
 		w.log.Info("Creating missing file in staging KB",
-			zap.String("filename", prodFile.Filename),
+			zap.String("filename", prodFile.DisplayName),
 			zap.String("prodFileUID", prodFile.UID.String()),
 			zap.String("stagingKBUID", stagingKBUID.String()))
 
@@ -827,7 +827,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 			skippedDueToMissingBlobs++
 			w.log.Error("reconcileKBFiles: Original blob file not found in MinIO - skipping file during reconciliation",
 				zap.String("prodFileUID", prodFile.UID.String()),
-				zap.String("filename", prodFile.Filename),
+				zap.String("filename", prodFile.DisplayName),
 				zap.String("destination", prodFile.Destination),
 				zap.String("bucket", bucket),
 				zap.Error(err),
@@ -838,7 +838,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 
 		// Create duplicate file record for staging KB
 		stagingFile := repository.KnowledgeBaseFileModel{
-			Filename:                  prodFile.Filename,
+			DisplayName:                  prodFile.DisplayName,
 			FileType:                  prodFile.FileType,
 			NamespaceUID:              prodFile.NamespaceUID,
 			CreatorUID:                prodFile.CreatorUID,
@@ -861,7 +861,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 			if attempt < maxRetries {
 				w.log.Warn("Failed to create staging file during reconciliation, retrying...",
 					zap.Error(err),
-					zap.String("filename", prodFile.Filename),
+					zap.String("filename", prodFile.DisplayName),
 					zap.Int("attempt", attempt))
 				time.Sleep(time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond)
 			}
@@ -870,8 +870,8 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		if err != nil {
 			w.log.Error("Failed to create staging file after retries during reconciliation",
 				zap.Error(err),
-				zap.String("filename", prodFile.Filename))
-			return nil, fmt.Errorf("failed to create staging file %s: %w", prodFile.Filename, err)
+				zap.String("filename", prodFile.DisplayName))
+			return nil, fmt.Errorf("failed to create staging file %s: %w", prodFile.DisplayName, err)
 		}
 
 		// Track this file for exclusion from NOTSTARTED check on next retry
@@ -882,7 +882,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		if err != nil {
 			w.log.Warn("Failed to increase staging KB usage during reconciliation",
 				zap.Error(err),
-				zap.String("filename", prodFile.Filename))
+				zap.String("filename", prodFile.DisplayName))
 			// Non-fatal, continue
 		}
 
@@ -891,13 +891,13 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		if err != nil {
 			w.log.Error("Failed to queue processing workflow during reconciliation",
 				zap.Error(err),
-				zap.String("filename", prodFile.Filename),
+				zap.String("filename", prodFile.DisplayName),
 				zap.String("fileUID", createdFile.UID.String()))
-			return nil, fmt.Errorf("failed to queue processing for file %s: %w", prodFile.Filename, err)
+			return nil, fmt.Errorf("failed to queue processing for file %s: %w", prodFile.DisplayName, err)
 		}
 
 		w.log.Info("Successfully created and queued staging file during reconciliation",
-			zap.String("filename", prodFile.Filename),
+			zap.String("filename", prodFile.DisplayName),
 			zap.String("stagingFileUID", createdFile.UID.String()))
 	}
 
@@ -908,7 +908,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 			zap.Strings("fileNames", func() []string {
 				filenames := make([]string, len(missingInProduction))
 				for i, f := range missingInProduction {
-					filenames[i] = f.Filename
+					filenames[i] = f.DisplayName
 				}
 				return filenames
 			}()))
@@ -919,7 +919,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 	// These are extra files created by dual processing race conditions
 	for _, dupFile := range duplicatesInStaging {
 		w.log.Info("Soft-deleting duplicate file in staging KB",
-			zap.String("filename", dupFile.Filename),
+			zap.String("filename", dupFile.DisplayName),
 			zap.String("fileUID", dupFile.UID.String()),
 			zap.String("stagingKBUID", stagingKBUID.String()))
 
@@ -927,13 +927,13 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		if err != nil {
 			w.log.Error("Failed to soft-delete duplicate file during reconciliation",
 				zap.Error(err),
-				zap.String("filename", dupFile.Filename),
+				zap.String("filename", dupFile.DisplayName),
 				zap.String("fileUID", dupFile.UID.String()))
-			return nil, fmt.Errorf("failed to soft-delete duplicate file %s: %w", dupFile.Filename, err)
+			return nil, fmt.Errorf("failed to soft-delete duplicate file %s: %w", dupFile.DisplayName, err)
 		}
 
 		w.log.Info("Successfully soft-deleted duplicate file",
-			zap.String("filename", dupFile.Filename),
+			zap.String("filename", dupFile.DisplayName),
 			zap.String("fileUID", dupFile.UID.String()))
 	}
 
@@ -1905,7 +1905,7 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	if err != nil {
 		w.log.Error("CloneFileToStagingKBActivity: Original blob file not found in MinIO - skipping file",
 			zap.String("fileUID", param.OriginalFileUID.String()),
-			zap.String("filename", originalFile.Filename),
+			zap.String("filename", originalFile.DisplayName),
 			zap.String("destination", originalFile.Destination),
 			zap.String("bucket", bucket),
 			zap.Error(err),
@@ -1940,7 +1940,7 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	// - Therefore, files in snapshot are never dual-processed
 	// - Clean separation prevents race conditions
 	newFile := repository.KnowledgeBaseFileModel{
-		Filename:                  originalFile.Filename,
+		DisplayName:                  originalFile.DisplayName,
 		FileType:                  originalFile.FileType,
 		NamespaceUID:              types.NamespaceUIDType(ownerUID),
 		KBUID:                     param.StagingKBUID,

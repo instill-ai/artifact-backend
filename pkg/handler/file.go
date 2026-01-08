@@ -130,7 +130,8 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	// upload file to minio and database
 	// Inherit RAG version from parent knowledge base
 	kbFile := repository.KnowledgeBaseFileModel{
-		Filename:                  req.GetFile().GetFilename(),
+		DisplayName:                  req.GetFile().GetDisplayName(),
+		Description:                  req.GetFile().GetDescription(),
 		FileType:                  req.File.Type.String(),
 		NamespaceUID:              ns.NsUID,
 		KBUID:                     kb.UID,
@@ -157,17 +158,17 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 
 	if !hasObject {
 		// check file name length based on character count
-		if len(req.File.Filename) > 255 {
+		if len(req.File.DisplayName) > 255 {
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("file name is too long. max length is 255. name: %s err: %w",
-					req.File.Filename, errorsx.ErrInvalidArgument),
+					req.File.DisplayName, errorsx.ErrInvalidArgument),
 				"File name is too long. Please use a name with 255 characters or less.",
 			)
 		}
 
 		// Determine file type if not explicitly provided
 		if req.File.Type == artifactpb.File_TYPE_UNSPECIFIED {
-			req.File.Type = determineFileType(req.File.Filename)
+			req.File.Type = determineFileType(req.File.DisplayName)
 			if req.File.Type == artifactpb.File_TYPE_UNSPECIFIED {
 				return nil, errorsx.AddMessage(
 					fmt.Errorf("%w: unsupported file extension", errorsx.ErrInvalidArgument),
@@ -178,14 +179,14 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 
 		// Special handling for WebM files - determine if audio-only or video by inspecting content
 		// Only do this if type wasn't explicitly specified or if it was inferred as WEBM_VIDEO
-		if strings.HasSuffix(strings.ToLower(req.File.Filename), ".webm") && req.File.Content != "" {
+		if strings.HasSuffix(strings.ToLower(req.File.DisplayName), ".webm") && req.File.Content != "" {
 			// If type was explicitly set to WEBM_AUDIO or WEBM_VIDEO, respect it
 			// Otherwise, detect from content
 			if req.File.Type == artifactpb.File_TYPE_WEBM_VIDEO {
 				detectedType := detectWebMType(req.File.Content)
 				req.File.Type = detectedType
 				logger.Info("Detected WebM type from content",
-					zap.String("filename", req.File.Filename),
+					zap.String("displayName", req.File.DisplayName),
 					zap.String("detectedType", detectedType.String()))
 			}
 		}
@@ -193,7 +194,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		// Update kbFile.FileType after determining the type
 		kbFile.FileType = req.File.Type.String()
 
-		if strings.Contains(req.File.Filename, "/") {
+		if strings.Contains(req.File.DisplayName, "/") {
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("%w: file name cannot contain slashes ('/')", errorsx.ErrInvalidArgument),
 				"File name cannot contain slashes ('/'). Please rename the file and try again.",
@@ -209,7 +210,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		}
 
 		// upload the file to MinIO and create the object in the object table
-		objectUID, err := ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, creatorUID, req.File.Filename, req.File.Content, req.File.Type)
+		objectUID, err := ph.uploadBase64FileToMinIO(ctx, ns.NsID, ns.NsUID, creatorUID, req.File.DisplayName, req.File.Content, req.File.Type)
 		if err != nil {
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("fetching upload URL: %w", err),
@@ -258,7 +259,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			}
 		}
 
-		kbFile.Filename = obj.Name
+		kbFile.DisplayName = obj.Name
 		kbFile.CreatorUID = obj.CreatorUID
 		kbFile.Destination = obj.Destination
 		kbFile.Size = obj.Size
@@ -319,7 +320,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 
 	logger.Info("Checking dual processing requirements",
 		zap.String("fileUID", res.UID.String()),
-		zap.String("filename", res.Filename),
+		zap.String("filename", res.DisplayName),
 		zap.String("kbUID", kb.UID.String()),
 		zap.String("kbID", kb.KBID),
 		zap.String("updateStatus", kb.UpdateStatus))
@@ -340,7 +341,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	} else {
 		logger.Info("Dual processing NOT needed - single KB processing only",
 			zap.String("fileUID", res.UID.String()),
-			zap.String("filename", res.Filename),
+			zap.String("filename", res.DisplayName),
 			zap.String("kbUID", kb.UID.String()),
 			zap.String("kbID", kb.KBID),
 			zap.String("updateStatus", kb.UpdateStatus))
@@ -359,7 +360,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 
 		logger.Info("Dual processing started (fully synchronous: file record + workflow queueing)",
 			zap.String("prodFileUID", res.UID.String()),
-			zap.String("prodFileName", res.Filename),
+			zap.String("prodFileName", res.DisplayName),
 			zap.String("prodKBUID", kb.UID.String()),
 			zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 			zap.String("phase", dualTarget.Phase))
@@ -368,7 +369,8 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		// This file record will reference the same original file in MinIO
 		// but will have different processed outputs (chunks, embeddings)
 		targetFile := repository.KnowledgeBaseFileModel{
-			Filename:                  res.Filename,
+			DisplayName:                  res.DisplayName,
+			Description:                  res.Description,
 			FileType:                  res.FileType,
 			NamespaceUID:              res.NamespaceUID,
 			CreatorUID:                res.CreatorUID,
@@ -394,7 +396,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 				backoffDuration := time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond // 100ms, 200ms, 400ms
 				logger.Warn("Failed to create target file record during dual processing, retrying...",
 					zap.Error(err),
-					zap.String("prodFileName", res.Filename),
+					zap.String("prodFileName", res.DisplayName),
 					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 					zap.Int("attempt", attempt),
 					zap.Int("maxRetries", maxRetries),
@@ -406,7 +408,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		if err != nil {
 			logger.Error("Failed to create target file record during dual processing after retries",
 				zap.Error(err),
-				zap.String("prodFileName", res.Filename),
+				zap.String("prodFileName", res.DisplayName),
 				zap.String("prodFileUID", res.UID.String()),
 				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 				zap.String("targetKBID", dualTarget.TargetKB.KBID),
@@ -449,7 +451,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	// The ProcessCatalogFiles API is now deprecated (kept for backward compatibility only).
 	logger.Info("Auto-triggering file processing",
 		zap.String("fileUID", res.UID.String()),
-		zap.String("filename", res.Filename),
+		zap.String("filename", res.DisplayName),
 		zap.String("kbUID", kb.UID.String()))
 
 	ownerUID := types.UserUIDType(ns.NsUID)
@@ -461,7 +463,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		logger.Error("Failed to auto-trigger file processing",
 			zap.Error(err),
 			zap.String("fileUID", res.UID.String()),
-			zap.String("filename", res.Filename),
+			zap.String("filename", res.DisplayName),
 			zap.String("kbUID", kb.UID.String()),
 			zap.String("kbID", kb.KBID),
 			zap.String("updateStatus", kb.UpdateStatus))
@@ -469,7 +471,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	} else {
 		logger.Info("File processing started successfully (auto-trigger)",
 			zap.String("fileUID", res.UID.String()),
-			zap.String("filename", res.Filename),
+			zap.String("filename", res.DisplayName),
 			zap.String("kbUID", kb.UID.String()),
 			zap.String("kbID", kb.KBID),
 			zap.String("updateStatus", kb.UpdateStatus),
@@ -491,7 +493,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			Creator:            creator,
 			KnowledgeBaseUid:   res.KBUID.String(),
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, res.UID.String()),
-			Filename:           res.Filename,
+			DisplayName:        res.DisplayName,
 			Type:               req.File.Type,
 			CreateTime:         timestamppb.New(*res.CreateTime),
 			UpdateTime:         timestamppb.New(*res.UpdateTime),
@@ -695,7 +697,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			Creator:            creator,
 			KnowledgeBaseUid:   kbFile.KBUID.String(),
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, kbFile.UID.String()),
-			Filename:           kbFile.Filename,
+			DisplayName:        kbFile.DisplayName,
 			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
 			CreateTime:         timestamppb.New(*kbFile.CreateTime),
 			UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
@@ -956,7 +958,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		)
 		if err == nil && convertedFile != nil {
 			// Generate filename for download
-			filename := fmt.Sprintf("%s-summary.md", kbFile.Filename)
+			filename := fmt.Sprintf("%s-summary.md", kbFile.DisplayName)
 			fileURL, err := getFileURL(
 				config.Config.Minio.BucketName,
 				convertedFile.Destination,
@@ -985,7 +987,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		)
 		if err == nil && convertedFile != nil {
 			// Generate filename for download
-			filename := fmt.Sprintf("%s-content.md", kbFile.Filename)
+			filename := fmt.Sprintf("%s-content.md", kbFile.DisplayName)
 			fileURL, err := getFileURL(
 				config.Config.Minio.BucketName,
 				convertedFile.Destination,
@@ -1038,7 +1040,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			)
 			if err == nil && convertedFile != nil {
 				// Generate filename for download with appropriate extension
-				filename := fmt.Sprintf("%s.%s", kbFile.Filename, fileExtension)
+				filename := fmt.Sprintf("%s.%s", kbFile.DisplayName, fileExtension)
 				fileURL, err := getFileURL(
 					config.Config.Minio.BucketName,
 					convertedFile.Destination,
@@ -1083,7 +1085,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		fileURL, err := getFileURL(
 			bucket,
 			kbFile.Destination,
-			kbFile.Filename,
+			kbFile.DisplayName,
 			contentType,
 		)
 		if err != nil {
@@ -1169,7 +1171,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 				bucketName,
 				objectName,
 				fileProtoType,
-				kbFile.Filename,
+				kbFile.DisplayName,
 			)
 
 			if err != nil {
@@ -1394,12 +1396,12 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 		var targetFiles []repository.KnowledgeBaseFileModel
 		maxRetries := 30
 		for attempt := 0; attempt < maxRetries; attempt++ {
-			targetFiles, err = ph.service.Repository().GetKnowledgeBaseFilesByName(ctx, dualTarget.TargetKB.UID, files[0].Filename)
+			targetFiles, err = ph.service.Repository().GetKnowledgeBaseFilesByName(ctx, dualTarget.TargetKB.UID, files[0].DisplayName)
 			if err != nil {
 				logger.Warn("Failed to find target file for dual deletion",
 					zap.Error(err),
 					zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
-					zap.String("filename", files[0].Filename),
+					zap.String("filename", files[0].DisplayName),
 					zap.Int("attempt", attempt+1))
 				break // Stop retrying on error
 			}
@@ -1418,7 +1420,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 				// Log only on first few attempts and then every 5th attempt to reduce noise
 				if attempt < 3 || (attempt+1)%5 == 0 {
 					logger.Info("Target file not found yet, retrying dual deletion lookup",
-						zap.String("filename", files[0].Filename),
+						zap.String("filename", files[0].DisplayName),
 						zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 						zap.Int("attempt", attempt+1),
 						zap.Int("maxRetries", maxRetries))
@@ -1462,7 +1464,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 			}
 		} else {
 			logger.Warn("No corresponding target file found for dual deletion after retries",
-				zap.String("filename", files[0].Filename),
+				zap.String("filename", files[0].DisplayName),
 				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
 				zap.Int("retriesAttempted", maxRetries),
 				zap.String("warning", "This may cause validation mismatch if the file is created later"))
@@ -1725,7 +1727,7 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 
 	logger.Info("Starting file reprocessing",
 		zap.String("fileUID", file.UID.String()),
-		zap.String("filename", file.Filename),
+		zap.String("filename", file.DisplayName),
 		zap.String("currentStatus", file.ProcessStatus),
 		zap.String("kbUID", kb.UID.String()))
 
@@ -1759,7 +1761,7 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 		logger.Error("Failed to trigger file reprocessing",
 			zap.Error(err),
 			zap.String("fileUID", file.UID.String()),
-			zap.String("filename", file.Filename))
+			zap.String("filename", file.DisplayName))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to start reprocessing: %w", err),
 			"Unable to start file reprocessing. Please try again.",
@@ -1768,7 +1770,7 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 
 	logger.Info("File reprocessing started successfully",
 		zap.String("fileUID", file.UID.String()),
-		zap.String("filename", file.Filename),
+		zap.String("filename", file.DisplayName),
 		zap.String("kbUID", kb.UID.String()))
 
 	// Fetch owner and creator objects
@@ -1932,8 +1934,8 @@ func checkUploadKnowledgeBaseFileRequest(req *artifactpb.CreateFileRequest) (has
 	if req.GetFile().GetObjectUid() == "" {
 		// File upload doesn't reference object, so request must contain the
 		// file contents.
-		if req.GetFile().GetFilename() == "" {
-			return false, fmt.Errorf("%w: filename is required", errorsx.ErrInvalidArgument)
+		if req.GetFile().GetDisplayName() == "" {
+			return false, fmt.Errorf("%w: display_name (filename) is required", errorsx.ErrInvalidArgument)
 		}
 		if req.GetFile().GetContent() == "" {
 			return false, fmt.Errorf("%w: file content is required", errorsx.ErrInvalidArgument)

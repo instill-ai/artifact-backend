@@ -117,7 +117,7 @@ func (s *service) GetOrCreateFileCache(
 		{
 			Content:  content,
 			FileType: fileType,
-			Filename: filename,
+			FileDisplayName: filename,
 		},
 	}, gemini.DefaultCacheTTL)
 

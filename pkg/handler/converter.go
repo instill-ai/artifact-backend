@@ -90,13 +90,19 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 // The `name` field is computed dynamically following other backends' patterns.
 func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Namespace, kb *repository.KnowledgeBaseModel, owner *mgmtpb.Owner, creator *mgmtpb.User) *artifactpb.File {
 	ownerName := ns.Name()
-	fileIDStr := kbf.UID.String()
+	fileUIDStr := kbf.UID.String()
+	// Use ID if set, otherwise fallback to UID
+	fileID := kbf.ID
+	if fileID == "" {
+		fileID = fileUIDStr
+	}
 
 	file := &artifactpb.File{
-		Uid:              fileIDStr,
-		Id:               fileIDStr,                                                                    // For files, id = uid
-		Name:             fmt.Sprintf("%s/knowledge-bases/%s/files/%s", ownerName, kb.KBID, fileIDStr), // Computed!
-		Filename:         kbf.Filename,                                                                 // Database "filename" field is the user's filename
+		Uid:              fileUIDStr,
+		Id:               fileID,
+		Name:             fmt.Sprintf("%s/knowledge-bases/%s/files/%s", ownerName, kb.KBID, fileID), // Computed!
+		DisplayName:      kbf.DisplayName,
+		Description:      kbf.Description,
 		Type:             convertFileType(kbf.FileType),
 		CreateTime:       timestamppb.New(*kbf.CreateTime),
 		UpdateTime:       timestamppb.New(*kbf.UpdateTime),

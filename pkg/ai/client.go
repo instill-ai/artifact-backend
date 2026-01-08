@@ -65,9 +65,9 @@ type CacheUpdateOptions struct {
 
 // FileContent represents a single file's content for batch caching
 type FileContent struct {
-	Content  []byte
-	FileType artifactpb.File_Type
-	Filename string
+	Content         []byte
+	FileType        artifactpb.File_Type
+	FileDisplayName string
 }
 
 // ChatResult represents the AI's chat response using cached context

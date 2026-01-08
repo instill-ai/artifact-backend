@@ -129,12 +129,12 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.Return([]repository.KnowledgeBaseFileModel{
 		{
-			UID:         fileUID,
-			KBUID:       kbUID,
-			Filename:    "test.pdf",
-			FileType:    "TYPE_PDF",
-			Size:        1024,
-			Destination: "kb/test.pdf",
+			UID:             fileUID,
+			KBUID:           kbUID,
+			DisplayName: "test.pdf",
+			FileType:        "TYPE_PDF",
+			Size:            1024,
+			Destination:     "kb/test.pdf",
 		},
 	}, nil)
 
@@ -167,7 +167,7 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 	c.Assert(result.File, qt.IsNotNil)
 	c.Assert(result.File.UID, qt.Equals, fileUID)
 	c.Assert(result.File.KBUID, qt.Equals, kbUID)
-	c.Assert(result.File.Filename, qt.Equals, "test.pdf")
+	c.Assert(result.File.DisplayName, qt.Equals, "test.pdf")
 	c.Assert(result.File.FileType, qt.Equals, "TYPE_PDF")
 }
 
@@ -224,12 +224,12 @@ func TestCacheFileContextActivity_NoAIClient(t *testing.T) {
 	w := &Worker{repository: mockRepository, log: logger}
 
 	param := &CacheFileContextActivityParam{
-		FileUID:     uuid.Must(uuid.NewV4()),
-		KBUID:       uuid.Must(uuid.NewV4()),
-		Bucket:      "test-bucket",
-		Destination: "test/file.pdf",
-		FileType:    artifactpb.File_TYPE_PDF,
-		Filename:    "file.pdf",
+		FileUID:         uuid.Must(uuid.NewV4()),
+		KBUID:           uuid.Must(uuid.NewV4()),
+		Bucket:          "test-bucket",
+		Destination:     "test/file.pdf",
+		FileType:        artifactpb.File_TYPE_PDF,
+		FileDisplayName: "file.pdf",
 	}
 
 	result, err := w.CacheFileContextActivity(ctx, param)
@@ -250,12 +250,12 @@ func TestCacheFileContextActivity_UnsupportedFileType(t *testing.T) {
 	w := &Worker{repository: mockRepositoryMock, log: logger, aiClient: mockAIClient}
 
 	param := &CacheFileContextActivityParam{
-		FileUID:     uuid.Must(uuid.NewV4()),
-		KBUID:       uuid.Must(uuid.NewV4()),
-		Bucket:      "test-bucket",
-		Destination: "test/file.xyz",
-		FileType:    artifactpb.File_TYPE_UNSPECIFIED,
-		Filename:    "file.xyz",
+		FileUID:         uuid.Must(uuid.NewV4()),
+		KBUID:           uuid.Must(uuid.NewV4()),
+		Bucket:          "test-bucket",
+		Destination:     "test/file.xyz",
+		FileType:        artifactpb.File_TYPE_UNSPECIFIED,
+		FileDisplayName: "file.xyz",
 	}
 
 	result, err := w.CacheFileContextActivity(ctx, param)
@@ -292,12 +292,12 @@ func TestCacheFileContextActivity_Success(t *testing.T) {
 	w := &Worker{repository: mockRepositoryMock, log: logger, aiClient: mockAIClient}
 
 	param := &CacheFileContextActivityParam{
-		FileUID:     uuid.Must(uuid.NewV4()),
-		KBUID:       uuid.Must(uuid.NewV4()),
-		Bucket:      "test-bucket",
-		Destination: "test/file.pdf",
-		FileType:    artifactpb.File_TYPE_PDF,
-		Filename:    "file.pdf",
+		FileUID:         uuid.Must(uuid.NewV4()),
+		KBUID:           uuid.Must(uuid.NewV4()),
+		Bucket:          "test-bucket",
+		Destination:     "test/file.pdf",
+		FileType:        artifactpb.File_TYPE_PDF,
+		FileDisplayName: "file.pdf",
 	}
 
 	result, err := w.CacheFileContextActivity(ctx, param)
@@ -479,10 +479,10 @@ func TestProcessSummaryActivity_ConvertedFileCreation(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 
 	param := &ProcessSummaryActivityParam{
-		FileUID:  fileUID,
-		KBUID:    kbUID,
-		FileType: artifactpb.File_TYPE_PDF,
-		Filename: "test.pdf",
+		FileUID:         fileUID,
+		KBUID:           kbUID,
+		FileType:        artifactpb.File_TYPE_PDF,
+		FileDisplayName: "test.pdf",
 	}
 
 	// Verify the structure of what would be created

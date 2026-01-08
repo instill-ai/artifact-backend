@@ -387,7 +387,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Bucket:      fm.bucket,
 				Destination: fm.metadata.File.Destination,
 				FileType:    fm.fileType,
-				Filename:    fm.metadata.File.Filename,
+				FileDisplayName: fm.metadata.File.DisplayName,
 				Pipelines:   []pipeline.Release{pipeline.ConvertFileTypePipeline},
 				Metadata:    fm.metadata.ExternalMetadata,
 			}).Get(ctx, &result); err != nil {
@@ -459,7 +459,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					Bucket:      cr.effectiveBucket,
 					Destination: cr.effectiveDestination,
 					FileType:    cr.effectiveFileType,
-					Filename:    cr.fileMetadata.metadata.File.Filename,
+					FileDisplayName: cr.fileMetadata.metadata.File.DisplayName,
 					Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
 				})
 				logger.Info("Creating file cache (Gemini)", "fileUID", cr.fileUID.String())
@@ -551,7 +551,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Bucket:      cr.effectiveBucket,
 				Destination: cr.effectiveDestination,
 				FileType:    cr.effectiveFileType,
-				Filename:    cr.fileMetadata.metadata.File.Filename,
+				FileDisplayName: cr.fileMetadata.metadata.File.DisplayName,
 				Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
 				CacheName:   fileCacheName,
 			})
@@ -578,7 +578,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					KBUID:       kbUID,
 					Bucket:      cr.effectiveBucket,
 					Destination: cr.effectiveDestination,
-					Filename:    cr.fileMetadata.metadata.File.Filename,
+					FileDisplayName: cr.fileMetadata.metadata.File.DisplayName,
 					FileType:    cr.effectiveFileType,
 					Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
 					CacheName:   fileCacheName,
@@ -595,7 +595,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				fileUID := cr.fileUID
 				bucket := cr.effectiveBucket
 				destination := cr.effectiveDestination
-				filename := cr.fileMetadata.metadata.File.Filename
+				filename := cr.fileMetadata.metadata.File.DisplayName
 				fileType := cr.effectiveFileType
 				metadata := cr.fileMetadata.metadata.ExternalMetadata
 
@@ -635,7 +635,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 						KBUID:           kbUID,
 						Bucket:          bucket,      // Not used when ContentMarkdown is provided
 						Destination:     destination, // Not used when ContentMarkdown is provided
-						Filename:        filename,
+						FileDisplayName: filename,
 						FileType:        fileType,
 						Metadata:        metadata,
 						CacheName:       "",                    // No cache for OpenAI
@@ -977,13 +977,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			err := workflow.ExecuteActivity(findActivityCtx, w.FindTargetFileByNameActivity, &FindTargetFileByNameActivityParam{
 				TargetKBUID:    dualProcessingInfo.TargetKB.UID,
 				TargetOwnerUID: dualProcessingInfo.TargetKB.NamespaceUID,
-				Filename:       prodFileMeta.metadata.File.Filename,
+				FileDisplayName: prodFileMeta.metadata.File.DisplayName,
 			}).Get(findActivityCtx, &findResult)
 			if err != nil {
 				// CRITICAL: Activity execution failed (e.g., not registered, DB error)
 				// This is a system error, not a "file not found" scenario
 				logger.Error("FindTargetFileByNameActivity failed - dual-processing cannot proceed",
-					"filename", prodFileMeta.metadata.File.Filename,
+					"filename", prodFileMeta.metadata.File.DisplayName,
 					"targetKBUID", dualProcessingInfo.TargetKB.UID.String(),
 					"error", err)
 				return err
@@ -992,7 +992,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				// WARNING: Target file not found - expected during dual-processing
 				// This could happen if target file was deleted or cloning failed
 				logger.Warn("Target file not found for dual processing",
-					"filename", prodFileMeta.metadata.File.Filename,
+					"filename", prodFileMeta.metadata.File.DisplayName,
 					"targetKBUID", dualProcessingInfo.TargetKB.UID.String())
 				// Continue - we'll process what we can find
 				continue
@@ -1049,7 +1049,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				"prodFileNames", func() []string {
 					names := make([]string, len(filesMetadata))
 					for i, meta := range filesMetadata {
-						names[i] = meta.metadata.File.Filename
+						names[i] = meta.metadata.File.DisplayName
 					}
 					return names
 				}())
