@@ -351,8 +351,9 @@ func validatePrompt(prompt string) error {
 // createGenerateContentConfig creates a standard GenerateContentConfig with common settings
 func createGenerateContentConfig(cacheName string) *genai.GenerateContentConfig {
 	config := &genai.GenerateContentConfig{
-		Temperature: genai.Ptr(float32(1.0)),
-		TopP:        genai.Ptr(float32(0.95)),
+		Temperature:     genai.Ptr(float32(1.0)),
+		TopP:            genai.Ptr(float32(0.95)),
+		MaxOutputTokens: 65536, // Gemini 2.5 Flash supports up to 65k output tokens
 	}
 
 	if cacheName != "" {

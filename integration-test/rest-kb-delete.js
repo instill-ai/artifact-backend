@@ -145,9 +145,11 @@ export function CheckKnowledgeBaseDeletion(data) {
       "POST",
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify({
-        id: kbName,
-        description: "Knowledge base deletion cleanup test",
-        tags: ["test", "cleanup"]
+        knowledgeBase: {
+          displayName: kbName,
+          description: "Knowledge base deletion cleanup test",
+          tags: ["test", "cleanup"]
+        }
       }),
       data.header
     );
@@ -181,7 +183,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     const uploadRes = helper.uploadFileWithRetry(
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
       {
-        filename: filename,
+        displayName: filename,
         type: "TYPE_PDF",
         content: constant.docSamplePdf
       },

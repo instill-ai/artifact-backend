@@ -186,10 +186,12 @@ export function TEST_DB_SCHEMA(data) {
         // Create knowledge base
         const kbName = data.dbIDPrefix + "db-" + randomString(8);
         const cRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({
-            id: kbName,
-            description: "DB schema test knowledge base",
-            tags: ["test", "db", "schema"],
-            type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+            knowledgeBase: {
+                displayName: kbName,
+                description: "DB schema test knowledge base",
+                tags: ["test", "db", "schema"],
+                type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+            }
         }), data.header);
 
         logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases');
@@ -219,7 +221,7 @@ export function TEST_DB_SCHEMA(data) {
         const uploaded = [];
         for (const s of testFiles) {
             const filename = data.dbIDPrefix + s.originalName;
-            const fReq = { filename: filename, type: s.type, content: s.content };
+            const fReq = { displayName: filename, type: s.type, content: s.content };
 
             // Use retry logic to handle transient upload failures during parallel execution
             const uRes = helper.uploadFileWithRetry(

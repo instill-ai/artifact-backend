@@ -272,9 +272,8 @@ func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.Up
 		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
 	}
 
-	// Get file
-	fileUID := uuid.FromStringOrNil(req.GetFileId())
-	kbFiles, err := h.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
+	// Get file by hash-based ID
+	kbFiles, err := h.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.GetFileId()})
 	if err != nil || len(kbFiles) == 0 {
 		logger.Error("failed to get file", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "file not found")
@@ -392,9 +391,7 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 
 	// For the admin endpoint, we only receive file_id, so we need to look up the namespace and knowledge base
 	// from the file's KB to construct the full request for the public handler
-	fileUID := uuid.FromStringOrNil(req.GetFileId())
-
-	files, err := h.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
+	files, err := h.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.GetFileId()})
 	if err != nil || len(files) == 0 {
 		h.logger.Error("DeleteFileAdmin: failed to get file", zap.Error(err))
 		return nil, fmt.Errorf("file not found: %w", err)

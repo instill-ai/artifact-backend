@@ -35,7 +35,7 @@ import * as constant from "./const.js";
 
 const client = new grpc.Client();
 client.load(
-    ["./proto"],
+    ["./proto", "./proto/artifact/artifact/v1alpha"],
     "artifact/artifact/v1alpha/artifact_private_service.proto"
 );
 

@@ -61,6 +61,7 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 		Uid:         kb.UID.String(),
 		Id:          kb.KBID,                                                  // Database field KBID maps to protobuf id
 		Name:        fmt.Sprintf("%s/knowledge-bases/%s", ownerName, kb.KBID), // Computed dynamically!
+		DisplayName: kb.DisplayName,
 		Description: kb.Description,
 		CreateTime:  timestamppb.New(*kb.CreateTime),
 		UpdateTime:  timestamppb.New(*kb.UpdateTime),
@@ -69,6 +70,7 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 		Owner:       owner,
 		Creator:     creator,
 		Tags:        kb.Tags,
+		Aliases:     kb.Aliases,
 	}
 
 	// Handle nullable creator UID (nil for system-created KBs like instill-agent)
@@ -114,6 +116,7 @@ func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Name
 		KnowledgeBaseUid: kbf.KBUID.String(),
 		Size:             kbf.Size,
 		ProcessStatus:    convertFileProcessStatus(kbf.ProcessStatus),
+		Aliases:          kbf.Aliases,
 	}
 
 	// Handle optional fields

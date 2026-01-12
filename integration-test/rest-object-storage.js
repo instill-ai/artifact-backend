@@ -137,10 +137,12 @@ export function teardown(data) {
 }
 
 // Helper function to create knowledge base
-function createKB(data, kbId, description) {
+function createKB(data, displayName, description) {
   const body = {
-    id: kbId,
-    description: description || "Test KB for object storage",
+    knowledgeBase: {
+      displayName: displayName,
+      description: description || "Test KB for object storage",
+    }
   };
 
   const res = http.request(
@@ -169,7 +171,7 @@ function deleteKB(data, kbId) {
 // Helper function to create and upload a file
 function createFile(data, kbId, filename, fileType, content) {
   const body = {
-    filename: filename,
+    displayName: filename,
     type: fileType,
     content: content,
   };
@@ -291,8 +293,9 @@ export function TEST_01_MinIO_ViewSummary(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}m-sum-${randomString(5)}`;
-    const kb = createKB(data, kbId, "Test MinIO VIEW_SUMMARY");
+    const kbDisplayName = `${data.dbIDPrefix}m-sum-${randomString(5)}`;
+    const kb = createKB(data, kbDisplayName, "Test MinIO VIEW_SUMMARY");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-summary.pdf`;
     const file = createFile(data, kbId, filename, "TYPE_PDF", constant.docSamplePdf);
@@ -336,8 +339,9 @@ export function TEST_02_MinIO_ViewContent(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}m-con-${randomString(5)}`;
-    const kb = createKB(data, kbId, "Test MinIO VIEW_CONTENT");
+    const kbDisplayName = `${data.dbIDPrefix}m-con-${randomString(5)}`;
+    const kb = createKB(data, kbDisplayName, "Test MinIO VIEW_CONTENT");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-content.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -380,8 +384,9 @@ export function TEST_03_MinIO_ViewStandardFileType(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}m-std-${randomString(5)}`;
-    const kb = createKB(data, kbId, "Test MinIO VIEW_STANDARD_FILE_TYPE");
+    const kbDisplayName = `${data.dbIDPrefix}m-std-${randomString(5)}`;
+    const kb = createKB(data, kbDisplayName, "Test MinIO VIEW_STANDARD_FILE_TYPE");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-standard.docx`;
     const file = createFile(data, kbId, filename, "TYPE_DOCX", constant.docSampleDocx);
@@ -424,8 +429,9 @@ export function TEST_04_MinIO_ViewOriginalFileType(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}m-org-${randomString(5)}`;
-    const kb = createKB(data, kbId, "Test MinIO VIEW_ORIGINAL_FILE_TYPE");
+    const kbDisplayName = `${data.dbIDPrefix}m-org-${randomString(5)}`;
+    const kb = createKB(data, kbDisplayName, "Test MinIO VIEW_ORIGINAL_FILE_TYPE");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-original.pdf`;
     const file = createFile(data, kbId, filename, "TYPE_PDF", constant.docSamplePdf);
@@ -488,8 +494,9 @@ export function TEST_05_GCS_ViewSummary(data) {
     // Note: GCS tests will gracefully handle configuration errors
     // If GCS is not configured, the API will return appropriate error messages
 
-    const kbId = `${data.dbIDPrefix}g-sum-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS VIEW_SUMMARY");
+    const kbDisplayName = `${data.dbIDPrefix}g-sum-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS VIEW_SUMMARY");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-gcs-summary.pdf`;
     const file = createFile(data, kbId, filename, "TYPE_PDF", constant.docSamplePdf);
@@ -532,8 +539,9 @@ export function TEST_06_GCS_ViewContent(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}g-con-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS VIEW_CONTENT");
+    const kbDisplayName = `${data.dbIDPrefix}g-con-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS VIEW_CONTENT");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-gcs-content.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -576,8 +584,9 @@ export function TEST_07_GCS_ViewStandardFileType(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}g-std-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS VIEW_STANDARD_FILE_TYPE");
+    const kbDisplayName = `${data.dbIDPrefix}g-std-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS VIEW_STANDARD_FILE_TYPE");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-gcs-standard.docx`;
     const file = createFile(data, kbId, filename, "TYPE_DOCX", constant.docSampleDocx);
@@ -620,8 +629,9 @@ export function TEST_08_GCS_ViewOriginalFileType(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}g-org-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS VIEW_ORIGINAL_FILE_TYPE");
+    const kbDisplayName = `${data.dbIDPrefix}g-org-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS VIEW_ORIGINAL_FILE_TYPE");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-gcs-original.pdf`;
     const file = createFile(data, kbId, filename, "TYPE_PDF", constant.docSamplePdf);
@@ -683,8 +693,9 @@ export function TEST_09_UnspecifiedProvider_DefaultsToMinIO(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}def-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test default storage provider");
+    const kbDisplayName = `${data.dbIDPrefix}def-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test default storage provider");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-default.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -746,8 +757,9 @@ export function TEST_10_URLContentConsistency(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}con-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test content consistency");
+    const kbDisplayName = `${data.dbIDPrefix}con-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test content consistency");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-consistency.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -802,8 +814,9 @@ export function TEST_11_GCSCacheBehavior(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}g-cch-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS caching");
+    const kbDisplayName = `${data.dbIDPrefix}g-cch-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS caching");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-gcs-cache.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -886,8 +899,9 @@ export function TEST_12_MinIO_FilenameContentType(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}m-hdr-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test MinIO headers");
+    const kbDisplayName = `${data.dbIDPrefix}m-hdr-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test MinIO headers");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-headers.pdf`;
     const file = createFile(data, kbId, filename, "TYPE_PDF", constant.docSamplePdf);
@@ -929,8 +943,9 @@ export function TEST_13_GCS_FilenameContentType(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}g-hdr-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS headers");
+    const kbDisplayName = `${data.dbIDPrefix}g-hdr-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS headers");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-gcs-headers.pdf`;
     const file = createFile(data, kbId, filename, "TYPE_PDF", constant.docSamplePdf);
@@ -974,8 +989,9 @@ export function TEST_14_GCS_NotConfigured(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}g-err-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS error handling");
+    const kbDisplayName = `${data.dbIDPrefix}g-err-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS error handling");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-gcs-error.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -1032,8 +1048,9 @@ export function TEST_15_MultipleFileTypes_MinIO(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}m-mul-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test MinIO multiple file types");
+    const kbDisplayName = `${data.dbIDPrefix}m-mul-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test MinIO multiple file types");
+    const kbId = kb.id;
 
     const fileTypes = [
       { filename: `${data.dbIDPrefix}test-txt.txt`, type: "TYPE_TEXT", content: constant.docSampleTxt },
@@ -1093,8 +1110,9 @@ export function TEST_16_MultipleFileTypes_GCS(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}g-mul-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS multiple file types");
+    const kbDisplayName = `${data.dbIDPrefix}g-mul-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS multiple file types");
+    const kbId = kb.id;
 
     const fileTypes = [
       { filename: `${data.dbIDPrefix}test-gcs-txt.txt`, type: "TYPE_TEXT", content: constant.docSampleTxt },
@@ -1158,8 +1176,9 @@ export function TEST_17_RedisCacheHit(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}c-hit-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test Redis cache hit");
+    const kbDisplayName = `${data.dbIDPrefix}c-hit-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test Redis cache hit");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-cache-hit.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -1217,8 +1236,9 @@ export function TEST_18_RedisCacheMiss(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}c-mis-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test Redis cache miss");
+    const kbDisplayName = `${data.dbIDPrefix}c-mis-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test Redis cache miss");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-cache-miss.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -1249,8 +1269,9 @@ export function TEST_19_RedisCachePerformance(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}c-prf-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test Redis cache performance");
+    const kbDisplayName = `${data.dbIDPrefix}c-prf-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test Redis cache performance");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-cache-perf.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -1312,8 +1333,9 @@ export function TEST_20_GCSTTLTracking(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}t-trk-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS TTL tracking");
+    const kbDisplayName = `${data.dbIDPrefix}t-trk-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS TTL tracking");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-ttl-track.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -1366,8 +1388,9 @@ export function TEST_21_GCSFileExpiration(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}t-exp-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test GCS file expiration");
+    const kbDisplayName = `${data.dbIDPrefix}t-exp-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test GCS file expiration");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-ttl-expire.txt`;
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
@@ -1422,8 +1445,9 @@ export function TEST_22_ViewOriginalFileType_ImmediateAvailability(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true })
 
-    const kbId = `${data.dbIDPrefix}imm-${randomString(6)}`;
-    const kb = createKB(data, kbId, "Test immediate file availability");
+    const kbDisplayName = `${data.dbIDPrefix}imm-${randomString(6)}`;
+    const kb = createKB(data, kbDisplayName, "Test immediate file availability");
+    const kbId = kb.id;
 
     const filename = `${data.dbIDPrefix}test-immediate.pdf`;
 

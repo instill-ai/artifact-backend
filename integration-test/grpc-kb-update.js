@@ -260,7 +260,7 @@ import * as helper from "./helper.js";
 const client = new grpc.Client();
 client.load(
     ["./proto", "./proto/artifact/artifact/v1alpha"],
-    "artifact_private_service.proto"
+    "artifact/artifact/v1alpha/artifact_private_service.proto"
 );
 
 export let options = {
@@ -794,9 +794,9 @@ function TestCompleteUpdateWorkflow(client, data) {
         helper.waitForAllUpdatesComplete(client, data, 30);
 
         // Create knowledge base with 2 files
-        const knowledgeBaseId = data.dbIDPrefix + "workflow-" + randomString(8);
+        const displayName = data.dbIDPrefix + " Workflow " + randomString(8);
         const createBody = {
-            id: knowledgeBaseId,
+            displayName: displayName,
             description: "Test KB for complete workflow",
             tags: ["test", "workflow", "e2e"],
         };
@@ -816,6 +816,7 @@ function TestCompleteUpdateWorkflow(client, data) {
             return;
         }
 
+        const knowledgeBaseId = kb.id;
         const knowledgeBaseUid = kb.uid;
 
         check(createRes, {
@@ -829,14 +830,14 @@ function TestCompleteUpdateWorkflow(client, data) {
         const uploadRes1 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-            JSON.stringify({ filename: file1Name, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: file1Name, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
         const uploadRes2 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-            JSON.stringify({ filename: file2Name, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: file2Name, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
@@ -986,12 +987,12 @@ function TestPhasePrepare(client, data) {
         // helper.waitForAllUpdatesComplete(client, data, 15);
 
         // Create knowledge base
-        const knowledgeBaseId = data.dbIDPrefix + "prepare-" + randomString(8);
+        const displayName = data.dbIDPrefix + " Prepare " + randomString(8);
         const testDescription = "Test KB for Phase 1 - Prepare staging KB";
         const testTags = ["test", "phase1", "prepare"];
 
         const createBody = {
-            id: knowledgeBaseId,
+            displayName: displayName,
             description: testDescription,
             tags: testTags,
         };
@@ -1011,6 +1012,7 @@ function TestPhasePrepare(client, data) {
             return;
         }
 
+        const knowledgeBaseId = kb.id;
         const knowledgeBaseUid = kb.uid;
 
         // Upload and process file
@@ -1019,7 +1021,7 @@ function TestPhasePrepare(client, data) {
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({
-                filename: filename,
+                displayName: filename,
                 type: "TYPE_TEXT",
                 content: constant.docSampleTxt
             }),
@@ -1168,13 +1170,13 @@ function TestReprocessAndDualProcessing(client, data) {
 
         // TEST A: File Deletion During Update (Dual Deletion)
         console.log("Group 4: Testing dual deletion...");
-        const knowledgeBaseId = data.dbIDPrefix + "dual-del-" + randomString(8);
+        const displayName = data.dbIDPrefix + " Dual Del " + randomString(8);
 
         const createRes = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: knowledgeBaseId,
+                displayName: displayName,
                 description: "Test KB for dual deletion",
                 tags: ["test", "dual-deletion"],
             }),
@@ -1189,6 +1191,7 @@ function TestReprocessAndDualProcessing(client, data) {
             return;
         }
 
+        const knowledgeBaseId = kb.id;
         const knowledgeBaseUid = kb.uid;
 
         // Upload and process 1 initial file to ensure update workflow runs long enough for dual processing
@@ -1196,7 +1199,7 @@ function TestReprocessAndDualProcessing(client, data) {
         const uploadRes1 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-            JSON.stringify({ filename: file1Name, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: file1Name, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
@@ -1291,7 +1294,7 @@ function TestReprocessAndDualProcessing(client, data) {
         const uploadRes2 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-            JSON.stringify({ filename: fileToDelete, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: fileToDelete, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
@@ -1307,7 +1310,7 @@ function TestReprocessAndDualProcessing(client, data) {
 
         // Poll for dual processing to create both file records
         // Extended timeout to handle resource contention during parallel test execution
-        const prodFileQuery = `SELECT uid, delete_time FROM file WHERE kb_uid = $1 AND filename = $2`;
+        const prodFileQuery = `SELECT uid, delete_time FROM file WHERE kb_uid = $1 AND display_name = $2`;
         let prodFileBefore, stagingFileBefore;
         let bothFilesExist = false;
 
@@ -1453,7 +1456,7 @@ function TestReprocessAndDualProcessing(client, data) {
                 const finalRollbackKBUID = rollbackKBObj.uid;
                 rollbackKBID = rollbackKBObj.id; // Get actual rollback KB ID for cleanup
 
-                const prodFileCountQuery = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`;
+                const prodFileCountQuery = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`;
                 const prodFinalFile = helper.safeQuery(prodFileCountQuery, finalProdKBUID, fileToDelete);
                 const rollbackFinalFile = helper.safeQuery(prodFileCountQuery, finalRollbackKBUID, fileToDelete);
 
@@ -1508,12 +1511,12 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         console.log("Corner Case 1: Adding Files During `swapping` Status");
         console.log("=".repeat(80));
 
-        const knowledgeBaseIdCC1 = data.dbIDPrefix + "cc1-" + randomString(6);
+        const displayNameCC1 = data.dbIDPrefix + " CC1 " + randomString(6);
         const createResCC1 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: knowledgeBaseIdCC1,
+                displayName: displayNameCC1,
                 description: "Test KB for CC1 - adding files during swapping",
                 tags: ["test", "cc1", "swapping-add"],
             }),
@@ -1531,6 +1534,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
             return;
         }
 
+        const knowledgeBaseIdCC1 = kbCC1.id;
         const knowledgeBaseUidCC1 = kbCC1.uid;
 
         // Upload and process 1 initial file (simplified for faster test)
@@ -1538,7 +1542,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}/files`,
             JSON.stringify({
-                filename: `${data.dbIDPrefix}cc1-initial.txt`,
+                displayName: `${data.dbIDPrefix}cc1-initial.txt`,
                 type: "TYPE_TEXT",
                 content: constant.docSampleTxt
             }),
@@ -1615,7 +1619,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}/files`,
             JSON.stringify({
-                filename: fileAddedDuringSwapping,
+                displayName: fileAddedDuringSwapping,
                 type: "TYPE_TEXT",
                 content: encoding.b64encode("File uploaded during swapping - should be synchronized")
             }),
@@ -1664,7 +1668,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         let swappedFileUidCC1 = newFileUidCC1; // Fallback to original UID
         try {
             const filesListCC1 = listFilesResCC1.json().files || [];
-            const foundFileCC1 = filesListCC1.find(f => f.filename === fileAddedDuringSwapping);
+            const foundFileCC1 = filesListCC1.find(f => f.displayName === fileAddedDuringSwapping);
             if (foundFileCC1) {
                 swappedFileUidCC1 = foundFileCC1.uid;
                 console.log(`CC1: Found file in new production KB with UID: ${swappedFileUidCC1}`);
@@ -1714,7 +1718,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         const rollbackKBUIDCC1 = Array.isArray(rollbackKBCC1[0].uid) ? String.fromCharCode(...rollbackKBCC1[0].uid) : rollbackKBCC1[0].uid;
         const rollbackKBIDCC1 = rollbackKBCC1[0].id; // Get actual rollback KB ID for cleanup
 
-        const fileCountQueryCC1 = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`;
+        const fileCountQueryCC1 = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`;
         const prodFileCC1 = helper.safeQuery(fileCountQueryCC1, prodKBUIDCC1, fileAddedDuringSwapping);
         const rollbackFileCC1 = helper.safeQuery(fileCountQueryCC1, rollbackKBUIDCC1, fileAddedDuringSwapping);
 
@@ -1749,14 +1753,16 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         console.log("Corner Case 2: Deleting Files During `swapping` Status");
         console.log("=".repeat(80));
 
-        const knowledgeBaseIdCC2 = data.dbIDPrefix + "cc2-" + randomString(6);
+        const displayNameCC2 = data.dbIDPrefix + " CC2 " + randomString(6);
         const createResCC2 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: knowledgeBaseIdCC2,
-                description: "Test KB for CC2 - deleting files during swapping",
-                tags: ["test", "cc2", "swapping-delete"],
+                knowledgeBase: {
+                    displayName: displayNameCC2,
+                    description: "Test KB for CC2 - deleting files during swapping",
+                    tags: ["test", "cc2", "swapping-delete"],
+                }
             }),
             data.header
         );
@@ -1771,9 +1777,10 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
             return;
         }
 
-        let kbCC2;
+        let kbCC2, knowledgeBaseIdCC2;
         try {
             kbCC2 = createResCC2.json().knowledgeBase;
+            knowledgeBaseIdCC2 = kbCC2.id;
         } catch (e) {
             check(false, {
                 "CC2: Failed to parse knowledge base response": () => false
@@ -1788,9 +1795,9 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
 
         // Upload 2 initial files
         const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc2-keep-1.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc2-keep-1.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
         const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc2-keep-2.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc2-keep-2.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileUid1, fileUid2;
         try {
@@ -1947,9 +1954,9 @@ function TestCC03_RapidOperations(client, data) {
 
         // Upload initial files
         const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc3-init-1.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc3-init-1.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
         const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc3-init-2.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc3-init-2.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileUid1, fileUid2;
         try {
@@ -2014,11 +2021,11 @@ function TestCC03_RapidOperations(client, data) {
         console.log("CC3: Staging KB ready, performing rapid operations...");
         // Rapid operations: Upload 3 files
         const newUpload1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc3-rapid-1.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc3-rapid-1.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
         const newUpload2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc3-rapid-2.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc3-rapid-2.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
         const newUpload3 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc3-rapid-3.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc3-rapid-3.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let newFileUid1, newFileUid2, newFileUid3;
         try {
@@ -2075,9 +2082,9 @@ function TestCC03_RapidOperations(client, data) {
         let swappedFileUid3 = newFileUid3;
         try {
             const filesListCC3 = listFilesResCC3.json().files || [];
-            const file1 = filesListCC3.find(f => f.filename === data.dbIDPrefix + "cc3-rapid-1.txt");
-            const file2 = filesListCC3.find(f => f.filename === data.dbIDPrefix + "cc3-rapid-2.txt");
-            const file3 = filesListCC3.find(f => f.filename === data.dbIDPrefix + "cc3-rapid-3.txt");
+            const file1 = filesListCC3.find(f => f.displayName === data.dbIDPrefix + "cc3-rapid-1.txt");
+            const file2 = filesListCC3.find(f => f.displayName === data.dbIDPrefix + "cc3-rapid-2.txt");
+            const file3 = filesListCC3.find(f => f.displayName === data.dbIDPrefix + "cc3-rapid-3.txt");
             if (file1) swappedFileUid1 = file1.uid;
             if (file2) swappedFileUid2 = file2.uid;
             if (file3) swappedFileUid3 = file3.uid;
@@ -2182,7 +2189,7 @@ function TestCC04_RaceConditions(client, data) {
         const uploadResCC4 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc4-initial.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc4-initial.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
@@ -2257,7 +2264,7 @@ function TestCC04_RaceConditions(client, data) {
                     const raceUploadCC4 = http.request(
                         "POST",
                         `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}/files`,
-                        JSON.stringify({ filename: raceFileNameCC4, type: "TYPE_TEXT", content: encoding.b64encode("File uploaded near lock point") }),
+                        JSON.stringify({ displayName: raceFileNameCC4, type: "TYPE_TEXT", content: encoding.b64encode("File uploaded near lock point") }),
                         data.header
                     );
 
@@ -2320,7 +2327,7 @@ function TestCC04_RaceConditions(client, data) {
             let raceFileUidToCheck = null;
             try {
                 const filesListCC4 = listFilesResCC4.json().files || [];
-                const foundRaceFile = filesListCC4.find(f => f.filename === raceFileNameCC4);
+                const foundRaceFile = filesListCC4.find(f => f.displayName === raceFileNameCC4);
                 if (foundRaceFile) {
                     raceFileUidToCheck = foundRaceFile.fileUid;
                     console.log(`CC4: Found race file in new production KB with UID: ${raceFileUidToCheck}`);
@@ -2370,7 +2377,7 @@ function TestCC04_RaceConditions(client, data) {
             const rollbackKBUID = Array.isArray(rollbackKB[0].uid) ? String.fromCharCode(...rollbackKB[0].uid) : rollbackKB[0].uid;
             const rollbackKBIDCC4 = rollbackKB[0].id; // Get actual rollback KB ID for cleanup
 
-            const fileQuery = `SELECT uid, kb_uid, filename FROM file WHERE filename = $1 AND delete_time IS NULL`;
+            const fileQuery = `SELECT uid, kb_uid, display_name FROM file WHERE display_name = $1 AND delete_time IS NULL`;
             const raceFiles = helper.safeQuery(fileQuery, raceFileNameCC4);
 
             check({ raceFiles }, {
@@ -2429,7 +2436,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         const uploadResCC5 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc5-initial.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc5-initial.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
@@ -2538,7 +2545,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}/files`,
             JSON.stringify({
-                filename: fileAfterSwap,
+                displayName: fileAfterSwap,
                 type: "TYPE_TEXT",
                 content: encoding.b64encode("File uploaded after swap during retention period - should be dual processed")
             }),
@@ -2586,7 +2593,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         console.log("CC5: File processing completed, verifying dual processing...");
 
         // Verify: File exists in BOTH production and rollback KBs
-        const fileQuery = `SELECT uid, kb_uid, filename, destination, process_status FROM file WHERE filename = $1 AND delete_time IS NULL`;
+        const fileQuery = `SELECT uid, kb_uid, display_name, destination, process_status FROM file WHERE display_name = $1 AND delete_time IS NULL`;
         const fileRecords = helper.safeQuery(fileQuery, fileAfterSwap);
 
         console.log(`CC5: Found ${fileRecords ? fileRecords.length : 0} file records for ${fileAfterSwap}`);
@@ -2674,14 +2681,14 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         const upload1CC6 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}/files`,
-            JSON.stringify({ filename: file1NameCC6, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: file1NameCC6, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
         const upload2CC6 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}/files`,
-            JSON.stringify({ filename: file2NameCC6, type: "TYPE_TEXT", content: encoding.b64encode("File to delete after swap") }),
+            JSON.stringify({ displayName: file2NameCC6, type: "TYPE_TEXT", content: encoding.b64encode("File to delete after swap") }),
             data.header
         );
 
@@ -2793,7 +2800,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
                 console.log(`CC6: List attempt ${listAttempts}/${MAX_LIST_ATTEMPTS} - Found ${files.length} files`);
 
                 for (const file of files) {
-                    if (file.filename === file2NameCC6) {
+                    if (file.displayName === file2NameCC6) {
                         fileToDeleteUID = file.fileUid;
                         break;
                     }
@@ -2913,11 +2920,11 @@ function TestCC07_MultipleOperations(client, data) {
         const file3NameCC7 = data.dbIDPrefix + "cc7-file3.txt";
 
         const upload1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
-            JSON.stringify({ filename: file1NameCC7, type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: file1NameCC7, type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
         const upload2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
-            JSON.stringify({ filename: file2NameCC7, type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: file2NameCC7, type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
         const upload3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
-            JSON.stringify({ filename: file3NameCC7, type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: file3NameCC7, type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileUid1CC7, fileUid2CC7, fileUid3CC7;
         try {
@@ -2997,8 +3004,8 @@ function TestCC07_MultipleOperations(client, data) {
         const rollbackKBIDCC7 = rollbackKBCC7[0].id; // Get actual rollback KB ID for cleanup
 
         // Get NEW production file UIDs (post-swap)
-        const prodFile1Query = helper.safeQuery(`SELECT uid FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`, prodKBUIDCC7, file1NameCC7);
-        const prodFile2Query = helper.safeQuery(`SELECT uid FROM file WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`, prodKBUIDCC7, file2NameCC7);
+        const prodFile1Query = helper.safeQuery(`SELECT uid FROM file WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`, prodKBUIDCC7, file1NameCC7);
+        const prodFile2Query = helper.safeQuery(`SELECT uid FROM file WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`, prodKBUIDCC7, file2NameCC7);
 
         const prodFileUid1CC7 = prodFile1Query && prodFile1Query.length > 0 ? (Array.isArray(prodFile1Query[0].uid) ? String.fromCharCode(...prodFile1Query[0].uid) : prodFile1Query[0].uid) : null;
         const prodFileUid2CC7 = prodFile2Query && prodFile2Query.length > 0 ? (Array.isArray(prodFile2Query[0].uid) ? String.fromCharCode(...prodFile2Query[0].uid) : prodFile2Query[0].uid) : null;
@@ -3007,11 +3014,11 @@ function TestCC07_MultipleOperations(client, data) {
         console.log("CC7: Executing multiple operations during retention...");
 
         const uploadNew1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc7-new1.txt", type: "TYPE_TEXT", content: encoding.b64encode("New1") }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc7-new1.txt", type: "TYPE_TEXT", content: encoding.b64encode("New1") }), data.header);
         const uploadNew2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc7-new2.txt", type: "TYPE_TEXT", content: encoding.b64encode("New2") }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc7-new2.txt", type: "TYPE_TEXT", content: encoding.b64encode("New2") }), data.header);
         const uploadNew3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc7-new3.txt", type: "TYPE_TEXT", content: encoding.b64encode("New3") }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc7-new3.txt", type: "TYPE_TEXT", content: encoding.b64encode("New3") }), data.header);
 
         let newFileUids = [];
         try {
@@ -3120,7 +3127,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
 
         // Upload and process initial file
         const uploadResCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc8-initial.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc8-initial.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileUidCC8;
         try {
@@ -3189,7 +3196,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
 
         console.log("CC8: Uploading large file during retention...");
         const largeUploadCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}/files`,
-            JSON.stringify({ filename: largeFileName, type: "TYPE_TEXT", content: encoding.b64encode(largeContent) }), data.header);
+            JSON.stringify({ displayName: largeFileName, type: "TYPE_TEXT", content: encoding.b64encode(largeContent) }), data.header);
 
         check(largeUploadCC8, {
             "CC8: Large file uploaded": (r) => r.status === 200,
@@ -3253,9 +3260,9 @@ function TestCC09_DualProcessingStops(client, data) {
         console.log("Corner Case 9: Dual Processing Stops After Purge");
         console.log("=".repeat(80));
 
-        const knowledgeBaseIdCC9 = data.dbIDPrefix + "cc9-" + randomString(6);
+        const displayNameCC9 = data.dbIDPrefix + " CC9 " + randomString(6);
         const createResCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
-            JSON.stringify({ id: knowledgeBaseIdCC9, description: "CC9 - dual processing stops", tags: ["test", "cc9", "purge"] }), data.header);
+            JSON.stringify({ knowledgeBase: { displayName: displayNameCC9, description: "CC9 - dual processing stops", tags: ["test", "cc9", "purge"] } }), data.header);
 
         let kbCC9;
         try {
@@ -3268,11 +3275,12 @@ function TestCC09_DualProcessingStops(client, data) {
             return;
         }
 
+        const knowledgeBaseIdCC9 = kbCC9.id;
         const knowledgeBaseUidCC9 = kbCC9.uid;
 
         // Upload, process, and trigger update
         const uploadResCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc9-init.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc9-init.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileUidCC9;
         try {
@@ -3318,7 +3326,7 @@ function TestCC09_DualProcessingStops(client, data) {
         // Upload file BEFORE purge (should be dual-processed)
         const fileBeforePurge = data.dbIDPrefix + "before-purge.txt";
         const uploadBeforePurgeCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
-            JSON.stringify({ filename: fileBeforePurge, type: "TYPE_TEXT", content: encoding.b64encode("Before purge") }), data.header);
+            JSON.stringify({ displayName: fileBeforePurge, type: "TYPE_TEXT", content: encoding.b64encode("Before purge") }), data.header);
 
         let fileBeforePurgeUid;
         try {
@@ -3386,7 +3394,7 @@ function TestCC09_DualProcessingStops(client, data) {
         // Upload file AFTER purge (should be single-processed only, no dual-processing to rollback KB)
         const fileAfterPurge = data.dbIDPrefix + "after-purge.txt";
         const uploadAfterPurgeRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
-            JSON.stringify({ filename: fileAfterPurge, type: "TYPE_TEXT", content: encoding.b64encode("After purge - dual processing should be stopped") }), data.header);
+            JSON.stringify({ displayName: fileAfterPurge, type: "TYPE_TEXT", content: encoding.b64encode("After purge - dual processing should be stopped") }), data.header);
 
         // Verify upload succeeded
         check(uploadAfterPurgeRes, {
@@ -3438,7 +3446,7 @@ function TestCC09_DualProcessingStops(client, data) {
                 `SELECT COUNT(*) as count FROM file
                  WHERE kb_uid IN (
                    SELECT uid FROM knowledge_base WHERE id = $1 AND delete_time IS NULL
-                 ) AND filename = $2`,
+                 ) AND display_name = $2`,
                 rollbackKBIDCC9,
                 fileAfterPurge
             );
@@ -3482,10 +3490,10 @@ function TestCC10_RetentionExpiration(client, data) {
         console.log("Corner Case 10: Retention Expiration During Operations");
         console.log("=".repeat(80));
 
-        const knowledgeBaseIdCC10 = data.dbIDPrefix + "cc10-" + randomString(6);
-        console.log(`CC10: Creating knowledge base ${knowledgeBaseIdCC10}...`);
+        const displayNameCC10 = data.dbIDPrefix + " CC10 " + randomString(6);
+        console.log(`CC10: Creating knowledge base with displayName: ${displayNameCC10}...`);
         const createResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
-            JSON.stringify({ id: knowledgeBaseIdCC10, description: "CC10 - retention expiration", tags: ["test", "cc10"] }), data.header);
+            JSON.stringify({ knowledgeBase: { displayName: displayNameCC10, description: "CC10 - retention expiration", tags: ["test", "cc10"] } }), data.header);
 
         check(createResCC10, {
             "CC10: Knowledge base creation returns OK status": (r) => r.status === 200 || r.status === 201
@@ -3497,10 +3505,11 @@ function TestCC10_RetentionExpiration(client, data) {
             return;
         }
 
-        let kbCC10;
+        let kbCC10, knowledgeBaseIdCC10;
         try {
             kbCC10 = createResCC10.json().knowledgeBase;
-            console.log(`CC10: Knowledge base created with UID: ${kbCC10.uid}`);
+            knowledgeBaseIdCC10 = kbCC10.id;
+            console.log(`CC10: Knowledge base created with ID: ${knowledgeBaseIdCC10}, UID: ${kbCC10.uid}`);
         } catch (e) {
             check(false, {
                 "CC10: Failed to parse knowledge base response": () => false
@@ -3515,7 +3524,7 @@ function TestCC10_RetentionExpiration(client, data) {
         // Upload and process initial file
         console.log("CC10: Uploading initial file...");
         const uploadResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc10-init.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc10-init.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         check(uploadResCC10, {
             "CC10: Initial file uploaded": (r) => r.status === 200
@@ -3614,10 +3623,10 @@ function TestCC10_RetentionExpiration(client, data) {
         // Upload files continuously
         console.log("CC10: Uploading files during retention...");
         const file1ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc10-file1.txt", type: "TYPE_TEXT", content: encoding.b64encode("File 1") }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc10-file1.txt", type: "TYPE_TEXT", content: encoding.b64encode("File 1") }), data.header);
 
         const file2ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}/files`,
-            JSON.stringify({ filename: data.dbIDPrefix + "cc10-file2.txt", type: "TYPE_TEXT", content: encoding.b64encode("File 2") }), data.header);
+            JSON.stringify({ displayName: data.dbIDPrefix + "cc10-file2.txt", type: "TYPE_TEXT", content: encoding.b64encode("File 2") }), data.header);
 
         // Track uploaded file UIDs for cleanup verification
         const uploadedFileUidsCC10 = [];
@@ -3791,19 +3800,19 @@ function TestPhaseValidate(client, data) {
         const upload1 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-            JSON.stringify({ filename: file1, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: file1, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
         const upload2 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-            JSON.stringify({ filename: file2, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: file2, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
         const upload3 = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-            JSON.stringify({ filename: file3, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: file3, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
@@ -4204,9 +4213,9 @@ function TestPhaseSwap(client, data) {
         helper.waitForAllUpdatesComplete(client, data, 15);
 
         // Create knowledge base
-        const knowledgeBaseId = data.dbIDPrefix + "swap-" + randomString(8);
+        const displayName = data.dbIDPrefix + " Swap " + randomString(8);
         const createBody = {
-            id: knowledgeBaseId,
+            displayName: displayName,
             description: "Test KB for Phase 5 - Atomic Swap",
             tags: ["test", "phase5", "swap"],
         };
@@ -4226,6 +4235,7 @@ function TestPhaseSwap(client, data) {
             return;
         }
 
+        const knowledgeBaseId = kb.id;
         const knowledgeBaseUid = kb.uid;
         const originalKBUID = knowledgeBaseUid; // CRITICAL: This UID must remain constant
 
@@ -4235,7 +4245,7 @@ function TestPhaseSwap(client, data) {
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({
-                filename: filename,
+                displayName: filename,
                 type: "TYPE_TEXT",
                 content: encoding.b64encode("Test content for atomic swap verification.")
             }),
@@ -4529,9 +4539,9 @@ function TestResourceCleanup(client, data) {
 
         // Create a fresh knowledge base for this test
         // Use "g8-" prefix to avoid any pattern matching with "cleanup" or other keywords
-        const knowledgeBaseId = data.dbIDPrefix + "g8-purge-" + randomString(8);
+        const displayName = data.dbIDPrefix + " G8 Purge " + randomString(8);
         const createBody = {
-            id: knowledgeBaseId,
+            displayName: displayName,
             description: "Test resource cleanup with purge (Group 8)",
             tags: ["test", "group8", "purge-testing"],
         };
@@ -4551,6 +4561,7 @@ function TestResourceCleanup(client, data) {
             return;
         }
 
+        const knowledgeBaseId = kb.id;
         const knowledgeBaseUid = kb.uid;
         console.log(`Cleanup: Created knowledge base "${knowledgeBaseId}" with UID ${knowledgeBaseUid}`);
 
@@ -4560,7 +4571,7 @@ function TestResourceCleanup(client, data) {
         const uploadRes = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-            JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
@@ -5017,7 +5028,7 @@ function TestResourceCleanup(client, data) {
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${minioTestKBId}/files`,
             JSON.stringify({
-                filename: minioTestFilename,
+                displayName: minioTestFilename,
                 type: "TYPE_TEXT",
                 content: constant.docSampleTxt
             }),
@@ -5196,9 +5207,9 @@ function TestCollectionVersioning(client, data) {
         helper.waitForAllUpdatesComplete(client, data, 30);
 
         // Create a knowledge base for testing
-        const knowledgeBaseId = data.dbIDPrefix + "col-" + randomString(5);
+        const displayName = data.dbIDPrefix + " Col " + randomString(5);
         const createBody = {
-            id: knowledgeBaseId,
+            displayName: displayName,
             description: "Test KB for collection versioning",
             tags: ["test", "collection-versioning"],
         };
@@ -5210,7 +5221,7 @@ function TestCollectionVersioning(client, data) {
             data.header
         );
 
-        let kb;
+        let kb, knowledgeBaseId;
         try {
             const responseBody = createRes.json();
             console.log(`Collection Versioning: Create response status: ${createRes.status}`);
@@ -5220,6 +5231,7 @@ function TestCollectionVersioning(client, data) {
                 console.error(`Collection Versioning: No knowledge base in response. Response: ${JSON.stringify(responseBody)}`);
                 return;
             }
+            knowledgeBaseId = kb.id;
         } catch (e) {
             console.error(`Collection Versioning: Failed to create knowledge base: ${e}`);
             return;
@@ -5260,7 +5272,7 @@ function TestCollectionVersioning(client, data) {
         const uploadRes = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-            JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+            JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
@@ -5537,7 +5549,7 @@ function TestRollbackAndReUpdate(client, data) {
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({
-                filename: filename,
+                displayName: filename,
                 type: "TYPE_TEXT",
                 content: encoding.b64encode("Version 1: Original content for rollback test.")
             }),
@@ -5931,13 +5943,12 @@ function TestMultipleKBUpdates(client, data) {
         console.log(`Multiple KB Updates: Creating ${numKBs} knowledge bases...`);
 
         for (let i = 0; i < numKBs; i++) {
-            const knowledgeBaseId = data.dbIDPrefix + "multi-" + randomString(5) + "-" + i;
-            knowledgeBaseIds.push(knowledgeBaseId);
+            const displayName = data.dbIDPrefix + " Multi " + randomString(5) + " " + i;
             // Don't pre-populate rollbackKBIDs with suffix pattern - will get actual IDs after updates complete
             rollbackKBIDs.push(null);
 
             const createBody = {
-                id: knowledgeBaseId,
+                displayName: displayName,
                 description: `Test KB ${i + 1}/${numKBs} for multiple KB updates`,
                 tags: ["test", "multi-update", `batch-${i}`],
             };
@@ -5952,6 +5963,8 @@ function TestMultipleKBUpdates(client, data) {
             let kb;
             try {
                 kb = createRes.json().knowledgeBase;
+                const knowledgeBaseId = kb.id;
+                knowledgeBaseIds.push(knowledgeBaseId);
                 knowledgeBaseUids.push(kb.uid);
                 console.log(`Multiple KB Updates: Created knowledge base ${i + 1}/${numKBs}: ${knowledgeBaseId} (UID: ${kb.uid})`);
             } catch (e) {
@@ -5968,7 +5981,7 @@ function TestMultipleKBUpdates(client, data) {
             const uploadRes = http.request(
                 "POST",
                 `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-                JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+                JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
                 data.header
             );
 
@@ -6544,9 +6557,9 @@ function TestEdgeCases(client, data) {
 
         // Test 1: Empty knowledge base update
         // Verifies that KBs with 0 files can be updated successfully (e.g., to change system config)
-        const emptyKBId = data.dbIDPrefix + "empty-" + randomString(8);
+        const emptyDisplayName = data.dbIDPrefix + " Empty " + randomString(8);
         const createBody = {
-            id: emptyKBId,
+            displayName: emptyDisplayName,
             description: "Test empty knowledge base",
             tags: ["test", "empty"],
         };
@@ -6565,6 +6578,7 @@ function TestEdgeCases(client, data) {
             return;
         }
 
+        const emptyKBId = kb.id;
         const emptyKBUid = kb.uid;
 
         // Trigger update on empty knowledge base
@@ -6745,7 +6759,7 @@ function TestEdgeCases(client, data) {
                 "POST",
                 `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${missingCollKBId}/files`,
                 JSON.stringify({
-                    filename: missingCollFilename,
+                    displayName: missingCollFilename,
                     type: "TYPE_TEXT",
                     content: encoding.b64encode("Test content for missing collection scenario")
                 }),
@@ -6898,7 +6912,7 @@ function TestEdgeCases(client, data) {
                 "POST",
                 `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${idempotentTestKBId}/files`,
                 JSON.stringify({
-                    filename: idempotentFilename,
+                    displayName: idempotentFilename,
                     type: "TYPE_IMAGE",
                     content: constant.imgSampleJpg  // Use a real image
                 }),
@@ -7138,7 +7152,7 @@ function TestEdgeCases(client, data) {
                 "POST",
                 `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${constraintTestKBId}/files`,
                 JSON.stringify({
-                    filename: constraintFilename,
+                    displayName: constraintFilename,
                     type: "TYPE_TEXT",
                     content: encoding.b64encode("Test content for constraint validation")
                 }),
@@ -7300,7 +7314,7 @@ function TestEdgeCases(client, data) {
                     "POST",
                     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${duplicateTestKBId}/files`,
                     JSON.stringify({
-                        filename: filename,
+                        displayName: filename,
                         type: "TYPE_TEXT",
                         content: encoding.b64encode(testFile.content)
                     }),
@@ -7508,16 +7522,18 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
 
         // Test 14.2: Create a knowledge base and start an update
         console.log("\n=== Test 14.2: Setup knowledge base for abort test ===");
-        const knowledgeBaseIdAbort = `abort-test-${Math.random().toString(36).substring(7)}`;
+        const displayNameAbort = `Abort Test ${Math.random().toString(36).substring(7)}`;
 
         // Create knowledge base (name must also be unique, not just ID)
         const createRes = http.request(
             "POST",
             `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: knowledgeBaseIdAbort,  // Use the unique ID
-                description: "Test KB for abort functionality",
-                tags: ["abort-test"],
+                knowledgeBase: {
+                    displayName: displayNameAbort,
+                    description: "Test KB for abort functionality",
+                    tags: ["abort-test"],
+                }
             }),
             data.header
         );
@@ -7530,6 +7546,16 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
             console.error(`Abort: Failed to create knowledge base, status: ${createRes.status}, body: ${createRes.body}`);
             return;
         }
+
+        // Extract the actual KB ID from the response
+        let kbAbort;
+        try {
+            kbAbort = createRes.json().knowledgeBase;
+        } catch (e) {
+            console.error(`Abort: Failed to parse response: ${e}`);
+            return;
+        }
+        const knowledgeBaseIdAbort = kbAbort.id;
 
         // Start update on this knowledge base (no file needed for abort test)
         const executeRes = client.invoke(
@@ -7620,19 +7646,28 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         // Create two more knowledge bases and start updates
         const knowledgeBaseIds = [];
         for (let i = 0; i < 2; i++) {
-            const catId = `abort-all-${i}-${Math.random().toString(36).substring(7)}`;
-            knowledgeBaseIds.push(catId);
+            const displayName = `abort-all-${i}-${Math.random().toString(36).substring(7)}`;
 
             const createRes2 = http.request(
                 "POST",
                 `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
                 JSON.stringify({
-                    id: catId,  // Use unique ID as KB identifier
-                    description: "Test KB for abort all",
-                    tags: ["abort-all-test"],
+                    knowledgeBase: {
+                        displayName: displayName,
+                        description: "Test KB for abort all",
+                        tags: ["abort-all-test"],
+                    }
                 }),
                 data.header
             );
+
+            // Extract the actual KB ID from response
+            try {
+                const kbId = createRes2.json().knowledgeBase.id;
+                if (kbId) knowledgeBaseIds.push(kbId);
+            } catch (e) {
+                console.error(`Failed to create KB for abort-all test: ${createRes2.body}`);
+            }
         }
 
         // Start updates on these knowledge bases

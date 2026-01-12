@@ -62,6 +62,9 @@ type KnowledgeBase interface {
 	UpdateKnowledgeBase(ctx context.Context, id, ownerUID string, kb KnowledgeBaseModel) (*KnowledgeBaseModel, error)
 	DeleteKnowledgeBase(ctx context.Context, ownerUID, kbID string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, ownerUID types.OwnerUIDType, kbID string) (*KnowledgeBaseModel, error)
+	// GetKnowledgeBaseByIDOrAlias looks up a KB by its canonical ID or any of its aliases
+	// Aliases preserve old URLs when display_name is renamed
+	GetKnowledgeBaseByIDOrAlias(ctx context.Context, ownerUID types.OwnerUIDType, id string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseByID(ctx context.Context, kbID string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
@@ -134,6 +137,8 @@ type KnowledgeBaseModel struct {
 	KBID         string          `gorm:"column:id;size:255;not null" json:"kb_id"`
 	DisplayName  string          `gorm:"column:display_name;size:255" json:"display_name"`
 	Description  string          `gorm:"column:description;size:1023" json:"description"`
+	// Aliases stores previous IDs for backward compatibility with old URLs
+	Aliases      AliasesArray    `gorm:"column:aliases;type:text[]" json:"aliases"`
 	Tags         TagsArray       `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
 	NamespaceUID string          `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
 	CreateTime   *time.Time      `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
@@ -286,6 +291,38 @@ func (tags *TagsArray) Scan(value any) error {
 func (tags TagsArray) Value() (driver.Value, error) {
 	// Convert the TagsArray to a PostgreSQL array string.
 	return formatPostgresArray(tags), nil
+}
+
+// AliasesArray is a custom type to handle PostgreSQL TEXT[] arrays for storing aliases.
+// Aliases store previous IDs for backward compatibility with old URLs.
+type AliasesArray []string
+
+// Scan implements the Scanner interface for AliasesArray.
+func (aliases *AliasesArray) Scan(value any) error {
+	if value == nil {
+		*aliases = []string{}
+		return nil
+	}
+
+	// Convert the value to string and parse it as a PostgreSQL array.
+	*aliases = parsePostgresArray(value.(string))
+	return nil
+}
+
+// Value implements the driver Valuer interface for AliasesArray.
+func (aliases AliasesArray) Value() (driver.Value, error) {
+	// Convert the AliasesArray to a PostgreSQL array string.
+	return formatPostgresArray(aliases), nil
+}
+
+// Contains checks if the aliases array contains a specific string
+func (aliases AliasesArray) Contains(s string) bool {
+	for _, a := range aliases {
+		if strings.EqualFold(a, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // Helper functions to parse and format PostgreSQL arrays.
@@ -633,6 +670,20 @@ func (r *repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner t
 		return nil, err
 	}
 	return &existingKB, nil
+}
+
+// GetKnowledgeBaseByIDOrAlias looks up a knowledge base by its canonical ID or any of its aliases.
+// Aliases preserve old URLs when display_name is renamed.
+func (r *repository) GetKnowledgeBaseByIDOrAlias(ctx context.Context, owner types.OwnerUIDType, id string) (*KnowledgeBaseModel, error) {
+	var kb KnowledgeBaseModel
+	// Query: namespace_uid = ? AND delete_time IS NULL AND (id = ? OR ? = ANY(aliases))
+	err := r.db.WithContext(ctx).
+		Where("namespace_uid = ? AND delete_time IS NULL AND (id = ? OR ? = ANY(aliases))", owner, id, id).
+		First(&kb).Error
+	if err != nil {
+		return nil, err
+	}
+	return &kb, nil
 }
 
 // GetKnowledgeBaseByID gets a knowledge base by ID (without owner filtering)

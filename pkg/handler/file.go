@@ -24,6 +24,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
@@ -127,11 +128,23 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		return nil, err
 	}
 
+	// Pre-generate the UID for the file to create hash-based ID
+	fileUID, err := uuid.NewV4()
+	if err != nil {
+		return nil, fmt.Errorf("generating file UID: %w", err)
+	}
+
+	// Generate hash-based ID from display_name and UID
+	// Format: {slug}-{sha256(uid)[:8]}
+	fileID := utils.GenerateResourceID(req.GetFile().GetDisplayName(), fileUID)
+
 	// upload file to minio and database
 	// Inherit RAG version from parent knowledge base
 	kbFile := repository.KnowledgeBaseFileModel{
-		DisplayName:                  req.GetFile().GetDisplayName(),
-		Description:                  req.GetFile().GetDescription(),
+		UID:                       fileUID,
+		ID:                        fileID,
+		DisplayName:               req.GetFile().GetDisplayName(),
+		Description:               req.GetFile().GetDescription(),
 		FileType:                  req.File.Type.String(),
 		NamespaceUID:              ns.NsUID,
 		KBUID:                     kb.UID,
@@ -368,9 +381,22 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		// Create a duplicate file record for target KB (staging or rollback)
 		// This file record will reference the same original file in MinIO
 		// but will have different processed outputs (chunks, embeddings)
+
+		// Pre-generate UID and hash-based ID for the target file
+		targetFileUID, err := uuid.NewV4()
+		if err != nil {
+			logger.Error("Failed to generate target file UID",
+				zap.Error(err),
+				zap.String("prodFileName", res.DisplayName))
+			return nil, fmt.Errorf("generating target file UID: %w", err)
+		}
+		targetFileID := utils.GenerateResourceID(res.DisplayName, targetFileUID)
+
 		targetFile := repository.KnowledgeBaseFileModel{
-			DisplayName:                  res.DisplayName,
-			Description:                  res.Description,
+			UID:                       targetFileUID,
+			ID:                        targetFileID,
+			DisplayName:               res.DisplayName,
+			Description:               res.Description,
 			FileType:                  res.FileType,
 			NamespaceUID:              res.NamespaceUID,
 			CreatorUID:                res.CreatorUID,
@@ -485,14 +511,14 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	return &artifactpb.CreateFileResponse{
 		File: &artifactpb.File{
 			Uid:                res.UID.String(),
-			Id:                 res.UID.String(),
+			Id:                 res.ID,
 			OwnerUid:           res.NamespaceUID.String(),
 			OwnerName:          ns.Name(),
 			Owner:              owner,
 			CreatorUid:         res.CreatorUID.String(),
 			Creator:            creator,
 			KnowledgeBaseUid:   res.KBUID.String(),
-			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, res.UID.String()),
+			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, res.ID),
 			DisplayName:        res.DisplayName,
 			Type:               req.File.Type,
 			CreateTime:         timestamppb.New(*res.CreateTime),
@@ -687,16 +713,21 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		// Fetch creator for this file (owner is the same for all files in this KB)
 		creator, _ := ph.service.FetchUserByUID(ctx, kbFile.CreatorUID.String())
 
+		// Use ID if set, otherwise fallback to UID (for backward compatibility)
+		fileID := kbFile.ID
+		if fileID == "" {
+			fileID = kbFile.UID.String()
+		}
 		file := &artifactpb.File{
 			Uid:                kbFile.UID.String(),
-			Id:                 kbFile.UID.String(),
+			Id:                 fileID,
 			OwnerUid:           kbFile.NamespaceUID.String(),
 			OwnerName:          ns.Name(),
 			Owner:              owner,
 			CreatorUid:         kbFile.CreatorUID.String(),
 			Creator:            creator,
 			KnowledgeBaseUid:   kbFile.KBUID.String(),
-			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, kbFile.UID.String()),
+			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, fileID),
 			DisplayName:        kbFile.DisplayName,
 			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
 			CreateTime:         timestamppb.New(*kbFile.CreateTime),
@@ -788,8 +819,8 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		return &artifactpb.GetFileResponse{File: file}, nil
 	}
 
-	fileUID := uuid.FromStringOrNil(req.FileId)
-	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
+	// Look up file by hash-based ID
+	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
 	if err != nil || len(kbFiles) == 0 {
 		logger.Warn("failed to get file for view content", zap.Error(err))
 		return &artifactpb.GetFileResponse{File: file}, nil
@@ -1225,7 +1256,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	}
 
 	// ACL - check user's permission to write knowledge base of kb file
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(uuid.FromStringOrNil(req.FileId))})
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
 	if err != nil {
 		logger.Error("failed to get knowledge base files", zap.Error(err))
 		return nil, errorsx.AddMessage(
@@ -1332,24 +1363,18 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 		)
 	}
 
-	fUID, err := uuid.FromString(req.FileId)
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to parse file uid: %w", errorsx.ErrInvalidArgument),
-			"Invalid file ID format. Please check the file ID and try again.",
-		)
-	}
-
-	// get the file by uid
-	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fUID)})
+	// Look up file by hash-based ID
+	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
 	if err != nil {
 		return nil, err
-	} else if len(files) == 0 {
+	}
+	if len(files) == 0 {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
 			"File not found. Please check the file ID and try again.",
 		)
 	}
+	fUID := uuid.UUID(files[0].UID)
 
 	// Soft-delete the file record first to make it immediately invisible to users
 	// This ensures a responsive user experience regardless of cleanup workflow status
@@ -1548,22 +1573,46 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 		)
 	}
 
-	// Get file
-	fileUID := uuid.FromStringOrNil(req.FileId)
-	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
+	// Get file by hash-based ID
+	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
 	if err != nil || len(kbFiles) == 0 {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
 			"File not found. Please check the file ID and try again.",
 		)
 	}
+	kbFile := kbFiles[0]
 
 	// Build update map based on field mask
 	updates := make(map[string]any)
+	displayNameChanged := false
 
 	if req.UpdateMask != nil {
 		for _, path := range req.UpdateMask.Paths {
 			switch path {
+			case "display_name":
+				newDisplayName := req.GetFile().GetDisplayName()
+				if newDisplayName != "" && newDisplayName != kbFile.DisplayName {
+					displayNameChanged = true
+					updates[repository.KnowledgeBaseFileColumn.DisplayName] = newDisplayName
+					// Generate new ID from new display name
+					newFileID := utils.GenerateResourceID(newDisplayName, kbFile.UID)
+					updates[repository.KnowledgeBaseFileColumn.ID] = newFileID
+					// Add old ID to aliases for backward compatibility
+					oldAliases := kbFile.Aliases
+					if kbFile.ID != "" {
+						found := false
+						for _, alias := range oldAliases {
+							if alias == kbFile.ID {
+								found = true
+								break
+							}
+						}
+						if !found {
+							updates[repository.KnowledgeBaseFileColumn.Aliases] = append(oldAliases, kbFile.ID)
+						}
+					}
+				}
 			case "external_metadata":
 				// Update external metadata
 				updates[repository.KnowledgeBaseFileColumn.ExternalMetadata] = req.File.ExternalMetadata
@@ -1590,13 +1639,22 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 		)
 	}
 
+	_ = displayNameChanged // Used for logging below
+
 	// Perform the update
-	updatedFile, err := ph.service.Repository().UpdateKnowledgeBaseFile(ctx, fileUID.String(), updates)
+	updatedFile, err := ph.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), updates)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("updating file: %w", err),
 			"Unable to update file. Please try again.",
 		)
+	}
+
+	if displayNameChanged {
+		logger.Info("File displayName updated, ID regenerated",
+			zap.String("old_id", kbFile.ID),
+			zap.String("new_id", updatedFile.ID),
+			zap.Strings("aliases", updatedFile.Aliases))
 	}
 
 	// If tags were updated, sync them to Milvus embeddings
@@ -1605,9 +1663,9 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 		collectionID := constant.KBCollectionName(kb.ActiveCollectionUID)
 
 		// Update tags in Milvus for all embeddings of this file
-		if err := ph.service.Repository().UpdateEmbeddingTagsForFile(ctx, collectionID, fileUID, updatedFile.Tags); err != nil {
+		if err := ph.service.Repository().UpdateEmbeddingTagsForFile(ctx, collectionID, types.FileUIDType(kbFile.UID), updatedFile.Tags); err != nil {
 			logger.Warn("Failed to update embedding tags in Milvus (file tags in DB were updated)",
-				zap.String("fileUID", fileUID.String()),
+				zap.String("fileUID", kbFile.UID.String()),
 				zap.Error(err))
 			// Don't fail the request - DB tags were updated successfully
 			// Milvus tags will be resynced if file is reprocessed
@@ -1674,16 +1732,8 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 		)
 	}
 
-	// Get file
-	fileUID := uuid.FromStringOrNil(req.FileId)
-	if fileUID == uuid.Nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: invalid file ID format", errorsx.ErrInvalidArgument),
-			"Invalid file ID. Please provide a valid file identifier.",
-		)
-	}
-
-	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
+	// Get file by hash-based ID
+	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
 	if err != nil {
 		logger.Error("failed to get file", zap.Error(err))
 		return nil, errorsx.AddMessage(

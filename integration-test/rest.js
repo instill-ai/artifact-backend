@@ -138,11 +138,14 @@ export function TEST_02_CreateKnowledgeBase(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
+    var displayName = "Test " + data.dbIDPrefix + randomString(10);
     var reqBody = {
-      id: "test-" + data.dbIDPrefix + randomString(10),
-      description: randomString(50),
-      tags: ["test", "integration"],
-      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+      knowledgeBase: {
+        displayName: displayName,
+        description: randomString(50),
+        tags: ["test", "integration"],
+        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+      }
     };
 
     var resOrigin = http.request(
@@ -161,13 +164,15 @@ export function TEST_02_CreateKnowledgeBase(data) {
     check(resOrigin, {
       "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response status is 200": (r) => r.status === 200,
       "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base name": () =>
-        cat && cat.name === `namespaces/${data.expectedOwner.id}/knowledge-bases/${reqBody.id}`,
+        cat && cat.name === `namespaces/${data.expectedOwner.id}/knowledge-bases/${id}`,
       "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base uid": () =>
         cat && helper.isUUID(uid),
-      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base id": () =>
-        cat && id === reqBody.id,
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base has hash-based id": () =>
+        cat && id && /^[a-z][-a-z0-9]*-[a-f0-9]{8}$/.test(id),
+      "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base displayName": () =>
+        cat && cat.displayName === displayName,
       "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base description": () =>
-        cat && cat.description === reqBody.description,
+        cat && cat.description === reqBody.knowledgeBase.description,
       "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base is valid": () =>
         cat && helper.validateKnowledgeBase(cat, false),
       "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases response knowledge base createTime": () =>
@@ -224,7 +229,7 @@ export function TEST_04_GetKnowledgeBase(data) {
     const cRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
-      JSON.stringify({ id: "test-" + data.dbIDPrefix + randomString(10) }),
+      JSON.stringify({ knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10) } }),
       data.header
     );
     check(cRes, { "POST /v1alpha/namespaces/{namespace_id}/knowledge-bases 200": (r) => r.status === 200 });
@@ -257,10 +262,13 @@ export function TEST_05_UpdateKnowledgeBase(data) {
     const cRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
-      JSON.stringify({ id: "test-" + data.dbIDPrefix + randomString(10) }),
+      JSON.stringify({ knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10) } }),
       data.header
     );
     const created = (cRes.json() || {}).knowledgeBase || {};
+    if (!created.id) {
+      console.log(`TEST_05: KB creation failed, status=${cRes.status}, body=${cRes.body}`);
+    }
 
     const newDescription = randomString(50);
     // With proto `body: "knowledge_base"`, body should be just the KB fields directly
@@ -278,6 +286,9 @@ export function TEST_05_UpdateKnowledgeBase(data) {
     );
     const json = (function () { try { return resOrigin.json(); } catch (e) { return {}; } })();
     const cat2 = json.knowledgeBase || {};
+    if (resOrigin.status !== 200) {
+      console.log(`TEST_05: PATCH failed, status=${resOrigin.status}, body=${resOrigin.body}`);
+    }
     check(resOrigin, {
       "PATCH /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response status is 200": (r) => r.status === 200,
       "PATCH /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id} response knowledge base id": () =>
@@ -298,7 +309,7 @@ export function TEST_06_DeleteKnowledgeBase(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const createBody = { id: "test-" + data.dbIDPrefix + "del-" + randomString(8) };
+    const createBody = { knowledgeBase: { displayName: "Test " + data.dbIDPrefix + "del-" + randomString(8) } };
     const cRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
@@ -329,11 +340,11 @@ export function TEST_07_CleanupFiles(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const kbName = "test-" + data.dbIDPrefix + "cl-" + randomString(5);
+    const kbName = "Test " + data.dbIDPrefix + "cl-" + randomString(5);
     const createRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
-      JSON.stringify({ id: kbName, description: "Cleanup test" }),
+      JSON.stringify({ knowledgeBase: { displayName: kbName, description: "Cleanup test" } }),
       data.header
     );
 
@@ -351,7 +362,7 @@ export function TEST_07_CleanupFiles(data) {
     const uploadRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-      JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
+      JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
       data.header
     );
 
@@ -441,10 +452,12 @@ export function TEST_08_E2EKnowledgeBase(data) {
 
     // Create knowledge base
     const createBody = {
-      id: "test-" + data.dbIDPrefix + "cat-" + randomString(8),
-      description: randomString(40),
-      tags: ["test", "integration", "kb-e2e"],
-      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+      knowledgeBase: {
+        displayName: "Test " + data.dbIDPrefix + "cat-" + randomString(8),
+        description: randomString(40),
+        tags: ["test", "integration", "kb-e2e"],
+        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+      }
     };
     const cRes = http.request(
       "POST",
@@ -479,7 +492,7 @@ export function TEST_08_E2EKnowledgeBase(data) {
         req: {
           method: "POST",
           url: `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-          body: JSON.stringify({ filename: filename, type: s.type, content: s.content, tags: tags }),
+          body: JSON.stringify({ displayName: filename, type: s.type, content: s.content, tags: tags }),
           params: data.header,
         },
       };
@@ -586,7 +599,7 @@ export function TEST_08_E2EKnowledgeBase(data) {
           const fileData = viewRes.json().files[0];
           check(viewRes, {
             [`E2E: File has correct metadata (${f.type})`]: () =>
-              fileData && fileData.filename === f.filename &&
+              fileData && fileData.displayName === f.filename &&
               fileData.processStatus === "FILE_PROCESS_STATUS_COMPLETED" &&
               fileData.totalChunks > 0 && fileData.totalTokens > 0,
             // Owner/Creator validations on file list
@@ -815,19 +828,19 @@ function logUnexpected(res, label) {
 }
 
 function createKBAuthenticated(data) {
-  const name = "test-" + data.dbIDPrefix + "jwt-" + randomString(8);
+  const displayName = "Test " + data.dbIDPrefix + "jwt-" + randomString(8);
   const res = http.request(
     "POST",
     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
-    JSON.stringify({ id: name }),
+    JSON.stringify({ knowledgeBase: { displayName: displayName } }),
     data.header
   );
   try {
     const json = res.json();
     const cat = (json && json.knowledgeBase) || {};
-    return { id: cat.id || name, namespaceId: data.expectedOwner.id };
+    return { id: cat.id, namespaceId: data.expectedOwner.id };
   } catch (e) {
-    return { id: name, namespaceId: data.expectedOwner.id };
+    return { id: null, namespaceId: data.expectedOwner.id };
   }
 }
 
@@ -837,7 +850,7 @@ function deleteKBAuthenticated(data, knowledgeBaseId) {
 
 function createFileAuthenticated(data, knowledgeBaseId) {
   const filename = data.dbIDPrefix + "jwt-file-" + randomString(6) + ".txt";
-  const body = { filename: filename, type: "TYPE_TEXT", content: constant.docSampleTxt };
+  const body = { displayName: filename, type: "TYPE_TEXT", content: constant.docSampleTxt };
   const res = http.request(
     "POST",
     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
@@ -858,7 +871,7 @@ export function TEST_09_JWT_CreateKnowledgeBase(data) {
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
 
-    const body = { id: "test-" + data.dbIDPrefix + randomString(8) };
+    const body = { knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(8) } };
     const res = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: POST knowledge-bases");
     check(res, { "JWT: POST knowledge bases 401": (r) => r.status === 401 });
@@ -897,8 +910,14 @@ export function TEST_12_JWT_UpdateKnowledgeBase(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const created = createKBAuthenticated(data);
+    if (!created.id) {
+      console.log(`TEST_12: createKBAuthenticated returned null id`);
+    }
     const body = { description: "x" };
     const res = http.request("PATCH", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}?updateMask=description`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    if (res.status !== 401) {
+      console.log(`TEST_12: Expected 401, got status=${res.status}, body=${res.body}`);
+    }
     logUnexpected(res, "JWT: PATCH knowledge base");
     check(res, { "JWT: PATCH knowledge base 401": (r) => r.status === 401 });
     deleteKBAuthenticated(data, created.id);
@@ -911,7 +930,7 @@ export function TEST_13_JWT_CreateFile(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     const created = createKBAuthenticated(data);
-    const body = { filename: data.dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.docSampleTxt };
+    const body = { displayName: data.dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.docSampleTxt };
     const res = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: POST file");
     check(res, { "JWT: POST file 401": (r) => r.status === 401 });
@@ -1071,7 +1090,7 @@ export function TEST_20_GetFileCache(data) {
     const uploadRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`,
-      JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
+      JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
       data.header
     );
 
@@ -1127,7 +1146,7 @@ export function TEST_20_GetFileCache(data) {
     check(res1, {
       "GET file VIEW_CACHE status 200": (r) => r.status === 200,
       "GET file VIEW_CACHE has file": (r) => r.json().file !== undefined,
-      "GET file VIEW_CACHE has correct file id": (r) => r.json().file.id === fileUid,
+      "GET file VIEW_CACHE has correct file uid": (r) => r.json().file.uid === fileUid,
     });
 
     // Check derivedResourceUri - it should always be present
@@ -1165,7 +1184,7 @@ export function TEST_21_GetFileCacheRenewal(data) {
     const uploadRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`,
-      JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
+      JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
       data.header
     );
 
@@ -1282,7 +1301,7 @@ export function TEST_22_GetFileCacheLargeFile(data) {
     const uploadRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`,
-      JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
+      JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
       data.header
     );
 
@@ -1456,12 +1475,13 @@ export function TEST_23_OwnerCreatorFields(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Create knowledge base
-    // Note: KB ID must be <= 32 chars. dbIDPrefix already includes "test-" prefix
     const kbReqBody = {
-      id: data.dbIDPrefix + "oc-" + randomString(8),
-      description: "Test knowledge base for owner/creator validation",
-      tags: ["test", "owner-creator"],
-      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+      knowledgeBase: {
+        displayName: "Test " + data.dbIDPrefix + "oc-" + randomString(8),
+        description: "Test knowledge base for owner/creator validation",
+        tags: ["test", "owner-creator"],
+        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+      }
     };
 
     const kbRes = http.request(
@@ -1496,7 +1516,7 @@ export function TEST_23_OwnerCreatorFields(data) {
 
     // Create a file in the knowledge base
     const fileReqBody = {
-      filename: data.dbIDPrefix + "owner-creator-test.txt",
+      displayName: data.dbIDPrefix + "owner-creator-test.txt",
       type: "TYPE_TEXT",
       content: constant.docSampleTxt,
       tags: ["test-file"]
@@ -1625,12 +1645,13 @@ export function TEST_24_ReservedTagsValidation(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Create knowledge base for testing
-    // Note: KB ID must be <= 32 chars. dbIDPrefix already includes "test-" prefix
     const kbReqBody = {
-      id: data.dbIDPrefix + "tg-" + randomString(8),
-      description: "Test knowledge base for reserved tags validation",
-      tags: ["test"],
-      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+      knowledgeBase: {
+        displayName: "Test " + data.dbIDPrefix + "tg-" + randomString(8),
+        description: "Test knowledge base for reserved tags validation",
+        tags: ["test"],
+        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+      }
     };
 
     const kbRes = http.request(
@@ -1649,7 +1670,7 @@ export function TEST_24_ReservedTagsValidation(data) {
 
     // Test 1: Create file with normal tags - should succeed
     const normalTagsBody = {
-      filename: data.dbIDPrefix + "normal-tags.txt",
+      displayName: data.dbIDPrefix + "normal-tags.txt",
       type: "TYPE_TEXT",
       content: constant.docSampleTxt,
       tags: ["user-tag", "another-tag", "my-custom-tag"]
@@ -1672,7 +1693,7 @@ export function TEST_24_ReservedTagsValidation(data) {
 
     // Test 2: Try to create file with agent:collection: prefix - should be rejected
     const agentTagBody = {
-      filename: data.dbIDPrefix + "agent-tag.txt",
+      displayName: data.dbIDPrefix + "agent-tag.txt",
       type: "TYPE_TEXT",
       content: constant.docSampleTxt,
       tags: ["user-tag", "agent:collection:fake-uid-12345"]
@@ -1700,7 +1721,7 @@ export function TEST_24_ReservedTagsValidation(data) {
 
     // Test 3: Try to create file with instill- prefix - should be rejected
     const instillTagBody = {
-      filename: data.dbIDPrefix + "instill-tag.txt",
+      displayName: data.dbIDPrefix + "instill-tag.txt",
       type: "TYPE_TEXT",
       content: constant.docSampleTxt,
       tags: ["user-tag", "instill-internal-system-tag"]
