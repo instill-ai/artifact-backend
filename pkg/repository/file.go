@@ -41,6 +41,13 @@ type KnowledgeBaseFile interface {
 	// GetKnowledgeBaseFilesByFileUIDsIncludingDeleted returns files by UIDs, INCLUDING soft-deleted files
 	// Used for embedding activities to generate embeddings even if file was deleted during processing
 	GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]KnowledgeBaseFileModel, error)
+	// GetKnowledgeBaseFilesByFileIDs returns files by their hash-based IDs (slug format like 'my-file-abc12345').
+	// This is more robust than UUIDs for LLM interactions as the IDs are human-readable and less prone to hallucination.
+	// The function also checks aliases for backward compatibility when display_name is renamed.
+	GetKnowledgeBaseFilesByFileIDs(ctx context.Context, fileIDs []string, columns ...string) ([]KnowledgeBaseFileModel, error)
+	// GetFileByIDOrAlias looks up a file by its canonical ID or any of its aliases within a KB
+	// Aliases preserve old URLs when display_name is renamed
+	GetFileByIDOrAlias(ctx context.Context, kbUID types.KBUIDType, id string) (*KnowledgeBaseFileModel, error)
 	// GetKnowledgeBaseFilesByName retrieves files by name in a specific KB
 	// Used for dual deletion to find corresponding files in staging/rollback KB
 	GetKnowledgeBaseFilesByName(ctx context.Context, kbUID types.KBUIDType, filename string) ([]KnowledgeBaseFileModel, error)
@@ -91,7 +98,7 @@ type KnowledgeBaseFile interface {
 // KnowledgeBaseFileModel is the model for the knowledge base file table
 type KnowledgeBaseFileModel struct {
 	UID types.FileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	// ID is a URL-safe slug (defaults to uid for files)
+	// ID is a hash-based resource identifier (e.g., "my-file-abc12345")
 	ID string `gorm:"column:id;size:255;not null" json:"id"`
 	// NamespaceUID is the namespace that owns this file
 	NamespaceUID types.NamespaceUIDType `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
@@ -99,6 +106,8 @@ type KnowledgeBaseFileModel struct {
 	CreatorUID   types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	DisplayName  string                 `gorm:"column:display_name;size:255;not null" json:"display_name"`
 	Description  string                 `gorm:"column:description" json:"description"`
+	// Aliases stores previous IDs for backward compatibility with old URLs
+	Aliases AliasesArray `gorm:"column:aliases;type:text[]" json:"aliases"`
 	// FileType stores the FileType enum string (e.g., "TYPE_PDF", "TYPE_TEXT")
 	FileType string `gorm:"column:file_type;not null" json:"file_type"`
 	// Destination is the path in the MinIO bucket
@@ -167,10 +176,12 @@ type UsageMetadata struct {
 // KnowledgeBaseFileColumns is the columns for the knowledge base file table
 type KnowledgeBaseFileColumns struct {
 	UID              string
+	ID               string
 	Owner            string
 	KnowledgeBaseUID string
 	CreatorUID       string
 	DisplayName      string
+	Aliases          string
 	FileType         string
 	Destination      string
 	ProcessStatus    string
@@ -188,10 +199,12 @@ type KnowledgeBaseFileColumns struct {
 // KnowledgeBaseFileColumn is the columns for the knowledge base file table
 var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 	UID:              "uid",
+	ID:               "id",
 	Owner:            "owner",
 	KnowledgeBaseUID: "kb_uid",
 	CreatorUID:       "creator_uid",
 	DisplayName:      "display_name",
+	Aliases:          "aliases",
 	FileType:         "file_type",
 	Destination:      "destination",
 	ProcessStatus:    "process_status",
@@ -843,6 +856,77 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(
 
 	// Return the found files, or an empty slice if none were found
 	return files, nil
+}
+
+// GetKnowledgeBaseFilesByFileIDs returns files by their IDs (hash-based slug or UUID).
+// Supported formats:
+// 1. Hash-based IDs (e.g., 'my-file-abc12345') - preferred format, less prone to LLM hallucination
+// 2. UUID strings (e.g., 'aff8544b-3ccc-4e73-bbe5-8ec922446542') - legacy format, searched by uid column
+// The function also checks aliases for backward compatibility when display_name is renamed.
+// Unlike GetFileByIDOrAlias, this does NOT require a KB UID since file IDs include a unique hash suffix.
+func (r *repository) GetKnowledgeBaseFilesByFileIDs(
+	ctx context.Context,
+	fileIDs []string,
+	columns ...string,
+) ([]KnowledgeBaseFileModel, error) {
+	if len(fileIDs) == 0 {
+		return []KnowledgeBaseFileModel{}, nil
+	}
+
+	var files []KnowledgeBaseFileModel
+
+	// Build query: check id, aliases, AND uid (for legacy UUID lookups)
+	// Since file IDs include a unique hash suffix (e.g., 'my-file-abc12345'), they're globally unique
+	// across all KBs, so we don't need to filter by KB UID.
+	query := r.db.WithContext(ctx)
+	if len(columns) > 0 {
+		query = query.Select(columns)
+	}
+
+	// Query files where id matches OR any of the fileIDs is in the aliases array OR uid matches (for UUIDs)
+	// PostgreSQL syntax: ? = ANY(aliases), uid::text = ? for UUID comparison
+	// We need to build an OR condition for each fileID checking id, aliases, and uid
+	var conditions []string
+	var args []interface{}
+	for _, fid := range fileIDs {
+		// Check if fid looks like a UUID (36 chars with dashes in right places)
+		if len(fid) == 36 && fid[8] == '-' && fid[13] == '-' && fid[18] == '-' && fid[23] == '-' {
+			// For UUIDs, also check the uid column
+			conditions = append(conditions, "(id = ? OR ? = ANY(aliases) OR uid::text = ?)")
+			args = append(args, fid, fid, fid)
+		} else {
+			// For non-UUIDs, only check id and aliases
+			conditions = append(conditions, "(id = ? OR ? = ANY(aliases))")
+			args = append(args, fid, fid)
+		}
+	}
+
+	whereClause := fmt.Sprintf("(%s) AND delete_time IS NULL", strings.Join(conditions, " OR "))
+	if err := query.Where(whereClause, args...).Find(&files).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return []KnowledgeBaseFileModel{}, nil
+		}
+		return nil, fmt.Errorf("failed to get files by IDs: %w", err)
+	}
+
+	return files, nil
+}
+
+// GetFileByIDOrAlias looks up a file by its canonical ID or any of its aliases within a KB.
+// Aliases preserve old URLs when display_name is renamed.
+func (r *repository) GetFileByIDOrAlias(ctx context.Context, kbUID types.KBUIDType, id string) (*KnowledgeBaseFileModel, error) {
+	var file KnowledgeBaseFileModel
+	// Query: kb_uid = ? AND delete_time IS NULL AND (id = ? OR ? = ANY(aliases))
+	err := r.db.WithContext(ctx).
+		Where("kb_uid = ? AND delete_time IS NULL AND (id = ? OR ? = ANY(aliases))", kbUID, id, id).
+		First(&file).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("file not found: %s", id)
+		}
+		return nil, fmt.Errorf("failed to get file: %w", err)
+	}
+	return &file, nil
 }
 
 // GetKnowledgeBaseFilesByName retrieves files by name in a specific KB

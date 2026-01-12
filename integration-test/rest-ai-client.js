@@ -158,15 +158,17 @@ export default function (data) {
     group("AI Client: Test Content Conversion", function () {
         // Note: Content conversion requires AI client configuration
         // Tests document-to-markdown conversion via AI API
-        const kbName = `test-ai-conv-${randomString(8)}`;
+        const kbDisplayName = `Test AI Conv ${randomString(8)}`;
 
         // Create knowledge base
         const createKBResp = http.request(
             "POST",
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: kbName,
-                description: "Test KB for AI content conversion",
+                knowledgeBase: {
+                    displayName: kbDisplayName,
+                    description: "Test KB for AI content conversion",
+                }
             }),
             data.header
         );
@@ -189,7 +191,7 @@ export default function (data) {
         const uploadResp = helper.uploadFileWithRetry(
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
-                filename: "test-gemini-conversion.txt",
+                displayName: "test-gemini-conversion.txt",
                 type: "TYPE_TEXT",
                 content: encoding.b64encode(testContent) // Base64 encode content
             },
@@ -304,15 +306,17 @@ export default function (data) {
     group("AI Client: Test Embedding Generation", function () {
         // Note: Tests AI model embedding generation
         // Embedding dimensionality depends on the configured model
-        const kbName = `test-ai-embed-${randomString(8)}`; // Max 32 chars: test-ai-embed-12345678 = 24 chars
+        const kbDisplayName = `Test AI Embed ${randomString(8)}`;
 
         // Create knowledge base
         const createKBResp = http.request(
             "POST",
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: kbName,
-                description: "Test KB for AI embedding generation",
+                knowledgeBase: {
+                    displayName: kbDisplayName,
+                    description: "Test KB for AI embedding generation",
+                }
             }),
             data.header
         );
@@ -335,7 +339,7 @@ export default function (data) {
         const uploadResp = helper.uploadFileWithRetry(
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
-                filename: "test-embedding.txt",
+                displayName: "test-embedding.txt",
                 type: "TYPE_TEXT",
                 content: encoding.b64encode(testContent) // Base64 encode content
             },
@@ -441,15 +445,17 @@ export default function (data) {
     group("AI Client: Test Summary Generation", function () {
         // Note: Summary generation requires AI client configuration
         // Tests AI-powered document summarization
-        const kbName = `test-ai-summ-${randomString(8)}`; // Max 32 chars: test-ai-summ-12345678 = 23 chars
+        const kbDisplayName = `Test AI Summ ${randomString(8)}`;
 
         // Create knowledge base
         const createKBResp = http.request(
             "POST",
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: kbName,
-                description: "Test KB for AI summary generation",
+                knowledgeBase: {
+                    displayName: kbDisplayName,
+                    description: "Test KB for AI summary generation",
+                }
             }),
             data.header
         );
@@ -488,7 +494,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         const uploadResp = helper.uploadFileWithRetry(
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
-                filename: "test-summary.txt",
+                displayName: "test-summary.txt",
                 type: "TYPE_TEXT",
                 content: encoding.b64encode(longContent) // Base64 encode content
             },
@@ -584,15 +590,17 @@ in artificial intelligence integration and customer satisfaction metrics.
     group("AI Client: Test Cache Functionality", function () {
         // Note: Cache functionality depends on AI model support
         // Tests AI model native caching capabilities
-        const kbName = `test-ai-cache-${randomString(8)}`; // Max 32 chars: test-ai-cache-12345678 = 24 chars
+        const kbDisplayName = `Test AI Cache ${randomString(8)}`;
 
         // Create knowledge base
         const createKBResp = http.request(
             "POST",
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                id: kbName,
-                description: "Test KB for AI cache functionality",
+                knowledgeBase: {
+                    displayName: kbDisplayName,
+                    description: "Test KB for AI cache functionality",
+                }
             }),
             data.header
         );
@@ -615,7 +623,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         const uploadResp = helper.uploadFileWithRetry(
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
-                filename: "test-gemini-cache.txt",
+                displayName: "test-gemini-cache.txt",
                 type: "TYPE_TEXT",
                 content: encoding.b64encode(testContent) // Base64 encode content
             },

@@ -181,22 +181,19 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 		return nil, err
 	}
 
-	fileUID, err := uuid.FromString(req.FileId)
+	// Look up file by hash-based ID (also supports UUID lookup internally)
+	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
 	if err != nil {
-		logger.Error("failed to parse file uid", zap.Error(err))
-		return nil, fmt.Errorf("failed to parse file uid: %v. err: %w", err, errorsx.ErrInvalidArgument)
+		logger.Error("failed to get knowledge base files by file ids", zap.Error(err))
+		return nil, fmt.Errorf("failed to get knowledge base files: %w", err)
+	}
+	if len(kbfs) == 0 {
+		logger.Error("no files found for the given file id", zap.String("fileId", req.FileId))
+		return nil, fmt.Errorf("file not found: %s. err: %w", req.FileId, errorsx.ErrNotFound)
 	}
 
-	fileUIDs := []types.FileUIDType{types.FileUIDType(fileUID)}
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, fileUIDs)
-	if err != nil {
-		logger.Error("failed to get knowledge base files by file uids", zap.Error(err))
-		return nil, fmt.Errorf("failed to get knowledge base files by file uids")
-	} else if len(kbfs) == 0 {
-		logger.Error("no files found for the given file uids")
-		return nil, fmt.Errorf("no files found for the given file uids: %v. err: %w", fileUIDs, errorsx.ErrNotFound)
-	}
-	kbf := kbfs[0]
+	kbf := &kbfs[0]
+	fileUID := uuid.UUID(kbf.UID)
 	// ACL - check user's permission to read knowledge base
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KBUID, "reader")
 	if err != nil {

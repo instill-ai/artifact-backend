@@ -296,7 +296,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Create KB and upload a simple file
-    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ id: data.dbIDPrefix + "src-" + randomString(8) }), data.header);
+    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ knowledgeBase: { displayName: data.dbIDPrefix + "src-" + randomString(8) } }), data.header);
     logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases');
     const kb = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).knowledgeBase || {};
     const knowledgeBaseId = kb.id;
@@ -306,7 +306,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
     const s = constant.sampleFiles.find((x) => x.originalName === "doc-sample.txt") || {};
     const filename = data.dbIDPrefix + "process-status-test.txt";
 
-    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`, JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: s.content || "" }), data.header);
+    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`, JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: s.content || "" }), data.header);
     logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files');
     const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
     const fileUid = file.uid;
@@ -400,7 +400,7 @@ function runKnowledgeBaseFileTest(data, opts) {
     const { fileType, originalName, omitType } = opts || {};
 
     // Create knowledge base (id must be < 32 chars: test-{4}-src-{8} = 23 chars)
-    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ id: data.dbIDPrefix + "src-" + randomString(8) }), data.header);
+    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ knowledgeBase: { displayName: data.dbIDPrefix + "src-" + randomString(8) } }), data.header);
     logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases');
     const kb = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).knowledgeBase || {};
     const knowledgeBaseId = kb.id;
@@ -434,8 +434,8 @@ function runKnowledgeBaseFileTest(data, opts) {
 
     // If omitType is true, don't include the type field to test backend type inference
     const fReq = omitType
-      ? { filename: filename, content: s.content || "" }
-      : { filename: filename, type: fileType, content: s.content || "" };
+      ? { displayName: filename, content: s.content || "" }
+      : { displayName: filename, type: fileType, content: s.content || "" };
 
     if (omitType) {
       console.log(`Testing type inference for ${fileType}: uploading with filename only (no type field)`);
@@ -484,7 +484,7 @@ function runKnowledgeBaseFileTest(data, opts) {
     check(getKBFileRes, {
       [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} 200 (${testLabel})`]: (r) => r.status === 200,
       [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} uid matches (${testLabel})`]: () => getKBFileJson.file && getKBFileJson.file.uid === fileUid,
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} filename matches (${testLabel})`]: () => getKBFileJson.file && getKBFileJson.file.filename === filename,
+      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} filename matches (${testLabel})`]: () => getKBFileJson.file && getKBFileJson.file.displayName === filename,
       [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} is valid (${testLabel})`]: () => getKBFileJson.file && helper.validateFile(getKBFileJson.file, false),
       [`File has total_tokens field (${testLabel})`]: () => getKBFileJson.file && typeof getKBFileJson.file.totalTokens === 'number',
     });

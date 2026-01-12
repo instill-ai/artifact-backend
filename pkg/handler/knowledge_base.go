@@ -15,6 +15,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
@@ -70,17 +71,23 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf("knowledge_base.display_name is required. err: %w", errorsx.ErrInvalidArgument)
 	}
 
-	// Generate id from display_name if not provided
-	kbID := kb.GetId()
-	if kbID == "" {
-		// Generate URL-safe slug from display_name
-		kbID = generateSlugFromDisplayName(kb.GetDisplayName())
+	// Pre-generate the UID for the knowledge base
+	// This allows us to generate the hash-based ID before creation
+	kbUID, err := uuid.NewV4()
+	if err != nil {
+		return nil, fmt.Errorf("generating KB UID: %w", err)
 	}
 
-	nameOk := isValidName(kbID)
+	// Generate hash-based ID from display_name and UID
+	// Format: {slug}-{sha256(uid)[:8]}
+	// This ensures globally unique IDs while maintaining human-readable URLs
+	kbID := utils.GenerateResourceID(kb.GetDisplayName(), kbUID)
+
+	// Validate the generated ID has a valid slug portion
+	nameOk := isValidHashBasedID(kbID)
 	if !nameOk {
-		msg := "the knowledge base id should be lowercase without any space or special character besides the hyphen, " +
-			"it can not start with number or hyphen, and should be less than 32 characters. id: %v. err: %w"
+		msg := "the knowledge base display_name should contain at least one letter or number. " +
+			"Generated id: %v. err: %w"
 		return nil, fmt.Errorf(msg, kbID, errorsx.ErrInvalidArgument)
 	}
 
@@ -95,11 +102,18 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	// RAG configurations including AI model family, embedding vector dimensionality,
 	// chunking method, and other RAG-related settings
 	var system *repository.SystemModel
-	// Note: SystemId is no longer a direct field - it would need to be added to KnowledgeBase message
-	// For now, we always use the default system
-	system, err = ph.service.Repository().GetDefaultSystem(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("getting default system: %w", err)
+	if kb.GetSystemId() != "" {
+		// Use the specified system
+		system, err = ph.service.Repository().GetSystem(ctx, kb.GetSystemId())
+		if err != nil {
+			return nil, fmt.Errorf("getting system by ID %q: %w", kb.GetSystemId(), err)
+		}
+	} else {
+		// Fall back to default system
+		system, err = ph.service.Repository().GetDefaultSystem(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("getting default system: %w", err)
+		}
 	}
 
 	systemConfig, err := system.GetConfigJSON()
@@ -143,6 +157,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	dbData, err := ph.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
+			UID:               kbUID,
 			KBID:              kbID,
 			DisplayName:       kb.GetDisplayName(),
 			Description:       kb.GetDescription(),
@@ -376,31 +391,82 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		)
 	}
 
-	// Build update model based on field mask
-	updateModel := repository.KnowledgeBaseModel{}
+	// Build update map based on field mask
+	updates := make(map[string]any)
+	displayNameChanged := false
+	var newKBID string
 	for _, path := range req.UpdateMask.Paths {
 		switch path {
+		case "display_name":
+			newDisplayName := req.GetKnowledgeBase().GetDisplayName()
+			if newDisplayName != "" && newDisplayName != kb.DisplayName {
+				displayNameChanged = true
+				updates["display_name"] = newDisplayName
+				// Generate new ID from new display name
+				newKBID = utils.GenerateResourceID(newDisplayName, kb.UID)
+				updates["id"] = newKBID
+				// Add old ID to aliases for backward compatibility
+				oldAliases := kb.Aliases
+				if kb.KBID != "" {
+					// Check if old ID already in aliases
+					found := false
+					for _, alias := range oldAliases {
+						if alias == kb.KBID {
+							found = true
+							break
+						}
+					}
+					if !found {
+						oldAliases = append(oldAliases, kb.KBID)
+					}
+				}
+				updates["aliases"] = repository.AliasesArray(oldAliases)
+			}
 		case "description":
-			updateModel.Description = req.GetKnowledgeBase().GetDescription()
+			updates["description"] = req.GetKnowledgeBase().GetDescription()
 		case "tags":
-			updateModel.Tags = req.GetKnowledgeBase().GetTags()
+			updates["tags"] = req.GetKnowledgeBase().GetTags()
 		default:
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("%w: unsupported field path: %s", errorsx.ErrInvalidArgument, path),
-				fmt.Sprintf("Unsupported field path: %s. Only 'description' and 'tags' can be updated.", path),
+				fmt.Sprintf("Unsupported field path: %s. Supported fields: 'display_name', 'description', 'tags'.", path),
 			)
 		}
 	}
 
-	// update knowledge base
-	kb, err = ph.service.Repository().UpdateKnowledgeBase(
+	if len(updates) == 0 {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no valid fields to update", errorsx.ErrInvalidArgument),
+			"No valid fields specified for update.",
+		)
+	}
+
+	// update knowledge base using map to allow setting zero values
+	err = ph.service.Repository().UpdateKnowledgeBaseWithMap(
 		ctx,
 		req.GetKnowledgeBaseId(),
 		ns.NsUID.String(),
-		updateModel,
+		updates,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("updating knowledge base: %w", err)
+	}
+
+	// Re-fetch the updated KB
+	if displayNameChanged {
+		kb, err = ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, newKBID)
+	} else {
+		kb, err = ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetKnowledgeBaseId())
+	}
+	if err != nil {
+		return nil, fmt.Errorf("fetching updated knowledge base: %w", err)
+	}
+
+	if displayNameChanged {
+		logger.Info("Knowledge base displayName updated, ID regenerated",
+			zap.String("old_id", req.GetKnowledgeBaseId()),
+			zap.String("new_id", kb.KBID),
+			zap.Strings("aliases", kb.Aliases))
 	}
 
 	// Fetch KB with system config for the response
@@ -435,8 +501,10 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		Name:           fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), kb.KBID),
 		Uid:            kb.UID.String(),
 		Id:             kb.KBID,
+		DisplayName:    kb.DisplayName,
 		Description:    kb.Description,
 		Tags:           kb.Tags,
+		Aliases:        kb.Aliases,
 		CreateTime:     timestamppb.New(*kb.CreateTime),
 		UpdateTime:     timestamppb.New(*kb.UpdateTime),
 		OwnerName:      ns.Name(),
@@ -619,8 +687,8 @@ func (ph *PublicHandler) GetKnowledgeBase(ctx context.Context, req *artifactpb.G
 		return nil, fmt.Errorf("getting namespace: %w", err)
 	}
 
-	// Get knowledge base from repository
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetKnowledgeBaseId())
+	// Get knowledge base from repository (supports lookup by ID or alias)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByIDOrAlias(ctx, ns.NsUID, req.GetKnowledgeBaseId())
 	if err != nil {
 		return nil, fmt.Errorf("fetching knowledge base: %w", err)
 	}
@@ -660,42 +728,15 @@ func getUserUIDFromContext(ctx context.Context) (string, error) {
 	)
 }
 
-// The ID should be lowercase without any space or special character besides
-// the hyphen, it can not start with number or hyphen, and should be less
-// than 32 characters.
-func isValidName(name string) bool {
-	// Define the regular expression pattern
-	pattern := "^[a-z][-a-z_0-9]{0,31}$"
-	// Compile the regular expression
+// isValidHashBasedID validates the hash-based ID format
+// Format: {slug}-{8-char-hex-hash}
+// Examples: "my-knowledge-base-abc12345", "test-kb-12345678"
+// The slug must start with a letter and contain only lowercase letters, numbers, and hyphens.
+// The hash suffix is always 8 hexadecimal characters.
+func isValidHashBasedID(id string) bool {
+	// Hash-based ID format: {slug}-{8-char-hash}
+	// Pattern: starts with letter, contains alphanumeric/hyphens, ends with 8 hex chars
+	pattern := `^[a-z][-a-z0-9]*-[a-f0-9]{8}$`
 	re := regexp.MustCompile(pattern)
-	// Match the name against the regular expression
-	return re.MatchString(name)
-}
-
-// generateSlugFromDisplayName generates a URL-safe slug from a display name
-// e.g. "My Knowledge Base" -> "my-knowledge-base"
-func generateSlugFromDisplayName(displayName string) string {
-	// Convert to lowercase
-	slug := strings.ToLower(displayName)
-	// Replace spaces with dashes
-	slug = strings.ReplaceAll(slug, " ", "-")
-	// Remove characters that are not alphanumeric, dash, or underscore
-	re := regexp.MustCompile(`[^a-z0-9-_]`)
-	slug = re.ReplaceAllString(slug, "")
-	// Remove consecutive dashes
-	re = regexp.MustCompile(`-+`)
-	slug = re.ReplaceAllString(slug, "-")
-	// Remove leading/trailing dashes
-	slug = strings.Trim(slug, "-")
-	// Ensure it starts with a letter
-	if len(slug) > 0 && (slug[0] >= '0' && slug[0] <= '9') {
-		slug = "kb-" + slug
-	}
-	// Truncate to 32 characters
-	if len(slug) > 32 {
-		slug = slug[:32]
-		// Remove trailing dash if truncation created one
-		slug = strings.TrimRight(slug, "-")
-	}
-	return slug
+	return re.MatchString(id)
 }

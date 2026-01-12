@@ -137,7 +137,7 @@ else
 		{} --no-usage-report" ::: \
 		integration-test/rest.js \
 		integration-test/rest-object-storage.js \
-		integration-test/grpc.js 2>&1 | tee -a /tmp/artifact-integration-test.log
+		integration-test/rest-hash-based-ids.js 2>&1 | tee -a /tmp/artifact-integration-test.log
 	# Batch 2: File processing tests (heavy AI workload)
 	@parallel --halt now,fail=1 --tag --line-buffer \
 		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
@@ -162,6 +162,7 @@ else
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
 		-e DB_HOST=${DB_HOST} \
 		{} --no-usage-report" ::: \
+		integration-test/grpc.js \
 		integration-test/grpc-kb-update.js \
 		integration-test/grpc-system-config-update.js \
 		integration-test/grpc-system-admin.js 2>&1 | tee -a /tmp/artifact-integration-test.log

@@ -61,7 +61,7 @@ import * as helper from "./helper.js";
 
 const client = new grpc.Client();
 client.load(
-    ["./proto"],
+    ["./proto", "./proto/artifact/artifact/v1alpha"],
     "artifact/artifact/v1alpha/artifact_private_service.proto"
 );
 
@@ -260,15 +260,17 @@ export default function (data) {
             helper.waitForAllUpdatesComplete(client, data, 30);
 
             const randomSuffix = randomString(8);
-            const knowledgeBaseId1 = `${data.dbIDPrefix}sysconfig-kb1-${randomSuffix}`;
-            const knowledgeBaseId2 = `${data.dbIDPrefix}sysconfig-kb2-${randomSuffix}`;
+            const displayName1 = `${data.dbIDPrefix}sysconfig-kb1-${randomSuffix}`;
+            const displayName2 = `${data.dbIDPrefix}sysconfig-kb2-${randomSuffix}`;
 
             // Create first KB with OpenAI
             const createReq1 = {
-                id: knowledgeBaseId1,
-                description: "Test knowledge base 1 for system config update",
-                tags: ["test", "openai"],
-                system_id: "openai"
+                knowledgeBase: {
+                    displayName: displayName1,
+                    description: "Test knowledge base 1 for system config update",
+                    tags: ["test", "openai"],
+                    systemId: "openai"
+                }
             };
 
             const createRes1 = http.request(
@@ -296,6 +298,7 @@ export default function (data) {
             }
 
             const kb1 = responseBody1.knowledgeBase;
+            const knowledgeBaseId1 = kb1.id;
             data.knowledgeBaseIds.push(knowledgeBaseId1);
 
             // Verify OpenAI config
@@ -330,10 +333,12 @@ export default function (data) {
 
             // Create second KB with OpenAI
             const createReq2 = {
-                id: knowledgeBaseId2,
-                description: "Test knowledge base 2 for system config update",
-                tags: ["test", "openai"],
-                system_id: "openai"
+                knowledgeBase: {
+                    displayName: displayName2,
+                    description: "Test knowledge base 2 for system config update",
+                    tags: ["test", "openai"],
+                    systemId: "openai"
+                }
             };
 
             const createRes2 = http.request(
@@ -361,6 +366,7 @@ export default function (data) {
             }
 
             const kb2 = responseBody2.knowledgeBase;
+            const knowledgeBaseId2 = kb2.id;
             data.knowledgeBaseIds.push(knowledgeBaseId2);
 
             // Upload initial files to KB1 (use multi-page PDF to test position data with OpenAI)
@@ -373,7 +379,7 @@ export default function (data) {
                 const uploadRes = http.request(
                     "POST",
                     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId1}/files`,
-                    JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
+                    JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
                     data.header
                 );
 
@@ -399,7 +405,7 @@ export default function (data) {
                 const uploadRes = http.request(
                     "POST",
                     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId2}/files`,
-                    JSON.stringify({ filename: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
+                    JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
                     data.header
                 );
 
@@ -1183,7 +1189,7 @@ export default function (data) {
                 const uploadRes = http.request(
                     "POST",
                     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb1_initial.knowledgeBaseId}/files`,
-                    JSON.stringify({ filename: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
+                    JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
                     data.header
                 );
 
@@ -1203,7 +1209,7 @@ export default function (data) {
                 const uploadRes = http.request(
                     "POST",
                     `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb2_initial.knowledgeBaseId}/files`,
-                    JSON.stringify({ filename: filename, type: "TYPE_MARKDOWN", content: constant.docSampleMd }),
+                    JSON.stringify({ displayName: filename, type: "TYPE_MARKDOWN", content: constant.docSampleMd }),
                     data.header
                 );
 
@@ -1308,7 +1314,7 @@ export default function (data) {
                     for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb1-1.pdf`, `${data.dbIDPrefix}sysconfig-retention-kb1-2.pdf`]) {
                         const fileQuery = helper.safeQuery(
                             `SELECT process_status FROM file
-                             WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`,
+                             WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`,
                             data.kb1_rollback.kbUid,
                             filename
                         );
@@ -1323,7 +1329,7 @@ export default function (data) {
                         for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb2-1.md`, `${data.dbIDPrefix}sysconfig-retention-kb2-2.md`]) {
                             const fileQuery = helper.safeQuery(
                                 `SELECT process_status FROM file
-                                 WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`,
+                                 WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`,
                                 data.kb2_rollback.kbUid,
                                 filename
                             );
@@ -1406,7 +1412,7 @@ export default function (data) {
                     for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb1-1.pdf`, `${data.dbIDPrefix}sysconfig-retention-kb1-2.pdf`]) {
                         const fileQuery = helper.safeQuery(
                             `SELECT process_status FROM file
-                             WHERE kb_uid = $1 AND filename = $2 AND delete_time IS NULL`,
+                             WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`,
                             data.kb1_rollback.kbUid,
                             filename
                         );
@@ -1586,7 +1592,7 @@ export default function (data) {
                 for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb1-1.pdf`, `${data.dbIDPrefix}sysconfig-retention-kb1-2.pdf`]) {
                     const fileQuery = helper.safeQuery(
                         `SELECT COUNT(*) as count FROM file
-                         WHERE kb_uid = $1 AND filename = $2`,
+                         WHERE kb_uid = $1 AND display_name = $2`,
                         data.kb1_rollback.kbUid,
                         filename
                     );

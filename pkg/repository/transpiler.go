@@ -185,10 +185,20 @@ func (t *transpiler) transpileComparisonCallExpr(e *expr.Expr, op interface{}) (
 		case "q":
 			sql = "((SIMILARITY(id, ?) > 0.2) OR (LOWER(id) LIKE LOWER(?)) OR (LOWER(description) LIKE LOWER(?)))"
 			vars = append(vars, con.Vars[0], fmt.Sprintf("%%%s%%", con.Vars[0]), fmt.Sprintf("%%%s%%", con.Vars[0]))
-		// Map 'id' to 'uid' column (in File proto, 'id' is an alias for 'uid')
+		// 'id' filter: check both id column and aliases for backward compatibility
+		// Supports both hash-based IDs (e.g., "my-file-abc12345") and UUIDs
 		case "id":
-			sql = "uid = ?"
-			vars = append(vars, con.Vars...)
+			idVal := fmt.Sprintf("%v", con.Vars[0])
+			// Check if the value looks like a UUID (36 chars with dashes)
+			if len(idVal) == 36 && idVal[8] == '-' && idVal[13] == '-' && idVal[18] == '-' && idVal[23] == '-' {
+				// UUID format: check both id column and uid column
+				sql = "(id = ? OR uid::text = ?)"
+				vars = append(vars, idVal, idVal)
+			} else {
+				// Hash-based ID: check id column and aliases array
+				sql = "(id = ? OR ? = ANY(aliases))"
+				vars = append(vars, idVal, idVal)
+			}
 		default:
 			sql = fmt.Sprintf("%s = ?", ident.SQL)
 			vars = append(vars, con.Vars...)

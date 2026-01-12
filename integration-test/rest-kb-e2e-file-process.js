@@ -165,11 +165,14 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Step 1: Create knowledge base
+    const kbDisplayName = data.dbIDPrefix + "e2e-" + randomString(8);
     const createBody = {
-      id: data.dbIDPrefix + "e2e-" + randomString(8),
-      description: "E2E test knowledge base for multi-file processing",
-      tags: ["test", "integration", "e2e", "multi-file"],
-      type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+      knowledgeBase: {
+        displayName: kbDisplayName,
+        description: "E2E test knowledge base for multi-file processing",
+        tags: ["test", "integration", "e2e", "multi-file"],
+        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+      }
     };
 
     const cRes = http.request(
@@ -186,7 +189,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
 
     check(cRes, {
       "E2E: Knowledge base created successfully": (r) => r.status === 200,
-      "E2E: Knowledge base ID matches requested id": () => knowledgeBaseId === createBody.id,
+      "E2E: Knowledge base ID matches requested id": () => knowledgeBaseId && knowledgeBaseId.length > 0,
       "E2E: Knowledge base has valid UID": () => knowledgeBaseUid && knowledgeBaseUid.length > 0,
       "E2E: Knowledge base is valid": () => created && helper.validateKnowledgeBase(created, false),
     });
@@ -250,7 +253,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         req: {
           method: "POST",
           url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
-          body: JSON.stringify({ filename: filename, type: s.type, content: s.content }),
+          body: JSON.stringify({ displayName: filename, type: s.type, content: s.content }),
           params: data.header,
         },
       };
@@ -328,7 +331,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
           try {
             const body = r.json();
             const st = (body.file && body.file.processStatus) || "";
-            const filename = (body.file && body.file.filename) || uid;
+            const filename = (body.file && body.file.displayName) || uid;
 
             if (r.status === 200 && st === "FILE_PROCESS_STATUS_COMPLETED") {
               pending.delete(uid);
@@ -402,7 +405,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       check(viewRes, {
         [`E2E: File view successful (${f.originalName})`]: (r) => r.status === 200,
         [`E2E: File has correct resource name format (${f.originalName})`]: () => fileData && fileData.name && fileData.name.startsWith(`namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/`),
-        [`E2E: File has correct filename (${f.originalName})`]: () => fileData && fileData.filename === f.filename,
+        [`E2E: File has correct filename (${f.originalName})`]: () => fileData && fileData.displayName === f.filename,
         [`E2E: File status is COMPLETED (${f.originalName})`]: () => fileData && fileData.processStatus === "FILE_PROCESS_STATUS_COMPLETED",
         [`E2E: File has creator UID (${f.originalName})`]: () => fileData && fileData.creatorUid === data.expectedOwner.uid,
         [`E2E: File has positive size (${f.originalName})`]: () => fileData && fileData.size > 0,

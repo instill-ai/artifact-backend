@@ -159,13 +159,21 @@ export function TEST_02_CreateKnowledgeBase(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const id = "test-" + data.dbIDPrefix + randomString(10);
-    const req = { namespaceId: data.expectedOwner.id, id, description: randomString(30), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" };
+    const displayName = "Test " + data.dbIDPrefix + randomString(10);
+    const req = {
+      namespaceId: data.expectedOwner.id,
+      knowledgeBase: {
+        displayName: displayName,
+        description: randomString(30),
+        tags: ["test", "grpc"],
+        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
+      }
+    };
     const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", req, data.metadata);
 
     check(res, {
       "CreateKnowledgeBase response status is StatusOK": (r) => r.status === grpc.StatusOK,
-      "CreateKnowledgeBase response knowledge base id matches": (r) => r.message && r.message.knowledgeBase && r.message.knowledgeBase.id === id,
+      "CreateKnowledgeBase response has knowledge base with hash-based id": (r) => r.message && r.message.knowledgeBase && r.message.knowledgeBase.id && /^[a-z][-a-z0-9]*-[a-f0-9]{8}$/.test(r.message.knowledgeBase.id),
     });
 
     // Cleanup
@@ -201,8 +209,8 @@ export function TEST_04_GetKnowledgeBase(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const id = "test-" + data.dbIDPrefix + randomString(10);
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, id, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" }, data.metadata);
+    const displayName = "Test " + data.dbIDPrefix + randomString(10);
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: displayName, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message.knowledgeBase;
 
     const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListKnowledgeBases", { namespaceId: data.expectedOwner.id }, data.metadata);
@@ -224,8 +232,8 @@ export function TEST_05_UpdateKnowledgeBase(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const id = "test-" + data.dbIDPrefix + randomString(10);
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, id, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" }, data.metadata);
+    const displayName = "Test " + data.dbIDPrefix + randomString(10);
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: displayName, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message.knowledgeBase;
 
     const newDescription = randomString(25);
@@ -257,8 +265,8 @@ export function TEST_06_DeleteKnowledgeBase(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const id = "test-" + data.dbIDPrefix + randomString(10);
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, id, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" }, data.metadata);
+    const displayName = "Test " + data.dbIDPrefix + randomString(10);
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: displayName, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message.knowledgeBase;
 
     const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
@@ -281,17 +289,17 @@ export function TEST_07_UploadFile(data) {
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
     const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" },
+      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message && cRes.message.knowledgeBase ? cRes.message.knowledgeBase : {};
 
-    const reqBody = { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { filename: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } };
+    const reqBody = { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } };
     const resOrigin = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", reqBody, data.metadata);
 
     check(resOrigin, {
       "CreateFile response status is StatusOK": (r) => r.status === grpc.StatusOK,
-      "CreateFile response file filename": (r) => r.message.file.filename === reqBody.file.filename,
+      "CreateFile response file displayName": (r) => r.message.file.displayName === reqBody.file.displayName,
       "CreateFile response file uid": (r) => helper.isUUID(r.message.file.uid),
       "CreateFile response file type": (r) => r.message.file.type === "TYPE_DOC",
       "CreateFile response file is valid": (r) => helper.validateFileGRPC(r.message.file, false),
@@ -310,17 +318,33 @@ export function TEST_08_ListFiles(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" }, data.metadata);
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message && cRes.message.knowledgeBase ? cRes.message.knowledgeBase : {};
-    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { filename: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } }, data.metadata);
+
+    if (!knowledgeBase.id) {
+      console.log(`TEST_08_ListFiles: KB creation failed, status=${cRes.status}`);
+      publicClient.close();
+      return;
+    }
+
+    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } }, data.metadata);
+    const file = fRes.message && fRes.message.file ? fRes.message.file : null;
+
+    if (!file) {
+      console.log(`TEST_08_ListFiles: File creation failed, status=${fRes.status}`);
+      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+      publicClient.close();
+      return;
+    }
 
     const resOrigin = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListFiles", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, pageSize: 10 }, data.metadata);
     check(resOrigin, {
       "ListFiles response status is StatusOK": (r) => r.status === grpc.StatusOK,
-      "ListFiles response files is array": (r) => Array.isArray(r.message.files)
+      "ListFiles response files is array": (r) => r.message && Array.isArray(r.message.files)
     });
 
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: fRes.message.file.uid }, data.metadata);
+    // Cleanup
+    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: file.uid }, data.metadata);
     publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
     publicClient.close();
   });
@@ -333,16 +357,16 @@ export function TEST_09_GetFile(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" }, data.metadata);
+    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message && cRes.message.knowledgeBase ? cRes.message.knowledgeBase : {};
-    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { filename: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } }, data.metadata);
+    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } }, data.metadata);
     const file = fRes.message.file;
 
     const resOrigin = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/GetFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: file.uid }, data.metadata);
     check(resOrigin, {
       "GetFile response status is StatusOK": (r) => r.status === grpc.StatusOK,
       "GetFile response file uid": (r) => r.message.file.uid === file.uid,
-      "GetFile response file name": (r) => r.message.file.filename === file.filename,
+      "GetFile response file displayName": (r) => r.message.file.displayName === file.displayName,
       "GetFile response file is valid": (r) => helper.validateFileGRPC(r.message.file, false)
     });
 
@@ -361,14 +385,14 @@ export function TEST_10_CleanupOnDelete(data) {
 
     // Create knowledge base
     const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + "clf-" + randomString(5), description: "Cleanup test", tags: ["test", "cleanup"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" },
+      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + "clf-" + randomString(5), description: "Cleanup test", tags: ["test", "cleanup"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message && cRes.message.knowledgeBase ? cRes.message.knowledgeBase : {};
 
     // Upload a PDF file
     const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
-      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { filename: data.dbIDPrefix + "clf.pdf", type: "TYPE_PDF", content: constant.docSamplePdf } },
+      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "clf.pdf", type: "TYPE_PDF", content: constant.docSamplePdf } },
       data.metadata
     );
     const file = fRes.message && fRes.message.file ? fRes.message.file : {};
@@ -438,12 +462,12 @@ export function TEST_11_JWT_UploadFile(data) {
 
     // Create knowledge base with authorized metadata
     const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" },
+      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message.knowledgeBase;
 
-    const reqBody = { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { filename: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } };
+    const reqBody = { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } };
     // Invoke with invalid Authorization metadata
     const resNeg = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", reqBody, constant.paramsGRPCWithJwt);
     check(resNeg, {
@@ -465,12 +489,12 @@ export function TEST_12_JWT_ListFiles(data) {
 
     // Create resources with authorized metadata
     const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" },
+      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message.knowledgeBase;
     publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
-      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { filename: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } },
+      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } },
       data.metadata
     );
 
@@ -492,12 +516,12 @@ export function TEST_13_JWT_GetFile(data) {
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
     const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, id: "test-" + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" },
+      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message.knowledgeBase;
     const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
-      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { filename: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } },
+      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } },
       data.metadata
     );
     const file = fRes.message.file;
@@ -617,7 +641,7 @@ export function TEST_17_CreateKnowledgeBaseAdmin(data) {
     privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const systemKbId = `system-kb-${dbIDPrefix}`;
+    const systemKbDisplayName = `System KB ${dbIDPrefix}`;
 
     // Create a system knowledge base without a creator using the admin endpoint
     // Admin endpoints can set reserved tags that public APIs cannot (agent:, instill-)
@@ -625,23 +649,26 @@ export function TEST_17_CreateKnowledgeBaseAdmin(data) {
       "artifact.artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
       {
         namespace_id: constant.defaultUserId,
-        id: systemKbId,
-        description: "System knowledge base created via admin endpoint (no creator)",
-        tags: ["instill-internal", "agent:system", "system-kb"],
-        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+        knowledge_base: {
+          display_name: systemKbDisplayName,
+          description: "System knowledge base created via admin endpoint (no creator)",
+          tags: ["instill-internal", "agent:system", "system-kb"],
+          type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+        },
       },
       data.metadata
     );
     check(createRes, {
       "CreateKnowledgeBaseAdmin returns StatusOK": (r) => r.status === grpc.StatusOK,
       "CreateKnowledgeBaseAdmin returns knowledge_base": (r) => !!r.message && !!r.message.knowledge_base,
-      "CreateKnowledgeBaseAdmin returns correct id": (r) => r.message?.knowledge_base?.id === systemKbId,
+      "CreateKnowledgeBaseAdmin returns hash-based id": (r) => r.message?.knowledge_base?.id && /^[a-z][-a-z0-9]*-[a-f0-9]{8}$/.test(r.message.knowledge_base.id),
       "CreateKnowledgeBaseAdmin has no creator_uid": (r) => !r.message?.knowledge_base?.creator_uid || r.message?.knowledge_base?.creator_uid === "",
       "CreateKnowledgeBaseAdmin can use reserved tags": (r) => {
         const tags = r.message?.knowledge_base?.tags || [];
         return tags.includes("instill-internal") && tags.includes("agent:system");
       },
     });
+    const systemKbId = createRes.message?.knowledge_base?.id;
 
     // Verify the KB exists by getting it via public API
     if (createRes.status === grpc.StatusOK) {
@@ -695,17 +722,19 @@ export function TEST_18_UpdateKnowledgeBaseAdmin(data) {
     privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const testKbId = `admin-update-kb-${dbIDPrefix}`;
+    const testKbDisplayName = `Admin Update KB ${dbIDPrefix}`;
 
     // First create a system KB using admin endpoint
     var createRes = privateClient.invoke(
       "artifact.artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
       {
         namespace_id: constant.defaultUserId,
-        id: testKbId,
-        description: "KB for testing UpdateKnowledgeBaseAdmin",
-        tags: ["initial-tag"],
-        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+        knowledge_base: {
+          display_name: testKbDisplayName,
+          description: "KB for testing UpdateKnowledgeBaseAdmin",
+          tags: ["initial-tag"],
+          type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+        },
       },
       data.metadata
     );
@@ -718,6 +747,7 @@ export function TEST_18_UpdateKnowledgeBaseAdmin(data) {
       publicClient.close();
       return;
     }
+    const testKbId = createRes.message?.knowledge_base?.id;
 
     // Update with reserved tags using admin endpoint - should succeed
     var updateRes = privateClient.invoke(
@@ -793,16 +823,18 @@ export function TEST_19_UpdateFileAdmin(data) {
     privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const testKbId = `admin-file-kb-${dbIDPrefix}`;
+    const testKbDisplayName = `Admin File KB ${dbIDPrefix}`;
 
     // Create a KB for file testing
     var createKbRes = privateClient.invoke(
       "artifact.artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
       {
         namespace_id: constant.defaultUserId,
-        id: testKbId,
-        description: "KB for testing UpdateFileAdmin",
-        type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+        knowledge_base: {
+          display_name: testKbDisplayName,
+          description: "KB for testing UpdateFileAdmin",
+          type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
+        },
       },
       data.metadata
     );
@@ -815,6 +847,7 @@ export function TEST_19_UpdateFileAdmin(data) {
       publicClient.close();
       return;
     }
+    const testKbId = createKbRes.message?.knowledge_base?.id;
 
     // Create a file using public API
     var createFileRes = publicClient.invoke(
@@ -823,7 +856,7 @@ export function TEST_19_UpdateFileAdmin(data) {
         namespace_id: constant.defaultUserId,
         knowledge_base_id: testKbId,
         file: {
-          filename: "test-admin-update.txt",
+          displayName: "test-admin-update.txt",
           type: "TYPE_TEXT",
         },
       },

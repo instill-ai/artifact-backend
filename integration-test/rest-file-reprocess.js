@@ -140,14 +140,16 @@ export function CheckFileReprocessing(data) {
 
     // Step 1: Create a test knowledge base
     console.log("Step 1: Creating test knowledge base...");
-    const kbName = data.dbIDPrefix + "reprocess-" + randomString(5);
+    const kbDisplayName = data.dbIDPrefix + " Reprocess " + randomString(5);
     const createRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify({
-        id: kbName,
-        description: "Reprocessing test",
-        tags: ["test", "reprocess"]
+        knowledgeBase: {
+          displayName: kbDisplayName,
+          description: "Reprocessing test",
+          tags: ["test", "reprocess"]
+        }
       }),
       data.header
     );
@@ -174,12 +176,12 @@ export function CheckFileReprocessing(data) {
     // - Chunking step (creates chunk blobs in MinIO)
     // - Embedding step (creates vectors in Milvus)
     // This provides comprehensive coverage of reprocessing cleanup logic
-    const filename = `${data.dbIDPrefix}reprocess-test.pdf`;
+    const fileDisplayName = `${data.dbIDPrefix}reprocess-test.pdf`;
     const uploadRes = http.request(
       "POST",
       `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
       JSON.stringify({
-        filename: filename,
+        displayName: fileDisplayName,
         type: "TYPE_PDF",
         content: constant.docSamplePdf
       }),
@@ -193,7 +195,7 @@ export function CheckFileReprocessing(data) {
     check(uploadRes, {
       "Reprocess: File uploaded": (r) => r.status === 200 && fileUid,
     });
-    console.log(`✓ File uploaded: ${filename} (UID: ${fileUid})`);
+    console.log(`✓ File uploaded: ${fileDisplayName} (UID: ${fileUid})`);
 
     if (!fileUid) {
       console.log("✗ Failed to upload file, cleaning up and aborting");

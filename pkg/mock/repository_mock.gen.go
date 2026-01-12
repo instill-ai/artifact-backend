@@ -334,6 +334,13 @@ type RepositoryMock struct {
 	beforeGetEmbeddingCountByKBUIDCounter uint64
 	GetEmbeddingCountByKBUIDMock          mRepositoryMockGetEmbeddingCountByKBUID
 
+	funcGetFileByIDOrAlias          func(ctx context.Context, kbUID types.KBUIDType, id string) (kp1 *mm_repository.KnowledgeBaseFileModel, err error)
+	funcGetFileByIDOrAliasOrigin    string
+	inspectFuncGetFileByIDOrAlias   func(ctx context.Context, kbUID types.KBUIDType, id string)
+	afterGetFileByIDOrAliasCounter  uint64
+	beforeGetFileByIDOrAliasCounter uint64
+	GetFileByIDOrAliasMock          mRepositoryMockGetFileByIDOrAlias
+
 	funcGetFileCountByKnowledgeBaseUID          func(ctx context.Context, kbUID types.KBUIDType, processStatus string) (i1 int64, err error)
 	funcGetFileCountByKnowledgeBaseUIDOrigin    string
 	inspectFuncGetFileCountByKnowledgeBaseUID   func(ctx context.Context, kbUID types.KBUIDType, processStatus string)
@@ -382,6 +389,13 @@ type RepositoryMock struct {
 	beforeGetKnowledgeBaseByIDCounter uint64
 	GetKnowledgeBaseByIDMock          mRepositoryMockGetKnowledgeBaseByID
 
+	funcGetKnowledgeBaseByIDOrAlias          func(ctx context.Context, ownerUID types.OwnerUIDType, id string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
+	funcGetKnowledgeBaseByIDOrAliasOrigin    string
+	inspectFuncGetKnowledgeBaseByIDOrAlias   func(ctx context.Context, ownerUID types.OwnerUIDType, id string)
+	afterGetKnowledgeBaseByIDOrAliasCounter  uint64
+	beforeGetKnowledgeBaseByIDOrAliasCounter uint64
+	GetKnowledgeBaseByIDOrAliasMock          mRepositoryMockGetKnowledgeBaseByIDOrAlias
+
 	funcGetKnowledgeBaseByOwnerAndKbID          func(ctx context.Context, ownerUID types.OwnerUIDType, kbID string) (kp1 *mm_repository.KnowledgeBaseModel, err error)
 	funcGetKnowledgeBaseByOwnerAndKbIDOrigin    string
 	inspectFuncGetKnowledgeBaseByOwnerAndKbID   func(ctx context.Context, ownerUID types.OwnerUIDType, kbID string)
@@ -416,6 +430,13 @@ type RepositoryMock struct {
 	afterGetKnowledgeBaseCountByOwnerCounter  uint64
 	beforeGetKnowledgeBaseCountByOwnerCounter uint64
 	GetKnowledgeBaseCountByOwnerMock          mRepositoryMockGetKnowledgeBaseCountByOwner
+
+	funcGetKnowledgeBaseFilesByFileIDs          func(ctx context.Context, fileIDs []string, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)
+	funcGetKnowledgeBaseFilesByFileIDsOrigin    string
+	inspectFuncGetKnowledgeBaseFilesByFileIDs   func(ctx context.Context, fileIDs []string, columns ...string)
+	afterGetKnowledgeBaseFilesByFileIDsCounter  uint64
+	beforeGetKnowledgeBaseFilesByFileIDsCounter uint64
+	GetKnowledgeBaseFilesByFileIDsMock          mRepositoryMockGetKnowledgeBaseFilesByFileIDs
 
 	funcGetKnowledgeBaseFilesByFileUIDs          func(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)
 	funcGetKnowledgeBaseFilesByFileUIDsOrigin    string
@@ -1046,6 +1067,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.GetEmbeddingCountByKBUIDMock = mRepositoryMockGetEmbeddingCountByKBUID{mock: m}
 	m.GetEmbeddingCountByKBUIDMock.callArgs = []*RepositoryMockGetEmbeddingCountByKBUIDParams{}
 
+	m.GetFileByIDOrAliasMock = mRepositoryMockGetFileByIDOrAlias{mock: m}
+	m.GetFileByIDOrAliasMock.callArgs = []*RepositoryMockGetFileByIDOrAliasParams{}
+
 	m.GetFileCountByKnowledgeBaseUIDMock = mRepositoryMockGetFileCountByKnowledgeBaseUID{mock: m}
 	m.GetFileCountByKnowledgeBaseUIDMock.callArgs = []*RepositoryMockGetFileCountByKnowledgeBaseUIDParams{}
 
@@ -1063,6 +1087,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.GetKnowledgeBaseByIDMock = mRepositoryMockGetKnowledgeBaseByID{mock: m}
 	m.GetKnowledgeBaseByIDMock.callArgs = []*RepositoryMockGetKnowledgeBaseByIDParams{}
 
+	m.GetKnowledgeBaseByIDOrAliasMock = mRepositoryMockGetKnowledgeBaseByIDOrAlias{mock: m}
+	m.GetKnowledgeBaseByIDOrAliasMock.callArgs = []*RepositoryMockGetKnowledgeBaseByIDOrAliasParams{}
+
 	m.GetKnowledgeBaseByOwnerAndKbIDMock = mRepositoryMockGetKnowledgeBaseByOwnerAndKbID{mock: m}
 	m.GetKnowledgeBaseByOwnerAndKbIDMock.callArgs = []*RepositoryMockGetKnowledgeBaseByOwnerAndKbIDParams{}
 
@@ -1077,6 +1104,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.GetKnowledgeBaseCountByOwnerMock = mRepositoryMockGetKnowledgeBaseCountByOwner{mock: m}
 	m.GetKnowledgeBaseCountByOwnerMock.callArgs = []*RepositoryMockGetKnowledgeBaseCountByOwnerParams{}
+
+	m.GetKnowledgeBaseFilesByFileIDsMock = mRepositoryMockGetKnowledgeBaseFilesByFileIDs{mock: m}
+	m.GetKnowledgeBaseFilesByFileIDsMock.callArgs = []*RepositoryMockGetKnowledgeBaseFilesByFileIDsParams{}
 
 	m.GetKnowledgeBaseFilesByFileUIDsMock = mRepositoryMockGetKnowledgeBaseFilesByFileUIDs{mock: m}
 	m.GetKnowledgeBaseFilesByFileUIDsMock.callArgs = []*RepositoryMockGetKnowledgeBaseFilesByFileUIDsParams{}
@@ -16902,6 +16932,380 @@ func (m *RepositoryMock) MinimockGetEmbeddingCountByKBUIDInspect() {
 	}
 }
 
+type mRepositoryMockGetFileByIDOrAlias struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetFileByIDOrAliasExpectation
+	expectations       []*RepositoryMockGetFileByIDOrAliasExpectation
+
+	callArgs []*RepositoryMockGetFileByIDOrAliasParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetFileByIDOrAliasExpectation specifies expectation struct of the Repository.GetFileByIDOrAlias
+type RepositoryMockGetFileByIDOrAliasExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetFileByIDOrAliasParams
+	paramPtrs          *RepositoryMockGetFileByIDOrAliasParamPtrs
+	expectationOrigins RepositoryMockGetFileByIDOrAliasExpectationOrigins
+	results            *RepositoryMockGetFileByIDOrAliasResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetFileByIDOrAliasParams contains parameters of the Repository.GetFileByIDOrAlias
+type RepositoryMockGetFileByIDOrAliasParams struct {
+	ctx   context.Context
+	kbUID types.KBUIDType
+	id    string
+}
+
+// RepositoryMockGetFileByIDOrAliasParamPtrs contains pointers to parameters of the Repository.GetFileByIDOrAlias
+type RepositoryMockGetFileByIDOrAliasParamPtrs struct {
+	ctx   *context.Context
+	kbUID *types.KBUIDType
+	id    *string
+}
+
+// RepositoryMockGetFileByIDOrAliasResults contains results of the Repository.GetFileByIDOrAlias
+type RepositoryMockGetFileByIDOrAliasResults struct {
+	kp1 *mm_repository.KnowledgeBaseFileModel
+	err error
+}
+
+// RepositoryMockGetFileByIDOrAliasOrigins contains origins of expectations of the Repository.GetFileByIDOrAlias
+type RepositoryMockGetFileByIDOrAliasExpectationOrigins struct {
+	origin      string
+	originCtx   string
+	originKbUID string
+	originId    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) Optional() *mRepositoryMockGetFileByIDOrAlias {
+	mmGetFileByIDOrAlias.optional = true
+	return mmGetFileByIDOrAlias
+}
+
+// Expect sets up expected params for Repository.GetFileByIDOrAlias
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) Expect(ctx context.Context, kbUID types.KBUIDType, id string) *mRepositoryMockGetFileByIDOrAlias {
+	if mmGetFileByIDOrAlias.mock.funcGetFileByIDOrAlias != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation == nil {
+		mmGetFileByIDOrAlias.defaultExpectation = &RepositoryMockGetFileByIDOrAliasExpectation{}
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation.paramPtrs != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by ExpectParams functions")
+	}
+
+	mmGetFileByIDOrAlias.defaultExpectation.params = &RepositoryMockGetFileByIDOrAliasParams{ctx, kbUID, id}
+	mmGetFileByIDOrAlias.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetFileByIDOrAlias.expectations {
+		if minimock.Equal(e.params, mmGetFileByIDOrAlias.defaultExpectation.params) {
+			mmGetFileByIDOrAlias.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetFileByIDOrAlias.defaultExpectation.params)
+		}
+	}
+
+	return mmGetFileByIDOrAlias
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetFileByIDOrAlias
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetFileByIDOrAlias {
+	if mmGetFileByIDOrAlias.mock.funcGetFileByIDOrAlias != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation == nil {
+		mmGetFileByIDOrAlias.defaultExpectation = &RepositoryMockGetFileByIDOrAliasExpectation{}
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation.params != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by Expect")
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation.paramPtrs == nil {
+		mmGetFileByIDOrAlias.defaultExpectation.paramPtrs = &RepositoryMockGetFileByIDOrAliasParamPtrs{}
+	}
+	mmGetFileByIDOrAlias.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetFileByIDOrAlias.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetFileByIDOrAlias
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetFileByIDOrAlias
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockGetFileByIDOrAlias {
+	if mmGetFileByIDOrAlias.mock.funcGetFileByIDOrAlias != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation == nil {
+		mmGetFileByIDOrAlias.defaultExpectation = &RepositoryMockGetFileByIDOrAliasExpectation{}
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation.params != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by Expect")
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation.paramPtrs == nil {
+		mmGetFileByIDOrAlias.defaultExpectation.paramPtrs = &RepositoryMockGetFileByIDOrAliasParamPtrs{}
+	}
+	mmGetFileByIDOrAlias.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmGetFileByIDOrAlias.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmGetFileByIDOrAlias
+}
+
+// ExpectIdParam3 sets up expected param id for Repository.GetFileByIDOrAlias
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) ExpectIdParam3(id string) *mRepositoryMockGetFileByIDOrAlias {
+	if mmGetFileByIDOrAlias.mock.funcGetFileByIDOrAlias != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation == nil {
+		mmGetFileByIDOrAlias.defaultExpectation = &RepositoryMockGetFileByIDOrAliasExpectation{}
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation.params != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by Expect")
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation.paramPtrs == nil {
+		mmGetFileByIDOrAlias.defaultExpectation.paramPtrs = &RepositoryMockGetFileByIDOrAliasParamPtrs{}
+	}
+	mmGetFileByIDOrAlias.defaultExpectation.paramPtrs.id = &id
+	mmGetFileByIDOrAlias.defaultExpectation.expectationOrigins.originId = minimock.CallerInfo(1)
+
+	return mmGetFileByIDOrAlias
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetFileByIDOrAlias
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) Inspect(f func(ctx context.Context, kbUID types.KBUIDType, id string)) *mRepositoryMockGetFileByIDOrAlias {
+	if mmGetFileByIDOrAlias.mock.inspectFuncGetFileByIDOrAlias != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetFileByIDOrAlias")
+	}
+
+	mmGetFileByIDOrAlias.mock.inspectFuncGetFileByIDOrAlias = f
+
+	return mmGetFileByIDOrAlias
+}
+
+// Return sets up results that will be returned by Repository.GetFileByIDOrAlias
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) Return(kp1 *mm_repository.KnowledgeBaseFileModel, err error) *RepositoryMock {
+	if mmGetFileByIDOrAlias.mock.funcGetFileByIDOrAlias != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetFileByIDOrAlias.defaultExpectation == nil {
+		mmGetFileByIDOrAlias.defaultExpectation = &RepositoryMockGetFileByIDOrAliasExpectation{mock: mmGetFileByIDOrAlias.mock}
+	}
+	mmGetFileByIDOrAlias.defaultExpectation.results = &RepositoryMockGetFileByIDOrAliasResults{kp1, err}
+	mmGetFileByIDOrAlias.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetFileByIDOrAlias.mock
+}
+
+// Set uses given function f to mock the Repository.GetFileByIDOrAlias method
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) Set(f func(ctx context.Context, kbUID types.KBUIDType, id string) (kp1 *mm_repository.KnowledgeBaseFileModel, err error)) *RepositoryMock {
+	if mmGetFileByIDOrAlias.defaultExpectation != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("Default expectation is already set for the Repository.GetFileByIDOrAlias method")
+	}
+
+	if len(mmGetFileByIDOrAlias.expectations) > 0 {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("Some expectations are already set for the Repository.GetFileByIDOrAlias method")
+	}
+
+	mmGetFileByIDOrAlias.mock.funcGetFileByIDOrAlias = f
+	mmGetFileByIDOrAlias.mock.funcGetFileByIDOrAliasOrigin = minimock.CallerInfo(1)
+	return mmGetFileByIDOrAlias.mock
+}
+
+// When sets expectation for the Repository.GetFileByIDOrAlias which will trigger the result defined by the following
+// Then helper
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) When(ctx context.Context, kbUID types.KBUIDType, id string) *RepositoryMockGetFileByIDOrAliasExpectation {
+	if mmGetFileByIDOrAlias.mock.funcGetFileByIDOrAlias != nil {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetFileByIDOrAlias mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetFileByIDOrAliasExpectation{
+		mock:               mmGetFileByIDOrAlias.mock,
+		params:             &RepositoryMockGetFileByIDOrAliasParams{ctx, kbUID, id},
+		expectationOrigins: RepositoryMockGetFileByIDOrAliasExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetFileByIDOrAlias.expectations = append(mmGetFileByIDOrAlias.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetFileByIDOrAlias return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetFileByIDOrAliasExpectation) Then(kp1 *mm_repository.KnowledgeBaseFileModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetFileByIDOrAliasResults{kp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetFileByIDOrAlias should be invoked
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) Times(n uint64) *mRepositoryMockGetFileByIDOrAlias {
+	if n == 0 {
+		mmGetFileByIDOrAlias.mock.t.Fatalf("Times of RepositoryMock.GetFileByIDOrAlias mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetFileByIDOrAlias.expectedInvocations, n)
+	mmGetFileByIDOrAlias.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetFileByIDOrAlias
+}
+
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) invocationsDone() bool {
+	if len(mmGetFileByIDOrAlias.expectations) == 0 && mmGetFileByIDOrAlias.defaultExpectation == nil && mmGetFileByIDOrAlias.mock.funcGetFileByIDOrAlias == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetFileByIDOrAlias.mock.afterGetFileByIDOrAliasCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetFileByIDOrAlias.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetFileByIDOrAlias implements mm_repository.Repository
+func (mmGetFileByIDOrAlias *RepositoryMock) GetFileByIDOrAlias(ctx context.Context, kbUID types.KBUIDType, id string) (kp1 *mm_repository.KnowledgeBaseFileModel, err error) {
+	mm_atomic.AddUint64(&mmGetFileByIDOrAlias.beforeGetFileByIDOrAliasCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetFileByIDOrAlias.afterGetFileByIDOrAliasCounter, 1)
+
+	mmGetFileByIDOrAlias.t.Helper()
+
+	if mmGetFileByIDOrAlias.inspectFuncGetFileByIDOrAlias != nil {
+		mmGetFileByIDOrAlias.inspectFuncGetFileByIDOrAlias(ctx, kbUID, id)
+	}
+
+	mm_params := RepositoryMockGetFileByIDOrAliasParams{ctx, kbUID, id}
+
+	// Record call args
+	mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.mutex.Lock()
+	mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.callArgs = append(mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.callArgs, &mm_params)
+	mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.mutex.Unlock()
+
+	for _, e := range mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.kp1, e.results.err
+		}
+	}
+
+	if mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.defaultExpectation.params
+		mm_want_ptrs := mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetFileByIDOrAliasParams{ctx, kbUID, id}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetFileByIDOrAlias.t.Errorf("RepositoryMock.GetFileByIDOrAlias got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmGetFileByIDOrAlias.t.Errorf("RepositoryMock.GetFileByIDOrAlias got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.id != nil && !minimock.Equal(*mm_want_ptrs.id, mm_got.id) {
+				mmGetFileByIDOrAlias.t.Errorf("RepositoryMock.GetFileByIDOrAlias got unexpected parameter id, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.defaultExpectation.expectationOrigins.originId, *mm_want_ptrs.id, mm_got.id, minimock.Diff(*mm_want_ptrs.id, mm_got.id))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetFileByIDOrAlias.t.Errorf("RepositoryMock.GetFileByIDOrAlias got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetFileByIDOrAlias.GetFileByIDOrAliasMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetFileByIDOrAlias.t.Fatal("No results are set for the RepositoryMock.GetFileByIDOrAlias")
+		}
+		return (*mm_results).kp1, (*mm_results).err
+	}
+	if mmGetFileByIDOrAlias.funcGetFileByIDOrAlias != nil {
+		return mmGetFileByIDOrAlias.funcGetFileByIDOrAlias(ctx, kbUID, id)
+	}
+	mmGetFileByIDOrAlias.t.Fatalf("Unexpected call to RepositoryMock.GetFileByIDOrAlias. %v %v %v", ctx, kbUID, id)
+	return
+}
+
+// GetFileByIDOrAliasAfterCounter returns a count of finished RepositoryMock.GetFileByIDOrAlias invocations
+func (mmGetFileByIDOrAlias *RepositoryMock) GetFileByIDOrAliasAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFileByIDOrAlias.afterGetFileByIDOrAliasCounter)
+}
+
+// GetFileByIDOrAliasBeforeCounter returns a count of RepositoryMock.GetFileByIDOrAlias invocations
+func (mmGetFileByIDOrAlias *RepositoryMock) GetFileByIDOrAliasBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFileByIDOrAlias.beforeGetFileByIDOrAliasCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetFileByIDOrAlias.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetFileByIDOrAlias *mRepositoryMockGetFileByIDOrAlias) Calls() []*RepositoryMockGetFileByIDOrAliasParams {
+	mmGetFileByIDOrAlias.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetFileByIDOrAliasParams, len(mmGetFileByIDOrAlias.callArgs))
+	copy(argCopy, mmGetFileByIDOrAlias.callArgs)
+
+	mmGetFileByIDOrAlias.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetFileByIDOrAliasDone returns true if the count of the GetFileByIDOrAlias invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetFileByIDOrAliasDone() bool {
+	if m.GetFileByIDOrAliasMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetFileByIDOrAliasMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetFileByIDOrAliasMock.invocationsDone()
+}
+
+// MinimockGetFileByIDOrAliasInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetFileByIDOrAliasInspect() {
+	for _, e := range m.GetFileByIDOrAliasMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetFileByIDOrAlias at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetFileByIDOrAliasCounter := mm_atomic.LoadUint64(&m.afterGetFileByIDOrAliasCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetFileByIDOrAliasMock.defaultExpectation != nil && afterGetFileByIDOrAliasCounter < 1 {
+		if m.GetFileByIDOrAliasMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetFileByIDOrAlias at\n%s", m.GetFileByIDOrAliasMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetFileByIDOrAlias at\n%s with params: %#v", m.GetFileByIDOrAliasMock.defaultExpectation.expectationOrigins.origin, *m.GetFileByIDOrAliasMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetFileByIDOrAlias != nil && afterGetFileByIDOrAliasCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetFileByIDOrAlias at\n%s", m.funcGetFileByIDOrAliasOrigin)
+	}
+
+	if !m.GetFileByIDOrAliasMock.invocationsDone() && afterGetFileByIDOrAliasCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetFileByIDOrAlias at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetFileByIDOrAliasMock.expectedInvocations), m.GetFileByIDOrAliasMock.expectedInvocationsOrigin, afterGetFileByIDOrAliasCounter)
+	}
+}
+
 type mRepositoryMockGetFileCountByKnowledgeBaseUID struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -18951,6 +19355,380 @@ func (m *RepositoryMock) MinimockGetKnowledgeBaseByIDInspect() {
 	}
 }
 
+type mRepositoryMockGetKnowledgeBaseByIDOrAlias struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation
+	expectations       []*RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation
+
+	callArgs []*RepositoryMockGetKnowledgeBaseByIDOrAliasParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation specifies expectation struct of the Repository.GetKnowledgeBaseByIDOrAlias
+type RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetKnowledgeBaseByIDOrAliasParams
+	paramPtrs          *RepositoryMockGetKnowledgeBaseByIDOrAliasParamPtrs
+	expectationOrigins RepositoryMockGetKnowledgeBaseByIDOrAliasExpectationOrigins
+	results            *RepositoryMockGetKnowledgeBaseByIDOrAliasResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetKnowledgeBaseByIDOrAliasParams contains parameters of the Repository.GetKnowledgeBaseByIDOrAlias
+type RepositoryMockGetKnowledgeBaseByIDOrAliasParams struct {
+	ctx      context.Context
+	ownerUID types.OwnerUIDType
+	id       string
+}
+
+// RepositoryMockGetKnowledgeBaseByIDOrAliasParamPtrs contains pointers to parameters of the Repository.GetKnowledgeBaseByIDOrAlias
+type RepositoryMockGetKnowledgeBaseByIDOrAliasParamPtrs struct {
+	ctx      *context.Context
+	ownerUID *types.OwnerUIDType
+	id       *string
+}
+
+// RepositoryMockGetKnowledgeBaseByIDOrAliasResults contains results of the Repository.GetKnowledgeBaseByIDOrAlias
+type RepositoryMockGetKnowledgeBaseByIDOrAliasResults struct {
+	kp1 *mm_repository.KnowledgeBaseModel
+	err error
+}
+
+// RepositoryMockGetKnowledgeBaseByIDOrAliasOrigins contains origins of expectations of the Repository.GetKnowledgeBaseByIDOrAlias
+type RepositoryMockGetKnowledgeBaseByIDOrAliasExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originOwnerUID string
+	originId       string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) Optional() *mRepositoryMockGetKnowledgeBaseByIDOrAlias {
+	mmGetKnowledgeBaseByIDOrAlias.optional = true
+	return mmGetKnowledgeBaseByIDOrAlias
+}
+
+// Expect sets up expected params for Repository.GetKnowledgeBaseByIDOrAlias
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) Expect(ctx context.Context, ownerUID types.OwnerUIDType, id string) *mRepositoryMockGetKnowledgeBaseByIDOrAlias {
+	if mmGetKnowledgeBaseByIDOrAlias.mock.funcGetKnowledgeBaseByIDOrAlias != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation == nil {
+		mmGetKnowledgeBaseByIDOrAlias.defaultExpectation = &RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation{}
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by ExpectParams functions")
+	}
+
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.params = &RepositoryMockGetKnowledgeBaseByIDOrAliasParams{ctx, ownerUID, id}
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetKnowledgeBaseByIDOrAlias.expectations {
+		if minimock.Equal(e.params, mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.params) {
+			mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.params)
+		}
+	}
+
+	return mmGetKnowledgeBaseByIDOrAlias
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetKnowledgeBaseByIDOrAlias
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetKnowledgeBaseByIDOrAlias {
+	if mmGetKnowledgeBaseByIDOrAlias.mock.funcGetKnowledgeBaseByIDOrAlias != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation == nil {
+		mmGetKnowledgeBaseByIDOrAlias.defaultExpectation = &RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation{}
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseByIDOrAliasParamPtrs{}
+	}
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseByIDOrAlias
+}
+
+// ExpectOwnerUIDParam2 sets up expected param ownerUID for Repository.GetKnowledgeBaseByIDOrAlias
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) ExpectOwnerUIDParam2(ownerUID types.OwnerUIDType) *mRepositoryMockGetKnowledgeBaseByIDOrAlias {
+	if mmGetKnowledgeBaseByIDOrAlias.mock.funcGetKnowledgeBaseByIDOrAlias != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation == nil {
+		mmGetKnowledgeBaseByIDOrAlias.defaultExpectation = &RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation{}
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseByIDOrAliasParamPtrs{}
+	}
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.expectationOrigins.originOwnerUID = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseByIDOrAlias
+}
+
+// ExpectIdParam3 sets up expected param id for Repository.GetKnowledgeBaseByIDOrAlias
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) ExpectIdParam3(id string) *mRepositoryMockGetKnowledgeBaseByIDOrAlias {
+	if mmGetKnowledgeBaseByIDOrAlias.mock.funcGetKnowledgeBaseByIDOrAlias != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation == nil {
+		mmGetKnowledgeBaseByIDOrAlias.defaultExpectation = &RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation{}
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseByIDOrAliasParamPtrs{}
+	}
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.paramPtrs.id = &id
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.expectationOrigins.originId = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseByIDOrAlias
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetKnowledgeBaseByIDOrAlias
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) Inspect(f func(ctx context.Context, ownerUID types.OwnerUIDType, id string)) *mRepositoryMockGetKnowledgeBaseByIDOrAlias {
+	if mmGetKnowledgeBaseByIDOrAlias.mock.inspectFuncGetKnowledgeBaseByIDOrAlias != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetKnowledgeBaseByIDOrAlias")
+	}
+
+	mmGetKnowledgeBaseByIDOrAlias.mock.inspectFuncGetKnowledgeBaseByIDOrAlias = f
+
+	return mmGetKnowledgeBaseByIDOrAlias
+}
+
+// Return sets up results that will be returned by Repository.GetKnowledgeBaseByIDOrAlias
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) Return(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	if mmGetKnowledgeBaseByIDOrAlias.mock.funcGetKnowledgeBaseByIDOrAlias != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation == nil {
+		mmGetKnowledgeBaseByIDOrAlias.defaultExpectation = &RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation{mock: mmGetKnowledgeBaseByIDOrAlias.mock}
+	}
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.results = &RepositoryMockGetKnowledgeBaseByIDOrAliasResults{kp1, err}
+	mmGetKnowledgeBaseByIDOrAlias.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseByIDOrAlias.mock
+}
+
+// Set uses given function f to mock the Repository.GetKnowledgeBaseByIDOrAlias method
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) Set(f func(ctx context.Context, ownerUID types.OwnerUIDType, id string) (kp1 *mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+	if mmGetKnowledgeBaseByIDOrAlias.defaultExpectation != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("Default expectation is already set for the Repository.GetKnowledgeBaseByIDOrAlias method")
+	}
+
+	if len(mmGetKnowledgeBaseByIDOrAlias.expectations) > 0 {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("Some expectations are already set for the Repository.GetKnowledgeBaseByIDOrAlias method")
+	}
+
+	mmGetKnowledgeBaseByIDOrAlias.mock.funcGetKnowledgeBaseByIDOrAlias = f
+	mmGetKnowledgeBaseByIDOrAlias.mock.funcGetKnowledgeBaseByIDOrAliasOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseByIDOrAlias.mock
+}
+
+// When sets expectation for the Repository.GetKnowledgeBaseByIDOrAlias which will trigger the result defined by the following
+// Then helper
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) When(ctx context.Context, ownerUID types.OwnerUIDType, id string) *RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation {
+	if mmGetKnowledgeBaseByIDOrAlias.mock.funcGetKnowledgeBaseByIDOrAlias != nil {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseByIDOrAlias mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation{
+		mock:               mmGetKnowledgeBaseByIDOrAlias.mock,
+		params:             &RepositoryMockGetKnowledgeBaseByIDOrAliasParams{ctx, ownerUID, id},
+		expectationOrigins: RepositoryMockGetKnowledgeBaseByIDOrAliasExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetKnowledgeBaseByIDOrAlias.expectations = append(mmGetKnowledgeBaseByIDOrAlias.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetKnowledgeBaseByIDOrAlias return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetKnowledgeBaseByIDOrAliasExpectation) Then(kp1 *mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetKnowledgeBaseByIDOrAliasResults{kp1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetKnowledgeBaseByIDOrAlias should be invoked
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) Times(n uint64) *mRepositoryMockGetKnowledgeBaseByIDOrAlias {
+	if n == 0 {
+		mmGetKnowledgeBaseByIDOrAlias.mock.t.Fatalf("Times of RepositoryMock.GetKnowledgeBaseByIDOrAlias mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetKnowledgeBaseByIDOrAlias.expectedInvocations, n)
+	mmGetKnowledgeBaseByIDOrAlias.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseByIDOrAlias
+}
+
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) invocationsDone() bool {
+	if len(mmGetKnowledgeBaseByIDOrAlias.expectations) == 0 && mmGetKnowledgeBaseByIDOrAlias.defaultExpectation == nil && mmGetKnowledgeBaseByIDOrAlias.mock.funcGetKnowledgeBaseByIDOrAlias == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseByIDOrAlias.mock.afterGetKnowledgeBaseByIDOrAliasCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseByIDOrAlias.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetKnowledgeBaseByIDOrAlias implements mm_repository.Repository
+func (mmGetKnowledgeBaseByIDOrAlias *RepositoryMock) GetKnowledgeBaseByIDOrAlias(ctx context.Context, ownerUID types.OwnerUIDType, id string) (kp1 *mm_repository.KnowledgeBaseModel, err error) {
+	mm_atomic.AddUint64(&mmGetKnowledgeBaseByIDOrAlias.beforeGetKnowledgeBaseByIDOrAliasCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseByIDOrAlias.afterGetKnowledgeBaseByIDOrAliasCounter, 1)
+
+	mmGetKnowledgeBaseByIDOrAlias.t.Helper()
+
+	if mmGetKnowledgeBaseByIDOrAlias.inspectFuncGetKnowledgeBaseByIDOrAlias != nil {
+		mmGetKnowledgeBaseByIDOrAlias.inspectFuncGetKnowledgeBaseByIDOrAlias(ctx, ownerUID, id)
+	}
+
+	mm_params := RepositoryMockGetKnowledgeBaseByIDOrAliasParams{ctx, ownerUID, id}
+
+	// Record call args
+	mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.mutex.Lock()
+	mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.callArgs = append(mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.callArgs, &mm_params)
+	mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.mutex.Unlock()
+
+	for _, e := range mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.kp1, e.results.err
+		}
+	}
+
+	if mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.params
+		mm_want_ptrs := mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetKnowledgeBaseByIDOrAliasParams{ctx, ownerUID, id}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetKnowledgeBaseByIDOrAlias.t.Errorf("RepositoryMock.GetKnowledgeBaseByIDOrAlias got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
+				mmGetKnowledgeBaseByIDOrAlias.t.Errorf("RepositoryMock.GetKnowledgeBaseByIDOrAlias got unexpected parameter ownerUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+			}
+
+			if mm_want_ptrs.id != nil && !minimock.Equal(*mm_want_ptrs.id, mm_got.id) {
+				mmGetKnowledgeBaseByIDOrAlias.t.Errorf("RepositoryMock.GetKnowledgeBaseByIDOrAlias got unexpected parameter id, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.expectationOrigins.originId, *mm_want_ptrs.id, mm_got.id, minimock.Diff(*mm_want_ptrs.id, mm_got.id))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetKnowledgeBaseByIDOrAlias.t.Errorf("RepositoryMock.GetKnowledgeBaseByIDOrAlias got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetKnowledgeBaseByIDOrAlias.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetKnowledgeBaseByIDOrAlias.t.Fatal("No results are set for the RepositoryMock.GetKnowledgeBaseByIDOrAlias")
+		}
+		return (*mm_results).kp1, (*mm_results).err
+	}
+	if mmGetKnowledgeBaseByIDOrAlias.funcGetKnowledgeBaseByIDOrAlias != nil {
+		return mmGetKnowledgeBaseByIDOrAlias.funcGetKnowledgeBaseByIDOrAlias(ctx, ownerUID, id)
+	}
+	mmGetKnowledgeBaseByIDOrAlias.t.Fatalf("Unexpected call to RepositoryMock.GetKnowledgeBaseByIDOrAlias. %v %v %v", ctx, ownerUID, id)
+	return
+}
+
+// GetKnowledgeBaseByIDOrAliasAfterCounter returns a count of finished RepositoryMock.GetKnowledgeBaseByIDOrAlias invocations
+func (mmGetKnowledgeBaseByIDOrAlias *RepositoryMock) GetKnowledgeBaseByIDOrAliasAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseByIDOrAlias.afterGetKnowledgeBaseByIDOrAliasCounter)
+}
+
+// GetKnowledgeBaseByIDOrAliasBeforeCounter returns a count of RepositoryMock.GetKnowledgeBaseByIDOrAlias invocations
+func (mmGetKnowledgeBaseByIDOrAlias *RepositoryMock) GetKnowledgeBaseByIDOrAliasBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseByIDOrAlias.beforeGetKnowledgeBaseByIDOrAliasCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetKnowledgeBaseByIDOrAlias.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetKnowledgeBaseByIDOrAlias *mRepositoryMockGetKnowledgeBaseByIDOrAlias) Calls() []*RepositoryMockGetKnowledgeBaseByIDOrAliasParams {
+	mmGetKnowledgeBaseByIDOrAlias.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetKnowledgeBaseByIDOrAliasParams, len(mmGetKnowledgeBaseByIDOrAlias.callArgs))
+	copy(argCopy, mmGetKnowledgeBaseByIDOrAlias.callArgs)
+
+	mmGetKnowledgeBaseByIDOrAlias.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetKnowledgeBaseByIDOrAliasDone returns true if the count of the GetKnowledgeBaseByIDOrAlias invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetKnowledgeBaseByIDOrAliasDone() bool {
+	if m.GetKnowledgeBaseByIDOrAliasMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetKnowledgeBaseByIDOrAliasMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetKnowledgeBaseByIDOrAliasMock.invocationsDone()
+}
+
+// MinimockGetKnowledgeBaseByIDOrAliasInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetKnowledgeBaseByIDOrAliasInspect() {
+	for _, e := range m.GetKnowledgeBaseByIDOrAliasMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseByIDOrAlias at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetKnowledgeBaseByIDOrAliasCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseByIDOrAliasCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation != nil && afterGetKnowledgeBaseByIDOrAliasCounter < 1 {
+		if m.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseByIDOrAlias at\n%s", m.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseByIDOrAlias at\n%s with params: %#v", m.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.expectationOrigins.origin, *m.GetKnowledgeBaseByIDOrAliasMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetKnowledgeBaseByIDOrAlias != nil && afterGetKnowledgeBaseByIDOrAliasCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseByIDOrAlias at\n%s", m.funcGetKnowledgeBaseByIDOrAliasOrigin)
+	}
+
+	if !m.GetKnowledgeBaseByIDOrAliasMock.invocationsDone() && afterGetKnowledgeBaseByIDOrAliasCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetKnowledgeBaseByIDOrAlias at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetKnowledgeBaseByIDOrAliasMock.expectedInvocations), m.GetKnowledgeBaseByIDOrAliasMock.expectedInvocationsOrigin, afterGetKnowledgeBaseByIDOrAliasCounter)
+	}
+}
+
 type mRepositoryMockGetKnowledgeBaseByOwnerAndKbID struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -20725,6 +21503,380 @@ func (m *RepositoryMock) MinimockGetKnowledgeBaseCountByOwnerInspect() {
 	if !m.GetKnowledgeBaseCountByOwnerMock.invocationsDone() && afterGetKnowledgeBaseCountByOwnerCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.GetKnowledgeBaseCountByOwner at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetKnowledgeBaseCountByOwnerMock.expectedInvocations), m.GetKnowledgeBaseCountByOwnerMock.expectedInvocationsOrigin, afterGetKnowledgeBaseCountByOwnerCounter)
+	}
+}
+
+type mRepositoryMockGetKnowledgeBaseFilesByFileIDs struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation
+	expectations       []*RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation
+
+	callArgs []*RepositoryMockGetKnowledgeBaseFilesByFileIDsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation specifies expectation struct of the Repository.GetKnowledgeBaseFilesByFileIDs
+type RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetKnowledgeBaseFilesByFileIDsParams
+	paramPtrs          *RepositoryMockGetKnowledgeBaseFilesByFileIDsParamPtrs
+	expectationOrigins RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectationOrigins
+	results            *RepositoryMockGetKnowledgeBaseFilesByFileIDsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByFileIDsParams contains parameters of the Repository.GetKnowledgeBaseFilesByFileIDs
+type RepositoryMockGetKnowledgeBaseFilesByFileIDsParams struct {
+	ctx     context.Context
+	fileIDs []string
+	columns []string
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByFileIDsParamPtrs contains pointers to parameters of the Repository.GetKnowledgeBaseFilesByFileIDs
+type RepositoryMockGetKnowledgeBaseFilesByFileIDsParamPtrs struct {
+	ctx     *context.Context
+	fileIDs *[]string
+	columns *[]string
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByFileIDsResults contains results of the Repository.GetKnowledgeBaseFilesByFileIDs
+type RepositoryMockGetKnowledgeBaseFilesByFileIDsResults struct {
+	ka1 []mm_repository.KnowledgeBaseFileModel
+	err error
+}
+
+// RepositoryMockGetKnowledgeBaseFilesByFileIDsOrigins contains origins of expectations of the Repository.GetKnowledgeBaseFilesByFileIDs
+type RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originFileIDs string
+	originColumns string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) Optional() *mRepositoryMockGetKnowledgeBaseFilesByFileIDs {
+	mmGetKnowledgeBaseFilesByFileIDs.optional = true
+	return mmGetKnowledgeBaseFilesByFileIDs
+}
+
+// Expect sets up expected params for Repository.GetKnowledgeBaseFilesByFileIDs
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) Expect(ctx context.Context, fileIDs []string, columns ...string) *mRepositoryMockGetKnowledgeBaseFilesByFileIDs {
+	if mmGetKnowledgeBaseFilesByFileIDs.mock.funcGetKnowledgeBaseFilesByFileIDs != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by ExpectParams functions")
+	}
+
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.params = &RepositoryMockGetKnowledgeBaseFilesByFileIDsParams{ctx, fileIDs, columns}
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetKnowledgeBaseFilesByFileIDs.expectations {
+		if minimock.Equal(e.params, mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.params) {
+			mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.params)
+		}
+	}
+
+	return mmGetKnowledgeBaseFilesByFileIDs
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetKnowledgeBaseFilesByFileIDs
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetKnowledgeBaseFilesByFileIDs {
+	if mmGetKnowledgeBaseFilesByFileIDs.mock.funcGetKnowledgeBaseFilesByFileIDs != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseFilesByFileIDsParamPtrs{}
+	}
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseFilesByFileIDs
+}
+
+// ExpectFileIDsParam2 sets up expected param fileIDs for Repository.GetKnowledgeBaseFilesByFileIDs
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) ExpectFileIDsParam2(fileIDs []string) *mRepositoryMockGetKnowledgeBaseFilesByFileIDs {
+	if mmGetKnowledgeBaseFilesByFileIDs.mock.funcGetKnowledgeBaseFilesByFileIDs != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseFilesByFileIDsParamPtrs{}
+	}
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs.fileIDs = &fileIDs
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.expectationOrigins.originFileIDs = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseFilesByFileIDs
+}
+
+// ExpectColumnsParam3 sets up expected param columns for Repository.GetKnowledgeBaseFilesByFileIDs
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) ExpectColumnsParam3(columns ...string) *mRepositoryMockGetKnowledgeBaseFilesByFileIDs {
+	if mmGetKnowledgeBaseFilesByFileIDs.mock.funcGetKnowledgeBaseFilesByFileIDs != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation{}
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.params != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by Expect")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs == nil {
+		mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs = &RepositoryMockGetKnowledgeBaseFilesByFileIDsParamPtrs{}
+	}
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.paramPtrs.columns = &columns
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.expectationOrigins.originColumns = minimock.CallerInfo(1)
+
+	return mmGetKnowledgeBaseFilesByFileIDs
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetKnowledgeBaseFilesByFileIDs
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) Inspect(f func(ctx context.Context, fileIDs []string, columns ...string)) *mRepositoryMockGetKnowledgeBaseFilesByFileIDs {
+	if mmGetKnowledgeBaseFilesByFileIDs.mock.inspectFuncGetKnowledgeBaseFilesByFileIDs != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetKnowledgeBaseFilesByFileIDs")
+	}
+
+	mmGetKnowledgeBaseFilesByFileIDs.mock.inspectFuncGetKnowledgeBaseFilesByFileIDs = f
+
+	return mmGetKnowledgeBaseFilesByFileIDs
+}
+
+// Return sets up results that will be returned by Repository.GetKnowledgeBaseFilesByFileIDs
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) Return(ka1 []mm_repository.KnowledgeBaseFileModel, err error) *RepositoryMock {
+	if mmGetKnowledgeBaseFilesByFileIDs.mock.funcGetKnowledgeBaseFilesByFileIDs != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by Set")
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation == nil {
+		mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation = &RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation{mock: mmGetKnowledgeBaseFilesByFileIDs.mock}
+	}
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.results = &RepositoryMockGetKnowledgeBaseFilesByFileIDsResults{ka1, err}
+	mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseFilesByFileIDs.mock
+}
+
+// Set uses given function f to mock the Repository.GetKnowledgeBaseFilesByFileIDs method
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) Set(f func(ctx context.Context, fileIDs []string, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error)) *RepositoryMock {
+	if mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("Default expectation is already set for the Repository.GetKnowledgeBaseFilesByFileIDs method")
+	}
+
+	if len(mmGetKnowledgeBaseFilesByFileIDs.expectations) > 0 {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("Some expectations are already set for the Repository.GetKnowledgeBaseFilesByFileIDs method")
+	}
+
+	mmGetKnowledgeBaseFilesByFileIDs.mock.funcGetKnowledgeBaseFilesByFileIDs = f
+	mmGetKnowledgeBaseFilesByFileIDs.mock.funcGetKnowledgeBaseFilesByFileIDsOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseFilesByFileIDs.mock
+}
+
+// When sets expectation for the Repository.GetKnowledgeBaseFilesByFileIDs which will trigger the result defined by the following
+// Then helper
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) When(ctx context.Context, fileIDs []string, columns ...string) *RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation {
+	if mmGetKnowledgeBaseFilesByFileIDs.mock.funcGetKnowledgeBaseFilesByFileIDs != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation{
+		mock:               mmGetKnowledgeBaseFilesByFileIDs.mock,
+		params:             &RepositoryMockGetKnowledgeBaseFilesByFileIDsParams{ctx, fileIDs, columns},
+		expectationOrigins: RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetKnowledgeBaseFilesByFileIDs.expectations = append(mmGetKnowledgeBaseFilesByFileIDs.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetKnowledgeBaseFilesByFileIDs return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetKnowledgeBaseFilesByFileIDsExpectation) Then(ka1 []mm_repository.KnowledgeBaseFileModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetKnowledgeBaseFilesByFileIDsResults{ka1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetKnowledgeBaseFilesByFileIDs should be invoked
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) Times(n uint64) *mRepositoryMockGetKnowledgeBaseFilesByFileIDs {
+	if n == 0 {
+		mmGetKnowledgeBaseFilesByFileIDs.mock.t.Fatalf("Times of RepositoryMock.GetKnowledgeBaseFilesByFileIDs mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetKnowledgeBaseFilesByFileIDs.expectedInvocations, n)
+	mmGetKnowledgeBaseFilesByFileIDs.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetKnowledgeBaseFilesByFileIDs
+}
+
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) invocationsDone() bool {
+	if len(mmGetKnowledgeBaseFilesByFileIDs.expectations) == 0 && mmGetKnowledgeBaseFilesByFileIDs.defaultExpectation == nil && mmGetKnowledgeBaseFilesByFileIDs.mock.funcGetKnowledgeBaseFilesByFileIDs == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByFileIDs.mock.afterGetKnowledgeBaseFilesByFileIDsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByFileIDs.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetKnowledgeBaseFilesByFileIDs implements mm_repository.Repository
+func (mmGetKnowledgeBaseFilesByFileIDs *RepositoryMock) GetKnowledgeBaseFilesByFileIDs(ctx context.Context, fileIDs []string, columns ...string) (ka1 []mm_repository.KnowledgeBaseFileModel, err error) {
+	mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByFileIDs.beforeGetKnowledgeBaseFilesByFileIDsCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByFileIDs.afterGetKnowledgeBaseFilesByFileIDsCounter, 1)
+
+	mmGetKnowledgeBaseFilesByFileIDs.t.Helper()
+
+	if mmGetKnowledgeBaseFilesByFileIDs.inspectFuncGetKnowledgeBaseFilesByFileIDs != nil {
+		mmGetKnowledgeBaseFilesByFileIDs.inspectFuncGetKnowledgeBaseFilesByFileIDs(ctx, fileIDs, columns...)
+	}
+
+	mm_params := RepositoryMockGetKnowledgeBaseFilesByFileIDsParams{ctx, fileIDs, columns}
+
+	// Record call args
+	mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.mutex.Lock()
+	mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.callArgs = append(mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.callArgs, &mm_params)
+	mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.mutex.Unlock()
+
+	for _, e := range mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ka1, e.results.err
+		}
+	}
+
+	if mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.params
+		mm_want_ptrs := mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetKnowledgeBaseFilesByFileIDsParams{ctx, fileIDs, columns}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetKnowledgeBaseFilesByFileIDs.t.Errorf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileIDs != nil && !minimock.Equal(*mm_want_ptrs.fileIDs, mm_got.fileIDs) {
+				mmGetKnowledgeBaseFilesByFileIDs.t.Errorf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs got unexpected parameter fileIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.expectationOrigins.originFileIDs, *mm_want_ptrs.fileIDs, mm_got.fileIDs, minimock.Diff(*mm_want_ptrs.fileIDs, mm_got.fileIDs))
+			}
+
+			if mm_want_ptrs.columns != nil && !minimock.Equal(*mm_want_ptrs.columns, mm_got.columns) {
+				mmGetKnowledgeBaseFilesByFileIDs.t.Errorf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs got unexpected parameter columns, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.expectationOrigins.originColumns, *mm_want_ptrs.columns, mm_got.columns, minimock.Diff(*mm_want_ptrs.columns, mm_got.columns))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetKnowledgeBaseFilesByFileIDs.t.Errorf("RepositoryMock.GetKnowledgeBaseFilesByFileIDs got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetKnowledgeBaseFilesByFileIDs.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetKnowledgeBaseFilesByFileIDs.t.Fatal("No results are set for the RepositoryMock.GetKnowledgeBaseFilesByFileIDs")
+		}
+		return (*mm_results).ka1, (*mm_results).err
+	}
+	if mmGetKnowledgeBaseFilesByFileIDs.funcGetKnowledgeBaseFilesByFileIDs != nil {
+		return mmGetKnowledgeBaseFilesByFileIDs.funcGetKnowledgeBaseFilesByFileIDs(ctx, fileIDs, columns...)
+	}
+	mmGetKnowledgeBaseFilesByFileIDs.t.Fatalf("Unexpected call to RepositoryMock.GetKnowledgeBaseFilesByFileIDs. %v %v %v", ctx, fileIDs, columns)
+	return
+}
+
+// GetKnowledgeBaseFilesByFileIDsAfterCounter returns a count of finished RepositoryMock.GetKnowledgeBaseFilesByFileIDs invocations
+func (mmGetKnowledgeBaseFilesByFileIDs *RepositoryMock) GetKnowledgeBaseFilesByFileIDsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByFileIDs.afterGetKnowledgeBaseFilesByFileIDsCounter)
+}
+
+// GetKnowledgeBaseFilesByFileIDsBeforeCounter returns a count of RepositoryMock.GetKnowledgeBaseFilesByFileIDs invocations
+func (mmGetKnowledgeBaseFilesByFileIDs *RepositoryMock) GetKnowledgeBaseFilesByFileIDsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetKnowledgeBaseFilesByFileIDs.beforeGetKnowledgeBaseFilesByFileIDsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetKnowledgeBaseFilesByFileIDs.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetKnowledgeBaseFilesByFileIDs *mRepositoryMockGetKnowledgeBaseFilesByFileIDs) Calls() []*RepositoryMockGetKnowledgeBaseFilesByFileIDsParams {
+	mmGetKnowledgeBaseFilesByFileIDs.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetKnowledgeBaseFilesByFileIDsParams, len(mmGetKnowledgeBaseFilesByFileIDs.callArgs))
+	copy(argCopy, mmGetKnowledgeBaseFilesByFileIDs.callArgs)
+
+	mmGetKnowledgeBaseFilesByFileIDs.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetKnowledgeBaseFilesByFileIDsDone returns true if the count of the GetKnowledgeBaseFilesByFileIDs invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetKnowledgeBaseFilesByFileIDsDone() bool {
+	if m.GetKnowledgeBaseFilesByFileIDsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetKnowledgeBaseFilesByFileIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetKnowledgeBaseFilesByFileIDsMock.invocationsDone()
+}
+
+// MinimockGetKnowledgeBaseFilesByFileIDsInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetKnowledgeBaseFilesByFileIDsInspect() {
+	for _, e := range m.GetKnowledgeBaseFilesByFileIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseFilesByFileIDs at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetKnowledgeBaseFilesByFileIDsCounter := mm_atomic.LoadUint64(&m.afterGetKnowledgeBaseFilesByFileIDsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation != nil && afterGetKnowledgeBaseFilesByFileIDsCounter < 1 {
+		if m.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseFilesByFileIDs at\n%s", m.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseFilesByFileIDs at\n%s with params: %#v", m.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.expectationOrigins.origin, *m.GetKnowledgeBaseFilesByFileIDsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetKnowledgeBaseFilesByFileIDs != nil && afterGetKnowledgeBaseFilesByFileIDsCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetKnowledgeBaseFilesByFileIDs at\n%s", m.funcGetKnowledgeBaseFilesByFileIDsOrigin)
+	}
+
+	if !m.GetKnowledgeBaseFilesByFileIDsMock.invocationsDone() && afterGetKnowledgeBaseFilesByFileIDsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetKnowledgeBaseFilesByFileIDs at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetKnowledgeBaseFilesByFileIDsMock.expectedInvocations), m.GetKnowledgeBaseFilesByFileIDsMock.expectedInvocationsOrigin, afterGetKnowledgeBaseFilesByFileIDsCounter)
 	}
 }
 
@@ -45970,6 +47122,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockGetEmbeddingCountByKBUIDInspect()
 
+			m.MinimockGetFileByIDOrAliasInspect()
+
 			m.MinimockGetFileCountByKnowledgeBaseUIDInspect()
 
 			m.MinimockGetFileCountByKnowledgeBaseUIDIncludingDeletedInspect()
@@ -45982,6 +47136,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockGetKnowledgeBaseByIDInspect()
 
+			m.MinimockGetKnowledgeBaseByIDOrAliasInspect()
+
 			m.MinimockGetKnowledgeBaseByOwnerAndKbIDInspect()
 
 			m.MinimockGetKnowledgeBaseByUIDInspect()
@@ -45991,6 +47147,8 @@ func (m *RepositoryMock) MinimockFinish() {
 			m.MinimockGetKnowledgeBaseByUIDWithConfigInspect()
 
 			m.MinimockGetKnowledgeBaseCountByOwnerInspect()
+
+			m.MinimockGetKnowledgeBaseFilesByFileIDsInspect()
 
 			m.MinimockGetKnowledgeBaseFilesByFileUIDsInspect()
 
@@ -46196,17 +47354,20 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockGetDefaultSystemDone() &&
 		m.MinimockGetDualProcessingTargetDone() &&
 		m.MinimockGetEmbeddingCountByKBUIDDone() &&
+		m.MinimockGetFileByIDOrAliasDone() &&
 		m.MinimockGetFileCountByKnowledgeBaseUIDDone() &&
 		m.MinimockGetFileCountByKnowledgeBaseUIDIncludingDeletedDone() &&
 		m.MinimockGetFilesTotalTokensDone() &&
 		m.MinimockGetGCSFileInfoDone() &&
 		m.MinimockGetGCSStorageDone() &&
 		m.MinimockGetKnowledgeBaseByIDDone() &&
+		m.MinimockGetKnowledgeBaseByIDOrAliasDone() &&
 		m.MinimockGetKnowledgeBaseByOwnerAndKbIDDone() &&
 		m.MinimockGetKnowledgeBaseByUIDDone() &&
 		m.MinimockGetKnowledgeBaseByUIDIncludingDeletedDone() &&
 		m.MinimockGetKnowledgeBaseByUIDWithConfigDone() &&
 		m.MinimockGetKnowledgeBaseCountByOwnerDone() &&
+		m.MinimockGetKnowledgeBaseFilesByFileIDsDone() &&
 		m.MinimockGetKnowledgeBaseFilesByFileUIDsDone() &&
 		m.MinimockGetKnowledgeBaseFilesByFileUIDsIncludingDeletedDone() &&
 		m.MinimockGetKnowledgeBaseFilesByNameDone() &&

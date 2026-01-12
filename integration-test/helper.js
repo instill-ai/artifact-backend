@@ -215,8 +215,8 @@ export function validateFile(file, isPrivate) {
     return false;
   }
 
-  if (!("filename" in file)) {
-    console.log("File has no filename field");
+  if (!("displayName" in file)) {
+    console.log("File has no displayName field");
     return false;
   }
 
@@ -390,8 +390,8 @@ export function validateFileGRPC(file, isPrivate) {
     return false;
   }
 
-  if (!("filename" in file)) {
-    console.log("File has no filename field");
+  if (!("displayName" in file)) {
+    console.log("File has no displayName field");
     return false;
   }
 

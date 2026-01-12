@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -61,9 +63,34 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 		return nil, fmt.Errorf("unsupported chunk type: %v", req.GetType())
 	}
 
-	fileUIDs := make([]types.FileUIDType, 0, len(req.GetFileIds()))
-	for _, uid := range req.GetFileIds() {
-		fileUIDs = append(fileUIDs, types.FileUIDType(uuid.FromStringOrNil(uid)))
+	// Resolve file IDs to file UIDs
+	// file_ids can be either:
+	// 1. UUID strings (e.g., "aff8544b-3ccc-4e73-bbe5-8ec922446542") - legacy format
+	// 2. Hash-based IDs (e.g., "2412-15115v1-pdf-abc12345") - preferred format, less prone to LLM hallucination
+	// All IDs are validated against the database to prevent hallucinated UUIDs from causing empty results
+	allFileIDs := append([]string{}, req.GetFileIds()...)
+
+	// Resolve ALL file IDs (both UUIDs and hash-based) through the database
+	// This ensures hallucinated UUIDs are caught and reported
+	var fileUIDs []types.FileUIDType
+	if len(allFileIDs) > 0 {
+		files, err := s.repository.GetKnowledgeBaseFilesByFileIDs(ctx, allFileIDs)
+		if err != nil {
+			return nil, fmt.Errorf("resolving file IDs: %w", err)
+		}
+
+		// Check if any requested file IDs were not found
+		if len(files) == 0 && len(allFileIDs) > 0 {
+			return nil, status.Errorf(codes.NotFound,
+				"No files found matching the provided IDs: %v. "+
+					"Please use 'list-files' tool first to get valid file IDs. "+
+					"Tip: Use hash-based IDs (e.g., '2412-15115v1-pdf-abc12345') instead of UUIDs to avoid hallucination errors.",
+				allFileIDs)
+		}
+
+		for _, file := range files {
+			fileUIDs = append(fileUIDs, file.UID)
+		}
 	}
 
 	topK := req.GetTopK()
