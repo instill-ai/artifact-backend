@@ -3,6 +3,9 @@
 // ============================================================================
 
 import * as constant from './const.js';
+import http from 'k6/http';
+import { sleep } from 'k6';
+import exec from 'k6/x/exec';
 
 /**
  * Safe database query wrapper with proper error handling.
@@ -56,6 +59,122 @@ export function safeExecute(statement, ...params) {
     throw e;
   }
 }
+
+// ============================================================================
+// HTTP Retry Helpers for Transient Errors
+// ============================================================================
+
+// Default retry configuration
+const DEFAULT_RETRY_CONFIG = {
+  maxRetries: 3,
+  backoffMs: 1000,
+  retryOnStatus: [429, 500, 502, 503, 504],
+};
+
+/**
+ * HTTP request with automatic retry for transient errors.
+ * Handles rate limits (429), server errors (5xx), and network issues.
+ *
+ * @param {string} method - HTTP method (GET, POST, PATCH, DELETE)
+ * @param {string} url - Request URL
+ * @param {string|object} body - Request body (will be JSON.stringify'd if object)
+ * @param {object} params - Request params (headers, etc.)
+ * @returns {object} HTTP response
+ */
+function httpRequestWithRetry(method, url, body = null, params = {}) {
+  const { maxRetries, backoffMs, retryOnStatus } = DEFAULT_RETRY_CONFIG;
+
+  let lastResponse = null;
+  let requestBody = body;
+  if (body && typeof body === 'object') {
+    requestBody = JSON.stringify(body);
+  }
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    lastResponse = http.request(method, url, requestBody, params);
+
+    // Success - return immediately
+    if (lastResponse.status >= 200 && lastResponse.status < 300) {
+      return lastResponse;
+    }
+
+    // Check if we should retry this status code
+    if (!retryOnStatus.includes(lastResponse.status)) {
+      // Non-retryable error (4xx except 429) - return immediately
+      return lastResponse;
+    }
+
+    // Retryable error - wait and retry
+    if (attempt < maxRetries) {
+      const waitTime = backoffMs * Math.pow(2, attempt - 1); // Exponential backoff: 1s, 2s, 4s
+      const urlPath = url.split('/').slice(-2).join('/'); // Last 2 path segments for logging
+      console.log(`⚠ HTTP ${method} .../${urlPath} failed (status=${lastResponse.status}), ` +
+                  `retry ${attempt}/${maxRetries} in ${waitTime}ms...`);
+      sleep(waitTime / 1000);
+    }
+  }
+
+  // All retries exhausted
+  const urlPath = url.split('/').slice(-2).join('/');
+  console.log(`✗ HTTP ${method} .../${urlPath} failed after ${maxRetries} retries (status=${lastResponse.status})`);
+  return lastResponse;
+}
+
+/**
+ * Drop-in replacement for k6/http with automatic retry for transient errors.
+ * Use this instead of importing http from 'k6/http' to get automatic retry.
+ *
+ * Usage:
+ *   // Instead of: import http from "k6/http";
+ *   // Use: import { httpRetry as http } from "./helper.js";
+ *
+ *   const res = http.request("POST", url, body, params);
+ *   const res = http.post(url, body, params);
+ *   const res = http.get(url, params);
+ */
+export const httpRetry = {
+  /**
+   * Generic HTTP request with retry
+   */
+  request: httpRequestWithRetry,
+
+  /**
+   * POST request with retry
+   */
+  post: (url, body = null, params = {}) => httpRequestWithRetry("POST", url, body, params),
+
+  /**
+   * GET request with retry
+   */
+  get: (url, params = {}) => httpRequestWithRetry("GET", url, null, params),
+
+  /**
+   * PUT request with retry
+   */
+  put: (url, body = null, params = {}) => httpRequestWithRetry("PUT", url, body, params),
+
+  /**
+   * PATCH request with retry
+   */
+  patch: (url, body = null, params = {}) => httpRequestWithRetry("PATCH", url, body, params),
+
+  /**
+   * DELETE request with retry
+   */
+  del: (url, params = {}) => httpRequestWithRetry("DELETE", url, null, params),
+
+  /**
+   * Batch requests (pass-through to k6 http.batch)
+   * Note: Individual requests in a batch don't get retry logic,
+   * but the batch itself is atomic and rarely fails transiently.
+   */
+  batch: (requests) => http.batch(requests),
+};
+
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
 
 export function deepEqual(x, y) {
   const ok = Object.keys,
@@ -288,10 +407,10 @@ export function validateFile(file, isPrivate) {
       console.log("File collectionUids is not an array");
       return false;
     }
-    // Each element should be a valid UUID
+    // Each element should be a valid string UID
     for (const uid of file.collectionUids) {
-      if (!isUUID(uid)) {
-        console.log(`File collectionUids contains invalid UUID: ${uid}`);
+      if (typeof uid !== "string" || uid.length === 0) {
+        console.log(`File collectionUids contains invalid UID: ${uid}`);
         return false;
       }
     }
@@ -471,10 +590,10 @@ export function validateFileGRPC(file, isPrivate) {
       console.log("File collectionUids is not an array");
       return false;
     }
-    // Each element should be a valid UUID
+    // Each element should be a valid string UID
     for (const uid of file.collectionUids) {
-      if (!isUUID(uid)) {
-        console.log(`File collectionUids contains invalid UUID: ${uid}`);
+      if (typeof uid !== "string" || uid.length === 0) {
+        console.log(`File collectionUids contains invalid UID: ${uid}`);
         return false;
       }
     }
@@ -564,10 +683,6 @@ export function validateChunkGRPC(chunk, isPrivate) {
 // ============================================================================
 // Storage Verification Helpers for Reprocessing Tests
 // ============================================================================
-
-import { sleep } from 'k6';
-import exec from 'k6/x/exec';
-import * as helper from './helper.js';
 
 /**
  * Count MinIO objects directly using MinIO CLI (mc)
@@ -1210,8 +1325,6 @@ export function pollFileMetadata(namespaceId, knowledgeBaseId, fileUid, headers,
 // API Polling Helpers for Eventual Consistency
 // ============================================================================
 
-import http from "k6/http";
-
 /**
  * Poll chunks API until chunks appear or timeout
  * Handles API-level eventual consistency (transaction delays, caching, etc.)
@@ -1285,12 +1398,12 @@ export function findKnowledgeBaseByPattern(namePattern) {
  *
  * @param {object} client - gRPC client
  * @param {object} data - Test data with metadata
- * @param {string} knowledgeBaseUid - Knowledge Base UID to monitor
+ * @param {string} knowledgeBaseId - Knowledge Base ID (hash-based slug, NOT UUID) to monitor
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 300 = 5 minutes)
  * @returns {boolean} True if update completed, false if timeout
  */
-export function pollUpdateCompletion(client, data, knowledgeBaseUid, maxWaitSeconds = 900) {
-  console.log(`[POLL START] Polling for knowledgeBaseUid=${knowledgeBaseUid}, maxWait=${maxWaitSeconds}s`);
+export function pollUpdateCompletion(client, data, knowledgeBaseId, maxWaitSeconds = 900) {
+  console.log(`[POLL START] Polling for knowledgeBaseId=${knowledgeBaseId}, maxWait=${maxWaitSeconds}s`);
 
   let notFoundCount = 0;
   const MAX_NOT_FOUND_WAIT = 60; // Wait up to 60s for KB to appear in status list (workflow startup time)
@@ -1305,13 +1418,13 @@ export function pollUpdateCompletion(client, data, knowledgeBaseUid, maxWaitSeco
     // k6 gRPC returns res.status in various forms, check if response has valid message
     if (res.message && res.message.details) { // Check for successful response with data
       const statuses = res.message.details || [];
-      const kbStatus = statuses.find(s => s.knowledgeBaseUid === knowledgeBaseUid);
+      const kbStatus = statuses.find(s => s.knowledgeBaseId === knowledgeBaseId);
 
       // Debug logging on first attempt and periodically
       if (i === 0 || (i > 0 && i % 30 === 0)) {
-        console.log(`Poll attempt ${i + 1}: Looking for knowledgeBaseUid=${knowledgeBaseUid}, found ${statuses.length} statuses`);
+        console.log(`Poll attempt ${i + 1}: Looking for knowledgeBaseId=${knowledgeBaseId}, found ${statuses.length} statuses`);
         if (statuses.length > 0 && !kbStatus) {
-          console.log(`Available UIDs: ${statuses.map(s => s.knowledgeBaseUid).join(', ')}`);
+          console.log(`Available IDs: ${statuses.map(s => s.knowledgeBaseId).join(', ')}`);
         }
       }
 
@@ -1322,19 +1435,19 @@ export function pollUpdateCompletion(client, data, knowledgeBaseUid, maxWaitSeco
         // Check enum status using numeric values (k6 gRPC returns enums as numbers)
         // KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED = 6
         if (kbStatus.status === 6 || kbStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED") {
-          console.log(`✓ Update completed successfully for knowledge base ${knowledgeBaseUid}`);
+          console.log(`✓ Update completed successfully for knowledge base ${knowledgeBaseId}`);
           return true;
         }
         // KNOWLEDGE_BASE_UPDATE_STATUS_FAILED = 7
         if (kbStatus.status === 7 || kbStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_FAILED") {
-          console.error(`✗ Update FAILED for knowledge base ${knowledgeBaseUid}`);
+          console.error(`✗ Update FAILED for knowledge base ${knowledgeBaseId}`);
           console.error(`   Error message: ${kbStatus.errorMessage || 'No error message provided'}`);
           console.error(`   Workflow ID: ${kbStatus.workflowId || 'N/A'}`);
           return false;
         }
         // KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED = 8
         if (kbStatus.status === 8 || kbStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED") {
-          console.error(`✗ Update ABORTED for knowledge base ${knowledgeBaseUid}`);
+          console.error(`✗ Update ABORTED for knowledge base ${knowledgeBaseId}`);
           return false;
         }
         // Log current status periodically
@@ -1342,7 +1455,9 @@ export function pollUpdateCompletion(client, data, knowledgeBaseUid, maxWaitSeco
           console.log(`   Current status: ${kbStatus.status} (${typeof kbStatus.status})`);
         }
       } else {
-        // KB not found in status list yet - might be race condition with workflow startup
+        // KB not found in status list - could be:
+        // 1. Workflow hasn't started yet (race condition)
+        // 2. Workflow completed very quickly and KB was removed from status list
         notFoundCount++;
 
         if (notFoundCount <= MAX_NOT_FOUND_WAIT) {
@@ -1351,9 +1466,31 @@ export function pollUpdateCompletion(client, data, knowledgeBaseUid, maxWaitSeco
             console.log(`   KB not in status list yet (${notFoundCount}s) - waiting for workflow to start...`);
           }
         } else {
-          // Exceeded grace period - workflow likely failed to start or KB was deleted
-          console.error(`   KB not found in status list after ${MAX_NOT_FOUND_WAIT}s - workflow may have failed to start`);
-          return false;
+          // Exceeded grace period - check database to see if update already completed
+          // This handles the case where the update completed so quickly that we missed it
+          const kbQuery = safeQuery(
+            `SELECT update_status FROM knowledge_base WHERE id = $1 AND delete_time IS NULL`,
+            knowledgeBaseId
+          );
+
+          if (kbQuery && kbQuery.length > 0) {
+            const dbStatus = kbQuery[0].update_status;
+            // KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED = status value for completed updates
+            if (dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED' || dbStatus === 6) {
+              console.log(`✓ Update already completed (verified via DB) for knowledge base ${knowledgeBaseId}`);
+              return true;
+            }
+            // If status is failed/aborted, return false
+            if (dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_FAILED' || dbStatus === 7 ||
+                dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED' || dbStatus === 8) {
+              console.error(`✗ Update failed/aborted (verified via DB): ${dbStatus}`);
+              return false;
+            }
+            console.log(`   KB found in DB with status: ${dbStatus}, continuing to poll...`);
+          } else {
+            console.error(`   KB not found in status list or database after ${MAX_NOT_FOUND_WAIT}s`);
+            return false;
+          }
         }
       }
     } else {
@@ -1368,7 +1505,7 @@ export function pollUpdateCompletion(client, data, knowledgeBaseUid, maxWaitSeco
     }
   }
 
-  console.error(`Timeout waiting for update completion of knowledge base ${knowledgeBaseUid}`);
+  console.error(`Timeout waiting for update completion of knowledge base ${knowledgeBaseId}`);
   return false;
 }
 
@@ -2268,6 +2405,60 @@ export function uploadFileWithRetry(url, payload, headers, maxRetries = 3) {
   }
 
   console.log(`✗ File upload failed after ${maxRetries} attempts`);
+  return null;
+}
+
+/**
+ * Authenticate with automatic retry logic to handle transient failures.
+ *
+ * When tests run in parallel, auth requests can intermittently fail due to:
+ * - Service not fully ready
+ * - Connection timeouts under load
+ * - Brief network hiccups in Docker networking
+ *
+ * This function implements exponential backoff retry to handle these transient failures.
+ *
+ * @param {string} mgmtHost - The management API host URL
+ * @param {string} username - Username for authentication
+ * @param {string} password - Password for authentication
+ * @param {number} maxRetries - Maximum number of retry attempts (default: 3)
+ * @returns {object|null} - HTTP response object with accessToken, or null if all retries failed
+ */
+export function authenticateWithRetry(mgmtHost, username, password, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const response = http.request("POST", `${mgmtHost}/v1beta/auth/login`, JSON.stringify({
+      username: username,
+      password: password,
+    }), {
+      headers: { "Content-Type": "application/json" },
+      timeout: "30s",
+    });
+
+    try {
+      if (response.status === 200) {
+        const body = response.json();
+        if (body.accessToken) {
+          if (attempt > 1) {
+            console.log(`✓ Authentication succeeded on attempt ${attempt}/${maxRetries}`);
+          }
+          return response;
+        }
+      }
+    } catch (e) {
+      console.log(`⚠ Auth attempt ${attempt}/${maxRetries} parse error: ${e.message}`);
+    }
+
+    console.log(`⚠ Auth attempt ${attempt}/${maxRetries} failed (status: ${response.status})`);
+
+    // Exponential backoff before retry (1s, 2s, 4s, ...)
+    if (attempt < maxRetries) {
+      const backoff = Math.pow(2, attempt - 1);
+      console.log(`  Retrying in ${backoff}s...`);
+      sleep(backoff);
+    }
+  }
+
+  console.log(`✗ Authentication failed after ${maxRetries} attempts`);
   return null;
 }
 

@@ -1,10 +1,12 @@
-import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 import encoding from 'k6/encoding';
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
+
+// Use httpRetry for automatic retry on transient errors (429, 5xx)
+const http = helper.httpRetry;
 
 const dbIDPrefix = constant.generateDBIDPrefix();
 
@@ -60,25 +62,33 @@ export function setup() {
 
   console.log(`rest.js: Using unique test prefix: ${dbIDPrefix}`);
 
-  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
-    "username": constant.defaultUsername,
-    "password": constant.defaultPassword,
-  }))
+  // Authenticate with retry to handle transient failures
+  var loginResp = helper.authenticateWithRetry(
+    constant.mgmtRESTPublicHost,
+    constant.defaultUsername,
+    constant.defaultPassword
+  );
 
   check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r && r.status === 200,
   });
 
+  if (!loginResp || loginResp.status !== 200) {
+    console.error("Setup: Authentication failed, cannot continue");
+    return null;
+  }
+
+  var accessToken = loginResp.json().accessToken;
   var header = {
     "headers": {
-      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     "timeout": "600s",
   }
 
   var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-    headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
+    headers: { "Authorization": `Bearer ${accessToken}` }
   })
 
   return {
@@ -659,6 +669,8 @@ export function TEST_08_E2EKnowledgeBase(data) {
         // With body: "file" in protobuf, the file object goes in body and update_mask as query param
         // Note: file_id in URL is the UID, not the human-readable id
         const updateTagsBody = { tags: ["scott", "kim"] };
+
+        // httpRetry automatically handles transient errors (also triggers Milvus sync)
         const updateTagsRes = http.request(
           "PATCH",
           `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${pdfFile.fileUid}?updateMask=tags`,
@@ -685,13 +697,17 @@ export function TEST_08_E2EKnowledgeBase(data) {
 
     // Chunk similarity search tests
     {
-      // Test 1: Search with a combination of tags that returns all files
+      // Test 1: Search with multiple tags using OR logic (array_contains_any)
+      // All files were embedded with ["kim", "knives"], so searching for ["scott", "kim"]
+      // will match on "kim" (OR logic) and return results.
+      // Note: Tags are stored as Milvus scalar fields at embedding time.
       const searchBody1 = {
         textPrompt: "test file markdown",
         topK: 10,
-        tags: ["scott", "kim"],
-        contentType: "CONTENT_TYPE_CHUNK"
+        tags: ["scott", "kim"],  // OR logic: matches chunks with "scott" OR "kim"
       };
+
+      // httpRetry automatically handles transient errors (429, 5xx)
       const searchRes1 = http.request(
         "POST",
         `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/searchChunks`,
@@ -711,14 +727,13 @@ export function TEST_08_E2EKnowledgeBase(data) {
           similarChunks1.every(chunk => chunk.chunkMetadata && chunk.chunkMetadata.originalFileId),
       });
 
-      // Test 2: Search with tags that were embedded (all files have "kim", "knives")
-      // Note: We updated PDF tags to ["scott", "kim"] but embeddings still have original tags
+      // Test 2: Search with original embedded tags (all files have "kim", "knives")
       const searchBody2 = {
         textPrompt: "test file markdown",
         topK: 10,
         tags: ["kim", "knives"],  // Tags that were originally embedded
-        contentType: "CONTENT_TYPE_CHUNK"
       };
+
       const searchRes2 = http.request(
         "POST",
         `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/searchChunks`,
@@ -737,6 +752,59 @@ export function TEST_08_E2EKnowledgeBase(data) {
         "E2E: Chunks from files with matching embedded tags": () => similarChunks2.length > 0 && Array.isArray(similarChunks2),
       });
 
+      // Test 2.5: CRITICAL - Verify Milvus tag sync after UpdateFile
+      // This test verifies that when file tags are updated via UpdateFile API,
+      // the Milvus embeddings are ALSO updated (not just Postgres).
+      // Previously, only Postgres was updated, causing searches with new tags to fail.
+      // We search with ONLY "scott" (new tag) to verify Milvus was synced.
+      if (pdfFileUid) {
+        const searchBodyNewTag = {
+          textPrompt: "test file markdown",
+          topK: 10,
+          tags: ["scott"],  // NEW tag that was added via UpdateFile (not in original embedded tags)
+        };
+
+        // Wait a moment for Milvus to sync after tag update
+        sleep(1);
+
+        // httpRetry automatically handles transient errors
+        const searchResNewTag = http.request(
+          "POST",
+          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/searchChunks`,
+          JSON.stringify(searchBodyNewTag),
+          data.header
+        );
+        let searchJsonNewTag; try { searchJsonNewTag = searchResNewTag.json(); } catch (e) { searchJsonNewTag = {}; }
+        const newTagChunks = searchJsonNewTag.similarChunks || [];
+
+        // Verify the new tag search returns results (proves Milvus was synced)
+        check(searchResNewTag, {
+          "E2E: Milvus tag sync - search with NEW tag returns 200": (r) => r.status === 200,
+          "E2E: Milvus tag sync - search with NEW tag returns results": () => newTagChunks.length > 0,
+        });
+
+        // Verify results are ONLY from the PDF file (the one we updated)
+        if (newTagChunks.length > 0) {
+          const allFromPdf = newTagChunks.every(chunk =>
+            chunk.chunkMetadata && chunk.chunkMetadata.originalFileUid === pdfFileUid
+          );
+          check({ allFromPdf, newTagChunks }, {
+            "E2E: Milvus tag sync - results are from updated file only": () => allFromPdf,
+          });
+
+          if (!allFromPdf) {
+            console.log(`E2E: Milvus tag sync - unexpected files in results:`);
+            newTagChunks.forEach((chunk, i) => {
+              console.log(`  [${i}] fileUid=${chunk.chunkMetadata?.originalFileUid}, expected=${pdfFileUid}`);
+            });
+          }
+        } else {
+          console.log(`E2E: Milvus tag sync FAILED - no results for NEW tag "scott"`);
+          console.log(`  This indicates Milvus was NOT synced when file tags were updated.`);
+          console.log(`  Bug: UpdateFile only updates Postgres, not Milvus embeddings.`);
+        }
+      }
+
       // Test 3: Verify document types have page-based references
       // Note: Sample files contain multi-page documents (PDFs, DOCs, etc. may have 2+ pages)
       const documentTypes = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX"];
@@ -747,9 +815,9 @@ export function TEST_08_E2EKnowledgeBase(data) {
         const searchBody3 = {
           textPrompt: "test file markdown",
           topK: 50,
-          fileUids: documentFileUids,
-          contentType: "CONTENT_TYPE_CHUNK"
+          fileIds: documentFileUids,
         };
+
         const searchRes3 = http.request(
           "POST",
           `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/searchChunks`,

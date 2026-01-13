@@ -835,6 +835,21 @@ func getStringData(col column.Column) ([]string, error) {
 	}
 }
 
+func getFloatVectorData(col column.Column) ([][]float32, error) {
+	switch v := col.(type) {
+	case *column.ColumnFloatVector:
+		// Convert []entity.FloatVector to [][]float32
+		data := v.Data()
+		result := make([][]float32, len(data))
+		for i, fv := range data {
+			result[i] = []float32(fv)
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("unexpected column type for float vector data: %T", col)
+	}
+}
+
 // convertTagsToArray converts tags to [][]string format for multiple rows
 func convertTagsToArray(embeddingUIDs []string, tags []string) [][]string {
 	result := make([][]string, len(embeddingUIDs))
@@ -865,6 +880,8 @@ func (m *milvusClient) CollectionExists(ctx context.Context, collectionID string
 
 // UpdateEmbeddingTags updates tags for all embeddings belonging to a specific file
 // This is used when file tags are updated to keep Milvus embeddings in sync
+// IMPORTANT: Milvus upsert is delete+insert, so we must query ALL fields first
+// and include them in the upsert to avoid losing vector data.
 func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID string, fileUID types.FileUIDType, tags []string) error {
 	logger, _ := logx.GetZapLogger(ctx)
 	logger = logger.With(
@@ -884,8 +901,8 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 		return nil
 	}
 
-	// Check if collection has tags field
-	_, _, hasTags, err := m.checkMetadataFields(ctx, collectionID)
+	// Check if collection has tags field and other metadata
+	hasMetadata, hasFileUID, hasTags, err := m.checkMetadataFields(ctx, collectionID)
 	if err != nil {
 		return fmt.Errorf("checking metadata fields: %w", err)
 	}
@@ -907,12 +924,27 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 		}
 	}
 
-	// Query to get all embedding UIDs for this file
+	// Query ALL fields for embeddings of this file (Milvus upsert is delete+insert)
+	// We must preserve all existing data when updating tags
 	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
+
+	// Build list of output fields to query
+	outputFields := []string{
+		kbCollectionFieldSourceTable,
+		kbCollectionFieldSourceUID,
+		kbCollectionFieldDenseEmbeddingUID,
+		kbCollectionFieldDenseEmbedding,
+	}
+	if hasMetadata {
+		outputFields = append(outputFields, kbCollectionFieldFileName, kbCollectionFieldFileType, kbCollectionFieldContentType)
+	}
+	if hasFileUID {
+		outputFields = append(outputFields, kbCollectionFieldFileUID)
+	}
 
 	queryOpt := milvusclient.NewQueryOption(collectionID).
 		WithFilter(expr).
-		WithOutputFields(kbCollectionFieldDenseEmbeddingUID)
+		WithOutputFields(outputFields...)
 
 	searchResult, err := m.c.Query(ctx, queryOpt)
 	if err != nil {
@@ -924,7 +956,7 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 		return nil
 	}
 
-	// Extract embedding UIDs from the result set
+	// Extract all field data from the result set
 	embeddingUIDs, err := getStringData(searchResult.GetColumn(kbCollectionFieldDenseEmbeddingUID))
 	if err != nil {
 		return fmt.Errorf("extracting embedding UIDs: %w", err)
@@ -935,17 +967,52 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 		return nil
 	}
 
+	sourceTables, _ := getStringData(searchResult.GetColumn(kbCollectionFieldSourceTable))
+	sourceUIDs, _ := getStringData(searchResult.GetColumn(kbCollectionFieldSourceUID))
+	vectors, _ := getFloatVectorData(searchResult.GetColumn(kbCollectionFieldDenseEmbedding))
+
+	// Optional fields
+	var fileNames, fileTypes, contentTypes, fileUIDs []string
+	if hasMetadata {
+		fileNames, _ = getStringData(searchResult.GetColumn(kbCollectionFieldFileName))
+		fileTypes, _ = getStringData(searchResult.GetColumn(kbCollectionFieldFileType))
+		contentTypes, _ = getStringData(searchResult.GetColumn(kbCollectionFieldContentType))
+	}
+	if hasFileUID {
+		fileUIDs, _ = getStringData(searchResult.GetColumn(kbCollectionFieldFileUID))
+	}
+
 	logger.Info("UpdateEmbeddingTags: Found embeddings to update",
 		zap.Int("count", len(embeddingUIDs)))
 
-	// Build upsert option using fluent API
-	tagsColumn := column.NewColumnVarCharArray(kbCollectionFieldTags, convertTagsToArray(embeddingUIDs, tags))
+	// Build upsert option with ALL fields to preserve existing data
+	// CRITICAL: Milvus upsert is delete+insert, so we must include all fields
+	vectorDim := 0
+	if len(vectors) > 0 {
+		vectorDim = len(vectors[0])
+	}
 
 	upsertOpt := milvusclient.NewColumnBasedInsertOption(collectionID).
+		WithVarcharColumn(kbCollectionFieldSourceTable, sourceTables).
+		WithVarcharColumn(kbCollectionFieldSourceUID, sourceUIDs).
 		WithVarcharColumn(kbCollectionFieldDenseEmbeddingUID, embeddingUIDs).
-		WithColumns(tagsColumn)
+		WithFloatVectorColumn(kbCollectionFieldDenseEmbedding, vectorDim, vectors)
 
-	// Upsert to update tags (Milvus uses upsert for updates based on primary key)
+	if hasMetadata {
+		upsertOpt.WithVarcharColumn(kbCollectionFieldFileName, fileNames).
+			WithVarcharColumn(kbCollectionFieldFileType, fileTypes).
+			WithVarcharColumn(kbCollectionFieldContentType, contentTypes)
+	}
+
+	if hasFileUID {
+		upsertOpt.WithVarcharColumn(kbCollectionFieldFileUID, fileUIDs)
+	}
+
+	// Add updated tags for all embeddings
+	tagsColumn := column.NewColumnVarCharArray(kbCollectionFieldTags, convertTagsToArray(embeddingUIDs, tags))
+	upsertOpt.WithColumns(tagsColumn)
+
+	// Upsert to update tags while preserving all other data
 	_, err = m.c.Upsert(ctx, upsertOpt)
 	if err != nil {
 		return fmt.Errorf("updating embedding tags: %w", err)

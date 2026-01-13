@@ -82,7 +82,7 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 	// Handle optional fields
 	// Check if ActiveCollectionUID is not zero (nil UUID)
 	if kb.ActiveCollectionUID.String() != "00000000-0000-0000-0000-000000000000" {
-		knowledgeBase.ActiveCollectionUid = kb.ActiveCollectionUID.String()
+		knowledgeBase.ActiveCollectionId = kb.ActiveCollectionUID.String()
 	}
 
 	return knowledgeBase
@@ -113,7 +113,7 @@ func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Name
 		Owner:            owner,
 		CreatorUid:       kbf.CreatorUID.String(),
 		Creator:          creator,
-		KnowledgeBaseUid: kbf.KBUID.String(),
+		KnowledgeBaseId: kbf.KBUID.String(),
 		Size:             kbf.Size,
 		ProcessStatus:    convertFileProcessStatus(kbf.ProcessStatus),
 		Aliases:          kbf.Aliases,

@@ -160,8 +160,8 @@ func (r *repository) GetObjectByUID(ctx context.Context, uid types.ObjectUIDType
 // TurnObjectInDBToObjectInProto turns the object in db to the object in proto
 func TurnObjectInDBToObjectInProto(obj *ObjectModel) *artifactpb.Object {
 	protoObj := &artifactpb.Object{
-		Uid:          obj.UID.String(),
-		NamespaceUid: obj.NamespaceUID.String(),
+		Uid:         obj.UID.String(),
+		NamespaceId: obj.NamespaceUID.String(),
 		Name:         obj.Name,
 		Size:         obj.Size,
 		ContentType:  obj.ContentType,

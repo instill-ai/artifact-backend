@@ -29,13 +29,16 @@
 
 import grpc from "k6/net/grpc";
 import { check, group } from "k6";
-import http from "k6/http";
 
 import * as constant from "./const.js";
+import * as helper from "./helper.js";
+
+// Use httpRetry for automatic retry on transient errors (429, 5xx)
+const http = helper.httpRetry;
 
 const client = new grpc.Client();
 client.load(
-    ["./proto", "./proto/artifact/artifact/v1alpha"],
+    ["./proto"],
     "artifact/artifact/v1alpha/artifact_private_service.proto"
 );
 
@@ -55,19 +58,26 @@ export function setup() {
     const dbIDPrefix = constant.generateDBIDPrefix();
     console.log(`grpc-system-admin.js: Using unique test prefix: ${dbIDPrefix}`);
 
-    // Authenticate
-    const loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
-        "username": constant.defaultUsername,
-        "password": constant.defaultPassword,
-    }));
+    // Authenticate with retry to handle transient failures
+    const loginResp = helper.authenticateWithRetry(
+        constant.mgmtRESTPublicHost,
+        constant.defaultUsername,
+        constant.defaultPassword
+    );
 
     check(loginResp, {
-        "Setup: Authentication successful": (r) => r.status === 200,
+        "Setup: Authentication successful": (r) => r && r.status === 200,
     });
 
+    if (!loginResp || loginResp.status !== 200) {
+        console.error("Setup: Authentication failed, cannot continue");
+        return null;
+    }
+
+    const accessToken = loginResp.json().accessToken;
     const grpcMetadata = {
         "metadata": {
-            "Authorization": `Bearer ${loginResp.json().accessToken}`,
+            "Authorization": `Bearer ${accessToken}`,
         },
         "timeout": "300s",
     };

@@ -50,7 +50,6 @@
  * - Cleanup removes all resources
  */
 
-import http from "k6/http";
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
@@ -58,6 +57,9 @@ import { artifactRESTPublicHost } from "./const.js";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
+
+// Use httpRetry for automatic retry on transient errors (429, 5xx)
+const http = helper.httpRetry;
 
 export let options = {
   setupTimeout: '30s',
@@ -80,25 +82,33 @@ export function setup() {
   const dbIDPrefix = constant.generateDBIDPrefix();
   console.log(`rest-kb-e2e-file-process.js: Using unique test prefix: ${dbIDPrefix}`);
 
-  var loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
-    "username": constant.defaultUsername,
-    "password": constant.defaultPassword,
-  }))
+  // Authenticate with retry to handle transient failures
+  var loginResp = helper.authenticateWithRetry(
+    constant.mgmtRESTPublicHost,
+    constant.defaultUsername,
+    constant.defaultPassword
+  );
 
   check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r.status === 200,
+    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r && r.status === 200,
   });
 
+  if (!loginResp || loginResp.status !== 200) {
+    console.error("Setup: Authentication failed, cannot continue");
+    return null;
+  }
+
+  var accessToken = loginResp.json().accessToken;
   var header = {
     "headers": {
-      "Authorization": `Bearer ${loginResp.json().accessToken}`,
+      "Authorization": `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     "timeout": "600s",
   }
 
   var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-    headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
+    headers: { "Authorization": `Bearer ${accessToken}` }
   })
 
   // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST

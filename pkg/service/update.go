@@ -292,10 +292,10 @@ func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUI
 		zap.Int32("fileCount", fileCount))
 
 	return &artifactpb.PurgeRollbackAdminResponse{
-		Success:                true,
-		PurgedKnowledgeBaseUid: rollbackKB.UID.String(),
-		DeletedFiles:           fileCount,
-		Message:                "Rollback knowledge base purged successfully",
+		Success:               true,
+		PurgedKnowledgeBaseId: rollbackKB.UID.String(),
+		DeletedFiles:          fileCount,
+		Message:               "Rollback knowledge base purged successfully",
 	}, nil
 }
 
@@ -501,7 +501,7 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 		}
 
 		knowledgeBaseStatuses = append(knowledgeBaseStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
-			KnowledgeBaseUid: kb.UID.String(),
+			KnowledgeBaseId: kb.UID.String(),
 			Status:           statusEnum,
 			WorkflowId:       kb.UpdateWorkflowID,
 			StartedAt:        formatTime(kb.UpdateStartedAt),
@@ -614,9 +614,9 @@ func (s *service) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifa
 		}
 
 		knowledgeBaseStatuses = append(knowledgeBaseStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
-			KnowledgeBaseUid: status.KnowledgeBaseUID,
-			Status:           statusEnum,
-			WorkflowId:       status.WorkflowID,
+			KnowledgeBaseId: status.KnowledgeBaseUID,
+			Status:          statusEnum,
+			WorkflowId:      status.WorkflowID,
 		})
 	}
 

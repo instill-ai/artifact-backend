@@ -248,18 +248,20 @@
 
 import grpc from "k6/net/grpc";
 import { check, group, sleep } from "k6";
-import http from "k6/http";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 import encoding from "k6/encoding";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
 
+// Use httpRetry for automatic retry on transient errors (429, 5xx)
+const http = helper.httpRetry;
+
 // IMPORTANT: k6 requires client.load() to be called at module level (init context)
 // Cannot be called inside test functions due to k6 design limitations
 const client = new grpc.Client();
 client.load(
-    ["./proto", "./proto/artifact/artifact/v1alpha"],
+    ["./proto"],
     "artifact/artifact/v1alpha/artifact_private_service.proto"
 );
 
@@ -309,32 +311,39 @@ export function setup() {
     console.log(`grpc-kb-update.js: Using unique test prefix: ${dbIDPrefix}`);
 
     // Connect gRPC client to private service
-    // Authenticate FIRST (required for gRPC calls)
-    const loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
-        "username": constant.defaultUsername,
-        "password": constant.defaultPassword,
-    }));
+    // Authenticate with retry to handle transient failures
+    const loginResp = helper.authenticateWithRetry(
+        constant.mgmtRESTPublicHost,
+        constant.defaultUsername,
+        constant.defaultPassword
+    );
 
     check(loginResp, {
-        "Setup: Authentication successful": (r) => r.status === 200,
+        "Setup: Authentication successful": (r) => r && r.status === 200,
     });
 
+    if (!loginResp || loginResp.status !== 200) {
+        console.error("Setup: Authentication failed, cannot continue");
+        return null;
+    }
+
+    const accessToken = loginResp.json().accessToken;
     const header = {
         "headers": {
-            "Authorization": `Bearer ${loginResp.json().accessToken}`,
+            "Authorization": `Bearer ${accessToken}`,
             "Content-Type": "application/json",
         },
         "timeout": "600s",
     };
 
     const userResp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-        headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
+        headers: { "Authorization": `Bearer ${accessToken}` }
     });
 
     // gRPC metadata format
     const grpcMetadata = {
         "metadata": {
-            "Authorization": `Bearer ${loginResp.json().accessToken}`
+            "Authorization": `Bearer ${accessToken}`
         },
         "timeout": "600s"
     };
@@ -914,7 +923,7 @@ function TestCompleteUpdateWorkflow(client, data) {
 
         // PHASE 2-5: Wait for workflow completion (includes file reprocessing, synchronization, validation, and atomic swap)
         console.log("Workflow: Waiting for workflow completion (Phases 2-5)...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseId, 900);
 
         check({ updateCompleted }, {
             "Workflow Phase 5: Update completed": () => updateCompleted === true,
@@ -1139,7 +1148,7 @@ function TestPhasePrepare(client, data) {
         console.log(`Phase 1 Prepare: Staging collection UID: ${stagingKB.active_collection_uid}`);
 
         // Wait for update to complete so we can clean up properly
-        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseId, 900);
 
         check({ updateCompleted }, {
             "Phase 1 Prepare: Update completed successfully": () => updateCompleted === true,
@@ -1438,7 +1447,7 @@ function TestReprocessAndDualProcessing(client, data) {
 
         // Wait for update to complete
         console.log("Group 4: Waiting for update to complete...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseId, 900);
 
         check({ updateCompleted }, {
             "Group 4: Update completed successfully": () => updateCompleted === true,
@@ -1643,7 +1652,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
 
         // Wait for update to complete
         console.log("CC1: Waiting for update to complete...");
-        const updateCompletedCC1 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC1, 900);
+        const updateCompletedCC1 = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC1, 900);
 
         check(updateCompletedCC1, {
             "CC1: Update completed": (c) => c === true
@@ -1875,7 +1884,7 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
 
         // Wait for update completion
         console.log("CC2: Waiting for update to complete...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC2, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC2, 900);
 
         check(updateCompleted, {
             "CC2: Update completed": (c) => c === true
@@ -2055,7 +2064,7 @@ function TestCC03_RapidOperations(client, data) {
 
         console.log("CC3: Waiting for update completion...");
         // Extended timeout for rapid operations with dual processing + stabilization
-        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC3, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC3, 900);
 
         check(updateCompleted, {
             "CC3: Update completed": (c) => c === true
@@ -2254,7 +2263,7 @@ function TestCC04_RaceConditions(client, data) {
 
             if (statusRes.status === grpc.StatusOK && statusRes.message && statusRes.message.details) {
                 // Find our specific knowledge base in the response
-                const knowledgeBaseStatus = statusRes.message.details.find(cs => (cs.knowledge_base_uid || cs.knowledgeBaseUid || cs.uid) === knowledgeBaseUidCC4);
+                const knowledgeBaseStatus = statusRes.message.details.find(cs => cs.knowledgeBaseId === knowledgeBaseIdCC4);
                 const currentStatus = knowledgeBaseStatus ? knowledgeBaseStatus.status : null;
 
                 // If we're still in 'KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING' phase, upload the race file
@@ -2297,7 +2306,7 @@ function TestCC04_RaceConditions(client, data) {
         }
 
         // Wait for update to complete (extended timeout for CI - race condition testing is resource-intensive)
-        const updateCompletedCC4 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC4, 900);
+        const updateCompletedCC4 = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC4, 900);
 
 
         check(updateCompletedCC4, {
@@ -2488,7 +2497,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
 
         // Wait for update to complete
         console.log("CC5: Waiting for update to complete...");
-        const updateCompletedCC5 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC5, 900);
+        const updateCompletedCC5 = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC5, 900);
 
 
         check(updateCompletedCC5, {
@@ -2742,7 +2751,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
 
         // Wait for update to complete
         console.log("CC6: Waiting for update to complete...");
-        const updateCompletedCC6 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC6, 900);
+        const updateCompletedCC6 = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC6, 900);
 
 
         check(updateCompletedCC6, {
@@ -2977,7 +2986,7 @@ function TestCC07_MultipleOperations(client, data) {
 
         // Wait for update to complete
         console.log("CC7: Waiting for update to complete...");
-        const updateCompletedCC7 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC7, 900);
+        const updateCompletedCC7 = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC7, 900);
 
 
         check(updateCompletedCC7, {
@@ -3177,7 +3186,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
 
         // Wait for update to complete
         console.log("CC8: Waiting for update to complete...");
-        const updateCompletedCC8 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC8, 900);
+        const updateCompletedCC8 = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC8, 900);
 
 
         check(updateCompletedCC8, {
@@ -3305,7 +3314,7 @@ function TestCC09_DualProcessingStops(client, data) {
             { knowledgeBaseIds: [knowledgeBaseIdCC9] }, data.metadata);
 
         // Wait for completion
-        const updateCompletedCC9 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC9, 900);
+        const updateCompletedCC9 = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC9, 900);
 
         check({ updateCompletedCC9 }, {
             "CC9: Update completed successfully": () => updateCompletedCC9 === true,
@@ -3578,7 +3587,7 @@ function TestCC10_RetentionExpiration(client, data) {
         console.log("CC10: Update started, waiting for completion...");
 
         // Wait for completion
-        const updateCompletedCC10 = helper.pollUpdateCompletion(client, data, knowledgeBaseUidCC10, 900);
+        const updateCompletedCC10 = helper.pollUpdateCompletion(client, data, knowledgeBaseIdCC10, 900);
 
         check({ updateCompletedCC10 }, {
             "CC10: Update completed successfully": () => updateCompletedCC10 === true,
@@ -3928,7 +3937,7 @@ function TestPhaseValidate(client, data) {
         // Phase 4 validation happens automatically during the workflow (between Phase 3 and Phase 5)
         console.log("Validate: Waiting for update to complete (validation happens automatically in workflow)...");
 
-        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseId, 900);
 
         check({ updateCompleted }, {
             "Validate: Update completed successfully (validation passed)": () => updateCompleted === true,
@@ -4301,7 +4310,7 @@ function TestPhaseSwap(client, data) {
 
         // Wait for completion (swap happens automatically during workflow)
         console.log("Phase 5 Swap: Waiting for update to complete (swap happens in workflow)...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseId, 900);
 
 
         check(updateCompleted, {
@@ -4629,7 +4638,7 @@ function TestResourceCleanup(client, data) {
         });
 
         // Wait for update to complete (longer timeout for CI environment)
-        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseId, 900);
         check({ updateCompleted }, {
             "Cleanup: Update completed": () => updateCompleted === true,
         });
@@ -4885,7 +4894,7 @@ function TestResourceCleanup(client, data) {
         });
 
         // Wait for second update to complete
-        const secondUpdateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
+        const secondUpdateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseId, 900);
         check({ secondUpdateCompleted }, {
             "Cleanup: Second update completed for purge test": () => secondUpdateCompleted === true,
         });
@@ -5363,7 +5372,7 @@ function TestCollectionVersioning(client, data) {
 
         // TEST 3: Wait for update completion and verify collection pointer swap
         console.log("Collection Versioning: Waiting for update completion...");
-        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
+        const updateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseId, 900);
 
         check({ updateCompleted }, {
             "Collection Versioning: Update completed": () => updateCompleted === true,
@@ -5600,7 +5609,7 @@ function TestRollbackAndReUpdate(client, data) {
         // Wait for first update to complete
         // Extended timeout for CI environments where resources are constrained
         // Increased to 900s to handle sustained stress testing scenarios
-        const firstUpdateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseUid, 900);
+        const firstUpdateCompleted = helper.pollUpdateCompletion(client, data, knowledgeBaseId, 900);
         check({ firstUpdateCompleted }, {
             "Rollback Cycle: First update completed": () => firstUpdateCompleted === true,
         });
@@ -6612,18 +6621,18 @@ function TestEdgeCases(client, data) {
         );
 
         if (statusRes.status === grpc.StatusOK && statusRes.message.details) {
-            const initialStatus = statusRes.message.details.find(d => (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid) === emptyKBUid);
+            const initialStatus = statusRes.message.details.find(d => d.knowledgeBaseId === emptyKBId);
             if (initialStatus) {
                 console.log(`Edge Cases: Initial KB status: ${initialStatus.status}, workflowId: ${initialStatus.workflowId}`);
             } else {
-                const availableUids = statusRes.message.details.map(d => d ? (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid || 'null') : 'undefined').slice(0, 5).join(', ');
-                console.log(`Edge Cases: KB not found in status list yet. Available UIDs: ${availableUids}...`);
+                const availableIds = statusRes.message.details.map(d => d ? (d.knowledgeBaseId || 'null') : 'undefined').slice(0, 5).join(', ');
+                console.log(`Edge Cases: KB not found in status list yet. Available IDs: ${availableIds}...`);
             }
         }
 
         // Wait for update to complete (should succeed even with 0 files)
         console.log(`Edge Cases: Waiting for empty knowledge base update to complete (max 300s)...`);
-        const updateCompletedEmpty = helper.pollUpdateCompletion(client, data, emptyKBUid, 300);
+        const updateCompletedEmpty = helper.pollUpdateCompletion(client, data, emptyKBId, 300);
 
         if (updateCompletedEmpty !== true) {
             console.error(`Edge Cases: Empty knowledge base update did NOT complete successfully: ${updateCompletedEmpty}`);
@@ -6645,7 +6654,7 @@ function TestEdgeCases(client, data) {
 
             let emptyKBStatus = null;
             if (statusRes.status === grpc.StatusOK && statusRes.message.details) {
-                emptyKBStatus = statusRes.message.details.find(d => (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid) === emptyKBUid);
+                emptyKBStatus = statusRes.message.details.find(d => d.knowledgeBaseId === emptyKBId);
                 if (emptyKBStatus) {
                     console.log(`Edge Cases: Final KB status: ${emptyKBStatus.status} (type: ${typeof emptyKBStatus.status})`);
                     console.log(`Edge Cases: Workflow ID: ${emptyKBStatus.workflowId}`);
@@ -6677,8 +6686,8 @@ function TestEdgeCases(client, data) {
                             s.status === "KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED" || s.status === 6
                     });
                 } else {
-                    const availableUids = statusRes.message.details.map(d => d ? (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid || 'null') : 'undefined').slice(0, 5).join(', ');
-                    console.error(`Edge Cases: Empty KB status not found in final check. Available UIDs: ${availableUids}...`);
+                    const availableIds = statusRes.message.details.map(d => d ? (d.knowledgeBaseId || 'null') : 'undefined').slice(0, 5).join(', ');
+                    console.error(`Edge Cases: Empty KB status not found in final check. Available IDs: ${availableIds}...`);
                 }
             }
 
@@ -7061,7 +7070,7 @@ function TestEdgeCases(client, data) {
                     let finalStatus = null;
                     if (finalStatusRes.status === grpc.StatusOK && finalStatusRes.message.details) {
                         finalStatus = finalStatusRes.message.details.find(d =>
-                            (d.knowledge_base_uid || d.knowledgeBaseUid || d.uid) === updateCompletedKBUid
+                            (d.knowledge_base_id || d.knowledgeBaseId || d.uid) === updateCompletedKBUid
                         );
                     }
 
@@ -7496,7 +7505,7 @@ function TestObservability(client, data) {
             const knowledgeBaseStatus = statusRes.message.details[0];
 
             check(knowledgeBaseStatus, {
-                "Observability: Status has knowledgeBaseUid": () => "knowledgeBaseUid" in knowledgeBaseStatus,
+                "Observability: Status has knowledgeBaseId": () => "knowledgeBaseId" in knowledgeBaseStatus,
                 "Observability: Status has status field": () => "status" in knowledgeBaseStatus,
                 "Observability: Status has workflowId": () => "workflowId" in knowledgeBaseStatus,
             });
@@ -7590,7 +7599,7 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         if (abortRes.message.details && abortRes.message.details.length > 0) {
             const knowledgeBaseStatus = abortRes.message.details[0];
             check(knowledgeBaseStatus, {
-                "Abort: Status has knowledgeBaseUid": () => "knowledgeBaseUid" in knowledgeBaseStatus,
+                "Abort: Status has knowledgeBaseId": () => "knowledgeBaseId" in knowledgeBaseStatus,
                 "Abort: Status is KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED": () => knowledgeBaseStatus.status === "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED",
                 "Abort: Status has workflowId": () => "workflowId" in knowledgeBaseStatus,
             });
