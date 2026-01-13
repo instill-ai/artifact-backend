@@ -107,6 +107,7 @@ ifeq ($(CI),true)
 	for test in \
 		integration-test/rest.js \
 		integration-test/rest-object-storage.js \
+		integration-test/rest-hash-based-ids.js \
 		integration-test/rest-file-type.js \
 		integration-test/rest-db.js \
 		integration-test/rest-ai-client.js \

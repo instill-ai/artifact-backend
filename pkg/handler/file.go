@@ -517,7 +517,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			Owner:              owner,
 			CreatorUid:         res.CreatorUID.String(),
 			Creator:            creator,
-			KnowledgeBaseUid:   res.KBUID.String(),
+			KnowledgeBaseId:   res.KBUID.String(),
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, res.ID),
 			DisplayName:        res.DisplayName,
 			Type:               req.File.Type,
@@ -726,7 +726,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			Owner:              owner,
 			CreatorUid:         kbFile.CreatorUID.String(),
 			Creator:            creator,
-			KnowledgeBaseUid:   kbFile.KBUID.String(),
+			KnowledgeBaseId:   kbFile.KBUID.String(),
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, fileID),
 			DisplayName:        kbFile.DisplayName,
 			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
@@ -897,24 +897,54 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			if !fileExistsInGCS {
 				logger.Info("Uploading file to GCS",
 					zap.String("gcsPath", gcsObjectPath),
+					zap.String("bucket", bucket),
 					zap.String("sourceObject", objectPath),
 					zap.String("view", view.String()))
 
-				// Get file from MinIO (primary storage)
-				fileContent, err := ph.service.Repository().GetMinIOStorage().GetFile(ctx, bucket, objectPath)
-				if err != nil {
+				// Get file from MinIO (primary storage) with retry
+				var fileContent []byte
+				var minioErr error
+				for attempt := 1; attempt <= 3; attempt++ {
+					fileContent, minioErr = ph.service.Repository().GetMinIOStorage().GetFile(ctx, bucket, objectPath)
+					if minioErr == nil {
+						break
+					}
+					logger.Warn("Failed to read file from MinIO, retrying...",
+						zap.Int("attempt", attempt),
+						zap.String("bucket", bucket),
+						zap.String("path", objectPath),
+						zap.Error(minioErr))
+					if attempt < 3 {
+						time.Sleep(time.Duration(attempt*500) * time.Millisecond)
+					}
+				}
+				if minioErr != nil {
 					return "", errorsx.AddMessage(
-						fmt.Errorf("failed to read file from MinIO: %w", err),
+						fmt.Errorf("failed to read file from MinIO after 3 attempts: %w", minioErr),
 						"Unable to read file for GCS upload. Please try again.",
 					)
 				}
 
-				// Upload to GCS using GCS storage client
+				// Upload to GCS using GCS storage client with retry
 				base64Content := base64.StdEncoding.EncodeToString(fileContent)
-				err = gcsStorage.UploadBase64File(ctx, gcsBucket, gcsObjectPath, base64Content, contentType)
-				if err != nil {
+				var gcsErr error
+				for attempt := 1; attempt <= 3; attempt++ {
+					gcsErr = gcsStorage.UploadBase64File(ctx, gcsBucket, gcsObjectPath, base64Content, contentType)
+					if gcsErr == nil {
+						break
+					}
+					logger.Warn("Failed to upload file to GCS, retrying...",
+						zap.Int("attempt", attempt),
+						zap.String("bucket", gcsBucket),
+						zap.String("path", gcsObjectPath),
+						zap.Error(gcsErr))
+					if attempt < 3 {
+						time.Sleep(time.Duration(attempt*500) * time.Millisecond)
+					}
+				}
+				if gcsErr != nil {
 					return "", errorsx.AddMessage(
-						fmt.Errorf("failed to upload file to GCS: %w", err),
+						fmt.Errorf("failed to upload file to GCS after 3 attempts: %w", gcsErr),
 						"Unable to upload file to GCS. Please check GCS configuration and try again.",
 					)
 				}

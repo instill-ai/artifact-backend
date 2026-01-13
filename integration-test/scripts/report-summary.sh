@@ -27,19 +27,20 @@ parse_results() {
         is_parallel_format=true
     fi
 
-    # Extract test results for each file
+    # Extract test results for each file (order matches Makefile batches)
     for test_file in \
-        "grpc.js" \
         "rest.js" \
-        "rest-file-type.js" \
         "rest-object-storage.js" \
+        "rest-hash-based-ids.js" \
+        "rest-file-type.js" \
         "rest-db.js" \
         "rest-ai-client.js" \
         "rest-kb-e2e-file-process.js" \
         "rest-file-reprocess.js" \
         "rest-kb-delete.js" \
-        "grpc-system-config-update.js" \
+        "grpc.js" \
         "grpc-kb-update.js" \
+        "grpc-system-config-update.js" \
         "grpc-system-admin.js"; do
 
         local total=""

@@ -203,7 +203,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		TotalFiles:          0,
 		TotalTokens:         0,
 		UsedStorage:         0,
-		ActiveCollectionUid: activeCollectionUID,
+		ActiveCollectionId: activeCollectionUID,
 		EmbeddingConfig: &artifactpb.KnowledgeBase_EmbeddingConfig{
 			ModelFamily:    systemConfig.RAG.Embedding.ModelFamily,
 			Dimensionality: systemConfig.RAG.Embedding.Dimensionality,
@@ -319,7 +319,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			TotalFiles:          uint32(fileCounts[kb.UID]),
 			TotalTokens:         uint32(tokenCounts[kb.UID]),
 			UsedStorage:         uint64(kb.Usage),
-			ActiveCollectionUid: activeCollectionUID,
+			ActiveCollectionId: activeCollectionUID,
 			EmbeddingConfig: &artifactpb.KnowledgeBase_EmbeddingConfig{
 				ModelFamily:    kb.SystemConfig.RAG.Embedding.ModelFamily,
 				Dimensionality: kb.SystemConfig.RAG.Embedding.Dimensionality,

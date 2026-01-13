@@ -53,15 +53,17 @@
 
 import grpc from "k6/net/grpc";
 import { check, group, sleep } from "k6";
-import http from "k6/http";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
 
+// Use httpRetry for automatic retry on transient errors (429, 5xx)
+const http = helper.httpRetry;
+
 const client = new grpc.Client();
 client.load(
-    ["./proto", "./proto/artifact/artifact/v1alpha"],
+    ["./proto"],
     "artifact/artifact/v1alpha/artifact_private_service.proto"
 );
 
@@ -82,31 +84,38 @@ export function setup() {
     const dbIDPrefix = constant.generateDBIDPrefix();
     console.log(`grpc-system-config-update.js: Using unique test prefix: ${dbIDPrefix}`);
 
-    // Authenticate
-    const loginResp = http.request("POST", `${constant.mgmtRESTPublicHost}/v1beta/auth/login`, JSON.stringify({
-        "username": constant.defaultUsername,
-        "password": constant.defaultPassword,
-    }));
+    // Authenticate with retry to handle transient failures
+    const loginResp = helper.authenticateWithRetry(
+        constant.mgmtRESTPublicHost,
+        constant.defaultUsername,
+        constant.defaultPassword
+    );
 
     check(loginResp, {
-        "Setup: Authentication successful": (r) => r.status === 200,
+        "Setup: Authentication successful": (r) => r && r.status === 200,
     });
 
+    if (!loginResp || loginResp.status !== 200) {
+        console.error("Setup: Authentication failed, cannot continue");
+        return null;
+    }
+
+    const accessToken = loginResp.json().accessToken;
     const header = {
         "headers": {
-            "Authorization": `Bearer ${loginResp.json().accessToken}`,
+            "Authorization": `Bearer ${accessToken}`,
             "Content-Type": "application/json",
         },
         "timeout": "600s",
     };
 
     const userResp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-        headers: { "Authorization": `Bearer ${loginResp.json().accessToken}` }
+        headers: { "Authorization": `Bearer ${accessToken}` }
     });
 
     const grpcMetadata = {
         "metadata": {
-            "Authorization": `Bearer ${loginResp.json().accessToken}`
+            "Authorization": `Bearer ${accessToken}`
         },
         "timeout": "600s"
     };
@@ -704,8 +713,8 @@ export default function (data) {
             // System config changes require reprocessing all files with new embeddings
             // Poll both KBs concurrently instead of sequentially to avoid 2x timeout
             console.log("Waiting for both KB updates to complete (polling concurrently)...");
-            console.log(`  KB1 UID: ${data.kb1_initial.knowledgeBaseUid}`);
-            console.log(`  KB2 UID: ${data.kb2_initial.knowledgeBaseUid}`);
+            console.log(`  KB1 UID: ${data.kb1_initial.knowledgeBaseId}`);
+            console.log(`  KB2 UID: ${data.kb2_initial.knowledgeBaseId}`);
             console.log(`  Max wait: 600 seconds`);
 
             let kb1UpdateCompleted = null; // null = pending, true = completed, false = failed
@@ -725,14 +734,14 @@ export default function (data) {
                 if (statusRes.status === grpc.StatusOK && statusRes.message.details) {
                     if (i === 0) {
                         console.log(`Status check iteration ${i}: Found ${statusRes.message.details.length} KBs in status list`);
-                        console.log(`Looking for KB1 UID: ${data.kb1_initial.knowledgeBaseUid}`);
-                        console.log(`Looking for KB2 UID: ${data.kb2_initial.knowledgeBaseUid}`);
+                        console.log(`Looking for KB1 UID: ${data.kb1_initial.knowledgeBaseId}`);
+                        console.log(`Looking for KB2 UID: ${data.kb2_initial.knowledgeBaseId}`);
                         if (statusRes.message.details.length > 0) {
-                            console.log(`First KB in list: knowledgeBaseUid=${statusRes.message.details[0].knowledgeBaseUid}, status=${statusRes.message.details[0].status}`);
+                            console.log(`First KB in list: knowledgeBaseUid=${statusRes.message.details[0].knowledgeBaseId}, status=${statusRes.message.details[0].status}`);
                         }
                     }
-                    const kb1Status = statusRes.message.details.find(d => d.knowledgeBaseUid === data.kb1_initial.knowledgeBaseUid);
-                    const kb2Status = statusRes.message.details.find(d => d.knowledgeBaseUid === data.kb2_initial.knowledgeBaseUid);
+                    const kb1Status = statusRes.message.details.find(d => d.knowledgeBaseId === data.kb1_initial.knowledgeBaseId);
+                    const kb2Status = statusRes.message.details.find(d => d.knowledgeBaseId === data.kb2_initial.knowledgeBaseId);
 
                     // Check KB1 status
                     if (kb1Status) {
@@ -741,8 +750,29 @@ export default function (data) {
                         // Only count not-found if we haven't determined terminal state yet
                         kb1NotFoundCount++;
                         if (kb1NotFoundCount > MAX_NOT_FOUND_WAIT) {
-                            console.error(`✗ KB1 not found in status list after ${MAX_NOT_FOUND_WAIT}s - workflow may have failed to start`);
-                            kb1UpdateCompleted = false; // Mark as failed, but continue polling KB2
+                            // Check database directly - update may have completed so quickly we missed it
+                            // Note: knowledgeBaseId is the hash-based slug, so we query by 'id' not 'uid'
+                            const kb1DbCheck = helper.safeQuery(
+                                `SELECT update_status FROM knowledge_base WHERE id = $1 AND delete_time IS NULL`,
+                                data.kb1_initial.knowledgeBaseId
+                            );
+                            if (kb1DbCheck && kb1DbCheck.length > 0) {
+                                const dbStatus = kb1DbCheck[0].update_status;
+                                if (dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED' || dbStatus === 6) {
+                                    console.log(`✓ KB1 update already completed (verified via DB)`);
+                                    kb1UpdateCompleted = true;
+                                } else if (dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_FAILED' || dbStatus === 7 ||
+                                           dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED' || dbStatus === 8) {
+                                    console.error(`✗ KB1 update failed/aborted (verified via DB): ${dbStatus}`);
+                                    kb1UpdateCompleted = false;
+                                } else {
+                                    // Still in progress according to DB - continue polling
+                                    console.log(`   KB1 not in status list but DB shows: ${dbStatus}, continuing...`);
+                                }
+                            } else {
+                                console.error(`✗ KB1 not found in status list or database after ${MAX_NOT_FOUND_WAIT}s`);
+                                kb1UpdateCompleted = false;
+                            }
                         }
                     }
 
@@ -763,8 +793,29 @@ export default function (data) {
                         // Only count not-found if we haven't determined terminal state yet
                         kb2NotFoundCount++;
                         if (kb2NotFoundCount > MAX_NOT_FOUND_WAIT) {
-                            console.error(`✗ KB2 not found in status list after ${MAX_NOT_FOUND_WAIT}s - workflow may have failed to start`);
-                            kb2UpdateCompleted = false; // Mark as failed, but continue polling KB1
+                            // Check database directly - update may have completed so quickly we missed it
+                            // Note: knowledgeBaseId is the hash-based slug, so we query by 'id' not 'uid'
+                            const kb2DbCheck = helper.safeQuery(
+                                `SELECT update_status FROM knowledge_base WHERE id = $1 AND delete_time IS NULL`,
+                                data.kb2_initial.knowledgeBaseId
+                            );
+                            if (kb2DbCheck && kb2DbCheck.length > 0) {
+                                const dbStatus = kb2DbCheck[0].update_status;
+                                if (dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED' || dbStatus === 6) {
+                                    console.log(`✓ KB2 update already completed (verified via DB)`);
+                                    kb2UpdateCompleted = true;
+                                } else if (dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_FAILED' || dbStatus === 7 ||
+                                           dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED' || dbStatus === 8) {
+                                    console.error(`✗ KB2 update failed/aborted (verified via DB): ${dbStatus}`);
+                                    kb2UpdateCompleted = false;
+                                } else {
+                                    // Still in progress according to DB - continue polling
+                                    console.log(`   KB2 not in status list but DB shows: ${dbStatus}, continuing...`);
+                                }
+                            } else {
+                                console.error(`✗ KB2 not found in status list or database after ${MAX_NOT_FOUND_WAIT}s`);
+                                kb2UpdateCompleted = false;
+                            }
                         }
                     }
 
@@ -824,8 +875,8 @@ export default function (data) {
                 );
 
                 if (finalStatusRes.status === grpc.StatusOK && finalStatusRes.message.details) {
-                    const kb1FinalStatus = finalStatusRes.message.details.find(d => d.uid === data.kb1_initial.knowledgeBaseUid);
-                    const kb2FinalStatus = finalStatusRes.message.details.find(d => d.uid === data.kb2_initial.knowledgeBaseUid);
+                    const kb1FinalStatus = finalStatusRes.message.details.find(d => d.uid === data.kb1_initial.knowledgeBaseId);
+                    const kb2FinalStatus = finalStatusRes.message.details.find(d => d.uid === data.kb2_initial.knowledgeBaseId);
 
                     if (!kb1UpdateCompleted) {
                         if (kb1FinalStatus) {
@@ -1051,7 +1102,7 @@ export default function (data) {
                         `SELECT delete_time, update_status, update_workflow_id
                          FROM knowledge_base
                          WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
-                        data.kb1_initial.knowledgeBaseUid
+                        data.kb1_initial.knowledgeBaseId
                     );
 
                     if (stagingKB1Check && stagingKB1Check.length > 0) {
@@ -1079,7 +1130,7 @@ export default function (data) {
                         `SELECT delete_time, update_status, update_workflow_id
                          FROM knowledge_base
                          WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
-                        data.kb2_initial.knowledgeBaseUid
+                        data.kb2_initial.knowledgeBaseId
                     );
 
                     if (stagingKB2Check && stagingKB2Check.length > 0) {
@@ -1112,7 +1163,7 @@ export default function (data) {
                 `SELECT delete_time, update_status, update_workflow_id
                  FROM knowledge_base
                  WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
-                data.kb1_initial.knowledgeBaseUid
+                data.kb1_initial.knowledgeBaseId
             );
 
             if (stagingKB1Check && stagingKB1Check.length > 0) {
@@ -1142,7 +1193,7 @@ export default function (data) {
                 `SELECT delete_time, update_status, update_workflow_id
                  FROM knowledge_base
                  WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
-                data.kb2_initial.knowledgeBaseUid
+                data.kb2_initial.knowledgeBaseId
             );
 
             if (stagingKB2Check && stagingKB2Check.length > 0) {
@@ -1373,7 +1424,7 @@ export default function (data) {
                             // Check production KB status
                             const prodKBStatus = helper.safeQuery(
                                 `SELECT update_status FROM knowledge_base WHERE uid = $1`,
-                                data.kb1_initial.knowledgeBaseUid
+                                data.kb1_initial.knowledgeBaseId
                             );
                             if (prodKBStatus && prodKBStatus.length > 0) {
                                 console.log(`DIAGNOSTIC: Production KB1 update_status = "${prodKBStatus[0].update_status}"`);
@@ -1578,7 +1629,7 @@ export default function (data) {
 
             // Check that files exist in both production and rollback KBs
             if (data.kb1_rollback && data.kb1_retention_files) {
-                const prodKB1FileCount = helper.countFilesInKnowledgeBase(data.kb1_initial.knowledgeBaseUid);
+                const prodKB1FileCount = helper.countFilesInKnowledgeBase(data.kb1_initial.knowledgeBaseId);
                 const rollbackKB1FileCount = helper.countFilesInKnowledgeBase(data.kb1_rollback.kbUid);
 
                 console.log(`KB1 - Production files: ${prodKB1FileCount}, Rollback files: ${rollbackKB1FileCount}`);
@@ -1606,7 +1657,7 @@ export default function (data) {
 
             // Similar check for KB2
             if (data.kb2_rollback && data.kb2_retention_files) {
-                const prodKB2FileCount = helper.countFilesInKnowledgeBase(data.kb2_initial.knowledgeBaseUid);
+                const prodKB2FileCount = helper.countFilesInKnowledgeBase(data.kb2_initial.knowledgeBaseId);
                 const rollbackKB2FileCount = helper.countFilesInKnowledgeBase(data.kb2_rollback.kbUid);
 
                 console.log(`KB2 - Production files: ${prodKB2FileCount}, Rollback files: ${rollbackKB2FileCount}`);
