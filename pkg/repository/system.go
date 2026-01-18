@@ -5,24 +5,34 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/pkg/ai"
 	"github.com/instill-ai/artifact-backend/pkg/ai/openai"
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 )
 
 // System interface defines methods for system-wide configurations
 type System interface {
-	// GetSystem retrieves a complete system configuration by ID
+	// GetSystem retrieves a complete system configuration by ID (hash-based canonical ID)
 	GetSystem(ctx context.Context, id string) (*SystemModel, error)
+	// GetSystemBySlug retrieves a complete system configuration by slug
+	GetSystemBySlug(ctx context.Context, slug string) (*SystemModel, error)
+	// GetSystemByIDOrSlug retrieves a system by ID (sys-xxx) or slug (openai, gemini)
+	// This provides backward compatibility for clients that may use either format.
+	GetSystemByIDOrSlug(ctx context.Context, idOrSlug string) (*SystemModel, error)
 	// GetSystemByUID retrieves a complete system configuration by UID
 	GetSystemByUID(ctx context.Context, uid types.SystemUIDType) (*SystemModel, error)
 
-	// CreateSystem creates a new system configuration (fails if ID already exists)
-	CreateSystem(ctx context.Context, id string, config map[string]any, description string) error
+	// CreateSystem creates a new system configuration
+	// The ID is auto-generated as "sys-{hash}" from the UID via BeforeCreate hook
+	// displayName is used to generate the slug for human-readable identification
+	CreateSystem(ctx context.Context, displayName string, config map[string]any, description string) (*SystemModel, error)
 
 	// UpdateSystem updates an existing system configuration (fails if ID doesn't exist)
 	UpdateSystem(ctx context.Context, id string, config map[string]any, description string) error
@@ -36,8 +46,9 @@ type System interface {
 	// DeleteSystem deletes a system configuration
 	DeleteSystem(ctx context.Context, id string) error
 
-	// RenameSystemByID changes the ID of a system configuration
-	RenameSystemByID(ctx context.Context, id string, newID string) error
+	// RenameSystemByID updates the display name and slug of a system configuration
+	// The canonical ID (sys-xxx) is immutable. Only display_name and slug change.
+	RenameSystemByID(ctx context.Context, systemID string, newDisplayName string) error
 
 	// GetConfigByID retrieves the system configuration for a given system ID
 	// If the ID doesn't exist, it falls back to "default"
@@ -52,14 +63,20 @@ type System interface {
 
 	// SetDefaultSystem sets a system as the default, unsetting any previous default
 	SetDefaultSystem(ctx context.Context, id string) error
+
+	// SeedDefaultSystems ensures the default system configurations exist
+	// This is idempotent - systems are only created if they don't already exist (by slug)
+	SeedDefaultSystems(ctx context.Context, presets []PresetSystem) error
 }
 
 // SystemModel represents the system table structure
-// Follows standard resource table pattern with uid, id, and timestamps
+// Follows AIP standard resource table pattern with uid, id, display_name, slug, and timestamps
 // Systems are global resources (no owner field, resource name is computed as systems/{id})
 type SystemModel struct {
 	UID         types.SystemUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
-	ID          string              `gorm:"column:id;type:varchar(255);not null;unique" json:"id"` // User-facing ID (e.g., "openai", "gemini")
+	ID          string              `gorm:"column:id;type:varchar(255);not null;unique" json:"id"` // Hash-based ID (e.g., "sys-8f3a2k9e7c1")
+	DisplayName string              `gorm:"column:display_name;type:varchar(255);not null" json:"display_name"`
+	Slug        string              `gorm:"column:slug;type:varchar(255)" json:"slug"` // URL-friendly slug (e.g., "openai", "gemini")
 	Config      map[string]any      `gorm:"column:config;type:jsonb;not null;serializer:json" json:"config"`
 	Description string              `gorm:"column:description;type:text" json:"description"`
 	IsDefault   bool                `gorm:"column:is_default;type:boolean;not null;default:false" json:"is_default"`
@@ -71,6 +88,30 @@ type SystemModel struct {
 // TableName overrides the default table name for GORM
 func (SystemModel) TableName() string {
 	return "system"
+}
+
+// BeforeCreate is a GORM hook that auto-generates UID and ID before inserting
+// ID format: "sys-{base62_hash}" following AIP resource ID convention
+func (s *SystemModel) BeforeCreate(tx *gorm.DB) error {
+	// Generate UID if not set (compare with uuid.Nil for UUID type)
+	if uuid.UUID(s.UID) == uuid.Nil {
+		s.UID = types.SystemUIDType(uuid.Must(uuid.NewV4()))
+		tx.Statement.SetColumn("UID", s.UID)
+	}
+
+	// Generate hash-based ID from UID if not set
+	if s.ID == "" {
+		s.ID = utils.GeneratePrefixedResourceID(utils.PrefixSystem, uuid.UUID(s.UID))
+		tx.Statement.SetColumn("ID", s.ID)
+	}
+
+	// Generate slug from display_name if not set
+	if s.Slug == "" && s.DisplayName != "" {
+		s.Slug = generateSlug(s.DisplayName)
+		tx.Statement.SetColumn("Slug", s.Slug)
+	}
+
+	return nil
 }
 
 // GetConfigJSON converts the Config map to SystemConfigJSON
@@ -101,6 +142,7 @@ func (s *SystemModel) GetConfigJSON() (*SystemConfigJSON, error) {
 }
 
 // GetSystem retrieves a complete system configuration by ID
+// ID is the hash-based canonical ID like "sys-a1b2c3d4e5f6g7h8"
 // Filters out soft-deleted records (automatically handled by gorm.DeletedAt)
 func (r *repository) GetSystem(ctx context.Context, id string) (*SystemModel, error) {
 	var system SystemModel
@@ -114,6 +156,44 @@ func (r *repository) GetSystem(ctx context.Context, id string) (*SystemModel, er
 	}
 
 	return &system, nil
+}
+
+// GetSystemBySlug retrieves a complete system configuration by slug
+// Slug is the URL-friendly identifier like "openai", "gemini"
+// Filters out soft-deleted records (automatically handled by gorm.DeletedAt)
+func (r *repository) GetSystemBySlug(ctx context.Context, slug string) (*SystemModel, error) {
+	var system SystemModel
+
+	err := r.db.WithContext(ctx).
+		Where("slug = ?", slug).
+		First(&system).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &system, nil
+}
+
+// GetSystemByIDOrSlug retrieves a system by ID (sys-xxx) or slug (openai, gemini)
+// This provides backward compatibility for clients that may use either format.
+// First tries to find by ID, then falls back to slug lookup.
+func (r *repository) GetSystemByIDOrSlug(ctx context.Context, idOrSlug string) (*SystemModel, error) {
+	// First try by ID (canonical hash-based IDs start with "sys-")
+	if strings.HasPrefix(idOrSlug, "sys-") {
+		system, err := r.GetSystem(ctx, idOrSlug)
+		if err == nil {
+			return system, nil
+		}
+		// If not found by ID, don't fall back - it was explicitly an ID
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		return nil, err
+	}
+
+	// Try by slug (for backward compatibility with "openai", "gemini", etc.)
+	return r.GetSystemBySlug(ctx, idOrSlug)
 }
 
 // GetSystemByUID retrieves a complete system configuration by UID
@@ -133,12 +213,15 @@ func (r *repository) GetSystemByUID(ctx context.Context, uid types.SystemUIDType
 }
 
 // CreateSystem creates a new system configuration
-// Returns error if a system with the same ID already exists
-func (r *repository) CreateSystem(ctx context.Context, id string, config map[string]any, description string) error {
+// The ID is auto-generated as "sys-{hash}" from the UID via BeforeCreate hook
+// displayName is used to generate the slug for human-readable identification
+func (r *repository) CreateSystem(ctx context.Context, displayName string, config map[string]any, description string) (*SystemModel, error) {
 	now := time.Now()
 
 	system := SystemModel{
-		ID:          id,
+		// ID is auto-generated by BeforeCreate hook
+		DisplayName: displayName,
+		// Slug is auto-generated by BeforeCreate hook from DisplayName
 		Config:      config,
 		Description: description,
 		IsDefault:   false, // New systems are not default by default
@@ -146,8 +229,12 @@ func (r *repository) CreateSystem(ctx context.Context, id string, config map[str
 		UpdateTime:  &now,
 	}
 
-	// Create will fail if ID already exists (unique constraint)
-	return r.db.WithContext(ctx).Create(&system).Error
+	// Create will auto-generate UID and ID via BeforeCreate hook
+	if err := r.db.WithContext(ctx).Create(&system).Error; err != nil {
+		return nil, err
+	}
+
+	return &system, nil
 }
 
 // UpdateSystem updates an existing system configuration
@@ -225,9 +312,21 @@ func (r *repository) ListSystems(ctx context.Context) ([]SystemModel, error) {
 
 // DeleteSystem soft-deletes a system configuration
 func (r *repository) DeleteSystem(ctx context.Context, id string) error {
-	// Prevent deletion of the openai system (default for existing KBs)
-	if id == "openai" {
-		return errors.New("cannot delete openai system configuration")
+	// First retrieve the system to check its slug
+	system, err := r.GetSystem(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("system with id %q not found", id)
+		}
+		return err
+	}
+
+	// Prevent deletion of protected systems (openai, gemini)
+	protectedSlugs := []string{"openai", "gemini"}
+	for _, slug := range protectedSlugs {
+		if system.Slug == slug {
+			return fmt.Errorf("cannot delete protected system %q (slug: %s)", id, slug)
+		}
 	}
 
 	return r.db.WithContext(ctx).
@@ -235,27 +334,62 @@ func (r *repository) DeleteSystem(ctx context.Context, id string) error {
 		Delete(&SystemModel{}).Error
 }
 
-// RenameSystemByID changes the ID of a system configuration
-func (r *repository) RenameSystemByID(ctx context.Context, id string, newID string) error {
-	// Prevent renaming the openai system
-	if id == "openai" {
-		return errors.New("cannot rename openai system configuration")
+// RenameSystemByID updates the display name and slug of a system configuration
+// The canonical ID (sys-xxx) is immutable. Only display_name and slug change.
+func (r *repository) RenameSystemByID(ctx context.Context, systemID string, newDisplayName string) error {
+	// First retrieve the system to check if it's protected
+	system, err := r.GetSystem(ctx, systemID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("system with id %q not found", systemID)
+		}
+		return err
 	}
 
+	// Prevent renaming of protected systems (openai, gemini)
+	protectedSlugs := []string{"openai", "gemini"}
+	for _, slug := range protectedSlugs {
+		if system.Slug == slug {
+			return fmt.Errorf("cannot rename protected system %q (slug: %s)", systemID, slug)
+		}
+	}
+
+	// Generate new slug from display name (lowercase, replace spaces with hyphens)
+	newSlug := generateSlug(newDisplayName)
+
+	// Update the system by ID (not slug)
 	result := r.db.WithContext(ctx).
 		Model(&SystemModel{}).
-		Where("id = ?", id).
-		Update("id", newID)
+		Where("id = ?", systemID).
+		Updates(map[string]interface{}{
+			"display_name": newDisplayName,
+			"slug":         newSlug,
+		})
 
 	if result.Error != nil {
 		return result.Error
 	}
 
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("system with id %q not found", id)
+		return fmt.Errorf("system with id %q not found", systemID)
 	}
 
 	return nil
+}
+
+// generateSlug creates a URL-friendly slug from a display name
+func generateSlug(displayName string) string {
+	// Convert to lowercase and replace spaces with hyphens
+	slug := strings.ToLower(displayName)
+	slug = strings.ReplaceAll(slug, " ", "-")
+	// Remove any characters that aren't alphanumeric or hyphens
+	var result strings.Builder
+	for _, r := range slug {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
 }
 
 // GetConfigByID retrieves the system configuration for a given system ID
@@ -264,11 +398,21 @@ func (r *repository) GetConfigByID(ctx context.Context, id string) (*SystemConfi
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Fallback to 'openai' if specific ID not found (default for existing KBs)
-			if id != "openai" {
-				return r.GetConfigByID(ctx, "openai")
-			}
-			// Final fallback to hardcoded OpenAI standard if 'openai' doesn't exist
+			// Fallback to 'openai' system by slug if specific ID not found (default for existing KBs)
+			return r.getConfigBySlugWithFallback(ctx, "openai")
+		}
+		return nil, err
+	}
+
+	return r.extractConfigFromSystem(ctx, system)
+}
+
+// getConfigBySlugWithFallback retrieves system config by slug with hardcoded fallback
+func (r *repository) getConfigBySlugWithFallback(ctx context.Context, slug string) (*SystemConfigJSON, error) {
+	system, err := r.GetSystemBySlug(ctx, slug)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Final fallback to hardcoded OpenAI standard if system doesn't exist
 			return &SystemConfigJSON{
 				RAG: RAGConfig{
 					Embedding: EmbeddingConfig{
@@ -280,14 +424,16 @@ func (r *repository) GetConfigByID(ctx context.Context, id string) (*SystemConfi
 		}
 		return nil, err
 	}
+	return r.extractConfigFromSystem(ctx, system)
+}
 
+// extractConfigFromSystem extracts SystemConfigJSON from a SystemModel
+// If the system's config is incomplete, returns hardcoded OpenAI defaults to avoid infinite recursion
+func (r *repository) extractConfigFromSystem(_ context.Context, system *SystemModel) (*SystemConfigJSON, error) {
 	// Navigate the nested config: config.rag.embedding
 	ragConfig, ok := system.Config["rag"].(map[string]any)
 	if !ok {
-		// No rag config, fallback to openai or hardcoded
-		if id != "openai" {
-			return r.GetConfigByID(ctx, "openai")
-		}
+		// No rag config, return hardcoded default to avoid infinite recursion
 		return &SystemConfigJSON{
 			RAG: RAGConfig{
 				Embedding: EmbeddingConfig{
@@ -300,10 +446,7 @@ func (r *repository) GetConfigByID(ctx context.Context, id string) (*SystemConfi
 
 	embeddingConfig, ok := ragConfig["embedding"].(map[string]any)
 	if !ok {
-		// No embedding config, fallback
-		if id != "openai" {
-			return r.GetConfigByID(ctx, "openai")
-		}
+		// No embedding config, return hardcoded default to avoid infinite recursion
 		return &SystemConfigJSON{
 			RAG: RAGConfig{
 				Embedding: EmbeddingConfig{
@@ -366,8 +509,8 @@ func (r *repository) GetDefaultSystem(ctx context.Context) (*SystemModel, error)
 	var system SystemModel
 	if err := r.db.WithContext(ctx).Where("is_default = ?", true).First(&system).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// No default system set, fallback to "openai"
-			return r.GetSystem(ctx, "openai")
+			// No default system set, fallback to "openai" by slug
+			return r.GetSystemBySlug(ctx, "openai")
 		}
 		return nil, err
 	}
@@ -401,4 +544,57 @@ func (r *repository) SetDefaultSystem(ctx context.Context, id string) error {
 
 		return nil
 	})
+}
+
+// PresetSystem defines a preset system configuration for seeding
+type PresetSystem struct {
+	DisplayName    string
+	Slug           string
+	ModelFamily    string
+	Dimensionality uint32
+	Description    string
+	IsDefault      bool
+}
+
+// SeedDefaultSystems ensures the default system configurations exist
+// This is idempotent - systems are only created if they don't already exist (by slug)
+func (r *repository) SeedDefaultSystems(ctx context.Context, presets []PresetSystem) error {
+	for _, preset := range presets {
+		// Check if system with this slug already exists
+		_, err := r.GetSystemBySlug(ctx, preset.Slug)
+		if err == nil {
+			// System already exists, skip
+			continue
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			// Unexpected error
+			return fmt.Errorf("checking existing system %q: %w", preset.Slug, err)
+		}
+
+		// System doesn't exist, create it
+		now := time.Now()
+		system := SystemModel{
+			// UID and ID are auto-generated by BeforeCreate hook
+			DisplayName: preset.DisplayName,
+			Slug:        preset.Slug, // Explicitly set slug to match preset
+			Config: map[string]any{
+				"rag": map[string]any{
+					"embedding": map[string]any{
+						"model_family":   preset.ModelFamily,
+						"dimensionality": preset.Dimensionality,
+					},
+				},
+			},
+			Description: preset.Description,
+			IsDefault:   preset.IsDefault,
+			CreateTime:  &now,
+			UpdateTime:  &now,
+		}
+
+		if err := r.db.WithContext(ctx).Create(&system).Error; err != nil {
+			return fmt.Errorf("creating system %q: %w", preset.Slug, err)
+		}
+	}
+
+	return nil
 }

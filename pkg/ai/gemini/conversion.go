@@ -10,7 +10,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/ai"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	filetype "github.com/instill-ai/x/file"
 )
@@ -199,26 +199,6 @@ func (c *Client) createContentPartWithFileAPI(ctx context.Context, content []byt
 	}
 
 	return part, "", nil
-}
-
-// createContentPart creates a genai.Part from the input content using inline data (for testing and small files)
-func (c *Client) createContentPart(content []byte, contentType string) (*genai.Part, error) {
-	// ContentType should always be set by the caller (via filetype.FileTypeToMimeType)
-	if contentType == "" {
-		err := errorsx.ErrInvalidArgument
-		return nil, errorsx.AddMessage(err, "Unsupported file type. Please upload a supported file format.")
-	}
-
-	// Create inline data part for any content type
-	// Gemini's multimodal API accepts documents, images, audio, and video
-	part := &genai.Part{
-		InlineData: &genai.Blob{
-			MIMEType: contentType,
-			Data:     content,
-		},
-	}
-
-	return part, nil
 }
 
 // extractMarkdownFromResponse extracts the markdown text from Gemini's response

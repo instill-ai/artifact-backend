@@ -92,8 +92,6 @@ github.com/bsm/ginkgo/v2 v2.12.0/go.mod h1:SwYbGRRDovPVboqFv0tPTcG1sN61LM1Z4ARdb
 github.com/bsm/gomega v1.27.10 h1:yeMWxP2pV2fG3FgAODIY8EiRE3dy0aeFYt4l7wh6yKA=
 github.com/bsm/gomega v1.27.10/go.mod h1:JyEr/xRbxbtgWNi8tIEVPUYZ5Dzef52k01W3YH0H+O0=
 github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c/go.mod h1:l/bIBLeOl9eX+wxJAzxS4TveKRtAqlyDpHjhkfO0MEI=
-github.com/catalinc/hashcash v0.0.0-20220723060415-5e3ec3e24f67 h1:fz1wNIGLjuN+0PGJa8K4dwdM8J+3C3zS++VlT/sKF14=
-github.com/catalinc/hashcash v0.0.0-20220723060415-5e3ec3e24f67/go.mod h1:ldWL6buwYCK4VqIkLbZuFbGUoJceSafm8duCEQYw9Jw=
 github.com/cenkalti/backoff/v4 v4.1.1/go.mod h1:scbssz8iZGpm3xbr14ovlUdkxfGXNInqkPWOWmG2CLw=
 github.com/cenkalti/backoff/v4 v4.2.1 h1:y4OZtCnogmCPw98Zjyt5a6+QwPLGkiQsYW5oUqylYbM=
 github.com/cenkalti/backoff/v4 v4.2.1/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
@@ -247,8 +245,6 @@ github.com/go-playground/universal-translator v0.18.1 h1:Bcnm0ZwsGyWbCzImXv+pAJn
 github.com/go-playground/universal-translator v0.18.1/go.mod h1:xekY+UJKNuX9WP91TpwSH2VMlDf28Uj24BCp08ZFTUY=
 github.com/go-playground/validator v9.31.0+incompatible h1:UA72EPEogEnq76ehGdEDp4Mit+3FDh548oRqwVgNsHA=
 github.com/go-playground/validator v9.31.0+incompatible/go.mod h1:yrEkQXlcI+PugkyDjY2bRrL/UBU4f3rvrgkN3V8JEig=
-github.com/go-resty/resty/v2 v2.16.5 h1:hBKqmWrr7uRc3euHVqmh1HTHcKn99Smr7o5spptdhTM=
-github.com/go-resty/resty/v2 v2.16.5/go.mod h1:hkJtXbA2iKHzJheXYvQ8snQES5ZLGKMwQ07xAwp/fiA=
 github.com/go-sql-driver/mysql v1.7.0/go.mod h1:OXbVy3sEdcQ2Doequ6Z5BW6fXNQTmx+9S1MCJN5yJMI=
 github.com/go-sql-driver/mysql v1.8.1 h1:LedoTUt/eveggdHS9qUFC1EFSa8bU2+1pZjSRpvNJ1Y=
 github.com/go-sql-driver/mysql v1.8.1/go.mod h1:wEBSXgmK//2ZFJyE+qWnIsVGmvmEKlqwuVSjsCm7DZg=
@@ -423,12 +419,10 @@ github.com/iancoleman/strcase v0.3.0 h1:nTXanmYxhfFAMjZL34Ov6gkzEsSJZ5DbhxWjvSAS
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
 github.com/imkira/go-interpol v1.1.0/go.mod h1:z0h2/2T3XF8kyEPpRgJ3kmNv+C43p+I/CoI+jC3w2iA=
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
-github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260113033808-6ec139ce4174 h1:2lJbQ3fQiqSbN9DHbgXjXSZEaiY07TBr7kWJQPvJjas=
-github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260113033808-6ec139ce4174/go.mod h1:bCnBosofpaUxKBuTTJM3/I3thAK37kvfBnKByjnLsl4=
-github.com/instill-ai/usage-client v0.4.1-0.20251120123627-e91a3e75f28a h1:1DbZ96/ISzQXL7bQZLdRXx0daMB/H1cbTYzsPPqe82s=
-github.com/instill-ai/usage-client v0.4.1-0.20251120123627-e91a3e75f28a/go.mod h1:MxmU1Dyl+rCb/QNAHtz1XDj5ACX6z0ouGVhffrEL148=
-github.com/instill-ai/x v0.10.1-alpha.0.20260107051543-a2f91c8735f5 h1:sMig9cAOIiCef3FTzgtnulKnZzMTOzP08c5vspZ1ZpI=
-github.com/instill-ai/x v0.10.1-alpha.0.20260107051543-a2f91c8735f5/go.mod h1:iVbuScBk1v1c2sGgifqxbhK+uW+xnw1jCXPA+O165aI=
+github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260118041154-8f06ba4d527d h1:nQTNxSL0sakFtObb6tnZqXcB/LF1dqGFoaRfX5ywDfA=
+github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260118041154-8f06ba4d527d/go.mod h1:bCnBosofpaUxKBuTTJM3/I3thAK37kvfBnKByjnLsl4=
+github.com/instill-ai/x v0.10.1-alpha.0.20260118004501-5221537d0a1d h1:YUOzft7m56Jj+FUohdmn36d8gFnDcDo/tO2ij1zrzhw=
+github.com/instill-ai/x v0.10.1-alpha.0.20260118004501-5221537d0a1d/go.mod h1:NZwVnFLteR6JvV35pCYOOO75YMzTABefbrBC6YWDF/E=
 github.com/iris-contrib/blackfriday v2.0.0+incompatible/go.mod h1:UzZ2bDEoaSGPbkg6SAB4att1aAwTmVIx/5gCVqeyUdI=
 github.com/iris-contrib/go.uuid v2.0.0+incompatible/go.mod h1:iz2lgM/1UnEf1kP0L/+fafWORmlnuysV2EMP8MW+qe0=
 github.com/iris-contrib/jade v1.1.3/go.mod h1:H/geBymxJhShH5kecoiOCSssPX7QWYH7UaeZTSWddIk=

@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 // Object interface defines database operations for objects
@@ -18,28 +20,31 @@ type Object interface {
 	CreateObject(ctx context.Context, obj ObjectModel) (*ObjectModel, error)
 	ListAllObjects(ctx context.Context, namespaceUID types.NamespaceUIDType, creatorUID types.CreatorUIDType) ([]ObjectModel, error)
 	UpdateObject(ctx context.Context, obj ObjectModel) (*ObjectModel, error)
-	DeleteObjectByDestination(ctx context.Context, destination string) error
+	DeleteObjectByStoragePath(ctx context.Context, storagePath string) error
 	DeleteObject(ctx context.Context, uid types.ObjectUIDType) error
 	GetObjectByUID(ctx context.Context, uid types.ObjectUIDType) (*ObjectModel, error)
+	GetObjectByID(ctx context.Context, namespaceUID types.NamespaceUIDType, id types.ObjectIDType) (*ObjectModel, error)
 	UpdateObjectByUpdateMap(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) (*ObjectModel, error)
 }
 
 // ObjectModel represents an object in the database
+// Field ordering follows AIP standard: name (derived), id, display_name, uid, namespace, etc.
 type ObjectModel struct {
 	UID          types.ObjectUIDType    `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	Name         string                 `gorm:"column:name;size:1040" json:"name"`
-	Size         int64                  `gorm:"column:size;" json:"size"`
-	ContentType  string                 `gorm:"column:content_type;size:255" json:"content_type"`
+	ID           types.ObjectIDType     `gorm:"column:id;size:255;not null" json:"id"`
+	DisplayName  string                 `gorm:"column:display_name;size:1040" json:"display_name"`
 	NamespaceUID types.NamespaceUIDType `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
 	CreatorUID   types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
+	CreateTime   time.Time              `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime   time.Time              `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"`
+	DeleteTime   gorm.DeletedAt         `gorm:"column:delete_time;index" json:"delete_time"`
+	Size         int64                  `gorm:"column:size" json:"size"`
+	ContentType  string                 `gorm:"column:content_type;size:255" json:"content_type"`
 	IsUploaded   bool                   `gorm:"column:is_uploaded;not null;default:false" json:"is_uploaded"`
-	// BucketName/ns:<nid>/obj:<uid>
-	Destination      string         `gorm:"column:destination;size:255" json:"destination"`
-	ObjectExpireDays *int           `gorm:"column:object_expire_days" json:"object_expire_days"`
-	LastModifiedTime *time.Time     `gorm:"column:last_modified_time" json:"last_modified_time"`
-	CreateTime       time.Time      `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime       time.Time      `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"`
-	DeleteTime       gorm.DeletedAt `gorm:"column:delete_time;index" json:"delete_time"`
+	// StoragePath is the path in blob storage (e.g., "ns-{nsUID}/obj-{objUID}")
+	StoragePath      string     `gorm:"column:storage_path;size:255" json:"storage_path"`
+	ObjectExpireDays *int       `gorm:"column:object_expire_days" json:"object_expire_days"`
+	LastModifiedTime *time.Time `gorm:"column:last_modified_time" json:"last_modified_time"`
 }
 
 // TableName overrides the default table name for GORM
@@ -47,38 +52,55 @@ func (ObjectModel) TableName() string {
 	return "object"
 }
 
+// BeforeCreate is a GORM hook that generates UID and ID if not provided (AIP standard)
+func (obj *ObjectModel) BeforeCreate(tx *gorm.DB) error {
+	// Generate UID if not provided (required before generating ID)
+	if uuid.UUID(obj.UID) == uuid.Nil {
+		obj.UID = types.ObjectUIDType(uuid.Must(uuid.NewV4()))
+		tx.Statement.SetColumn("UID", obj.UID)
+	}
+	// Generate prefixed canonical ID if not provided
+	if obj.ID == "" {
+		obj.ID = types.ObjectIDType(utils.GeneratePrefixedResourceID(utils.PrefixObject, uuid.UUID(obj.UID)))
+		tx.Statement.SetColumn("ID", obj.ID)
+	}
+	return nil
+}
+
 // ObjectColumns defines column names for the object table
 type ObjectColumns struct {
 	UID              string
-	Name             string
-	Size             string
-	ContentType      string
+	ID               string
+	DisplayName      string
 	NamespaceUID     string
 	CreatorUID       string
-	IsUploaded       string
-	Destination      string
-	ObjectExpireDays string
-	LastModifiedTime string
 	CreateTime       string
 	UpdateTime       string
 	DeleteTime       string
+	Size             string
+	ContentType      string
+	IsUploaded       string
+	StoragePath      string
+	ObjectExpireDays string
+	LastModifiedTime string
 }
 
 // ObjectColumn contains all column names for the object table
 var ObjectColumn = ObjectColumns{
 	UID:              "uid",
-	Name:             "name",
-	Size:             "size",
-	ContentType:      "content_type",
+	ID:               "id",
+	DisplayName:      "display_name",
 	NamespaceUID:     "namespace_uid",
 	CreatorUID:       "creator_uid",
-	IsUploaded:       "is_uploaded",
-	Destination:      "destination",
-	ObjectExpireDays: "object_expire_days",
-	LastModifiedTime: "last_modified_time",
 	CreateTime:       "create_time",
 	UpdateTime:       "update_time",
 	DeleteTime:       "delete_time",
+	Size:             "size",
+	ContentType:      "content_type",
+	IsUploaded:       "is_uploaded",
+	StoragePath:      "storage_path",
+	ObjectExpireDays: "object_expire_days",
+	LastModifiedTime: "last_modified_time",
 }
 
 // CreateObject inserts a new ObjectModel record into the database.
@@ -136,12 +158,12 @@ func (r *repository) DeleteObject(ctx context.Context, uid types.ObjectUIDType) 
 	return nil
 }
 
-// DeleteObjectByDestination soft deletes an object by its destination path
+// DeleteObjectByStoragePath soft deletes an object by its storage path
 // This is used when cleaning up blob objects after file deletion
-func (r *repository) DeleteObjectByDestination(ctx context.Context, destination string) error {
+func (r *repository) DeleteObjectByStoragePath(ctx context.Context, storagePath string) error {
 	deleteTime := time.Now().UTC()
-	whereString := fmt.Sprintf("%v = ? AND %v IS NULL", ObjectColumn.Destination, ObjectColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Model(&ObjectModel{}).Where(whereString, destination).Update(ObjectColumn.DeleteTime, deleteTime).Error; err != nil {
+	whereString := fmt.Sprintf("%v = ? AND %v IS NULL", ObjectColumn.StoragePath, ObjectColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Model(&ObjectModel{}).Where(whereString, storagePath).Update(ObjectColumn.DeleteTime, deleteTime).Error; err != nil {
 		return err
 	}
 	return nil
@@ -157,25 +179,42 @@ func (r *repository) GetObjectByUID(ctx context.Context, uid types.ObjectUIDType
 	return &obj, nil
 }
 
+// GetObjectByID fetches an ObjectModel record by its ID within a namespace.
+func (r *repository) GetObjectByID(ctx context.Context, namespaceUID types.NamespaceUIDType, id types.ObjectIDType) (*ObjectModel, error) {
+	var obj ObjectModel
+	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", ObjectColumn.NamespaceUID, ObjectColumn.ID, ObjectColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(whereString, namespaceUID, id).First(&obj).Error; err != nil {
+		return nil, err
+	}
+	return &obj, nil
+}
+
 // TurnObjectInDBToObjectInProto turns the object in db to the object in proto
 func TurnObjectInDBToObjectInProto(obj *ObjectModel) *artifactpb.Object {
+	// Build canonical resource name following AIP format
+	name := fmt.Sprintf("namespaces/%s/objects/%s", obj.NamespaceUID.String(), string(obj.ID))
+
 	protoObj := &artifactpb.Object{
-		Uid:         obj.UID.String(),
-		NamespaceId: obj.NamespaceUID.String(),
-		Name:         obj.Name,
-		Size:         obj.Size,
-		ContentType:  obj.ContentType,
-		Creator:      obj.CreatorUID.String(),
-		Path:         &obj.Destination,
-		IsUploaded:   obj.IsUploaded,
-		CreatedTime:  timestamppb.New(obj.CreateTime),
-		UpdatedTime:  timestamppb.New(obj.UpdateTime),
+		Name:             name,
+		Id:               string(obj.ID),
+		DisplayName:      obj.DisplayName,
+		NamespaceId:      obj.NamespaceUID.String(),
+		Creator:          obj.CreatorUID.String(),
+		CreateTime:       timestamppb.New(obj.CreateTime),
+		UpdateTime:       timestamppb.New(obj.UpdateTime),
+		Size:             obj.Size,
+		ContentType:      obj.ContentType,
+		IsUploaded:       obj.IsUploaded,
+		ObjectExpireDays: 0,
 	}
 	if obj.LastModifiedTime != nil {
 		protoObj.LastModifiedTime = timestamppb.New(*obj.LastModifiedTime)
 	}
 	if obj.ObjectExpireDays != nil {
 		protoObj.ObjectExpireDays = int32(*obj.ObjectExpireDays)
+	}
+	if obj.DeleteTime.Valid {
+		protoObj.DeleteTime = timestamppb.New(obj.DeleteTime.Time)
 	}
 	return protoObj
 }

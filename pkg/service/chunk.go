@@ -18,10 +18,10 @@ import (
 // GetChunksByFile returns the chunks of a file
 // Fetches chunk content directly from MinIO using parallel goroutines for better performance
 // Returns chunks and their content texts in the same order (use index to access matching content)
-func (s *service) GetChunksByFile(ctx context.Context, file *repository.KnowledgeBaseFileModel) (
+func (s *service) GetChunksByFile(ctx context.Context, file *repository.FileModel) (
 	types.SourceTableType,
 	types.SourceUIDType,
-	[]repository.TextChunkModel,
+	[]repository.ChunkModel,
 	[]string,
 	error,
 ) {
@@ -90,7 +90,7 @@ func (s *service) GetChunksByFile(ctx context.Context, file *repository.Knowledg
 			mu.Lock()
 			texts[idx] = string(content)
 			mu.Unlock()
-		}(i, chunk.ContentDest)
+		}(i, chunk.StoragePath)
 	}
 
 	wg.Wait()

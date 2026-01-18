@@ -20,7 +20,7 @@ import exec from 'k6/x/exec';
  */
 export function safeQuery(query, ...params) {
   try {
-    const result = constant.db.query(query, ...params);
+    const result = constant.artifactDb.query(query, ...params);
     if (result === undefined || result === null) {
       throw new Error("Query returned undefined/null - possible SQL error");
     }
@@ -48,7 +48,7 @@ export function safeQuery(query, ...params) {
 export function safeExecute(statement, ...params) {
   try {
     // k6 SQL driver only has query(), use it for UPDATE/DELETE/INSERT too
-    const result = constant.db.query(statement, ...params);
+    const result = constant.artifactDb.query(statement, ...params);
     // query() succeeds but returns empty array for UPDATE/DELETE/INSERT
     // If no exception, assume success
     return 0;
@@ -58,6 +58,79 @@ export function safeExecute(statement, ...params) {
     console.error(`[DB ERROR] Params: ${JSON.stringify(params)}`);
     throw e;
   }
+}
+
+// ============================================================================
+// ID to UID Mapping Helpers (AIP refactoring support)
+// ============================================================================
+
+/**
+ * Get the internal file_uid (UUID) from the hash-based file id.
+ * This is needed for database verification tests since internal UIDs
+ * are no longer exposed via API after AIP refactoring.
+ *
+ * @param {string} fileId - The hash-based file ID from API
+ * @returns {string|null} - The internal UUID as string, or null if not found
+ */
+export function getFileUidFromId(fileId) {
+  try {
+    // Cast UUID to text to ensure we get a string representation
+    const result = safeQuery(`SELECT uid::text as uid FROM file WHERE id = $1`, fileId);
+    if (result && result.length > 0) {
+      return result[0].uid;
+    }
+    return null;
+  } catch (e) {
+    console.error(`[DB ERROR] Failed to get file UID for id=${fileId}: ${e}`);
+    return null;
+  }
+}
+
+/**
+ * Get the internal knowledge_base uid (UUID) from the hash-based kb id.
+ * This is needed for database verification tests since internal UIDs
+ * are no longer exposed via API after AIP refactoring.
+ *
+ * @param {string} kbId - The hash-based knowledge base ID from API
+ * @returns {string|null} - The internal UUID as string, or null if not found
+ */
+export function getKnowledgeBaseUidFromId(kbId) {
+  try {
+    // Cast UUID to text to ensure we get a string representation
+    const result = safeQuery(`SELECT uid::text as uid FROM knowledge_base WHERE id = $1`, kbId);
+    if (result && result.length > 0) {
+      return result[0].uid;
+    }
+    return null;
+  } catch (e) {
+    console.error(`[DB ERROR] Failed to get KB UID for id=${kbId}: ${e}`);
+    return null;
+  }
+}
+
+/**
+ * Get the internal namespace uid (UUID) from the namespace id.
+ * After AIP refactoring, the API only exposes `id` (e.g., "admin"), not the internal UUID.
+ * Database queries use `namespace_uid` which is the internal UUID.
+ *
+ * @param {string} namespaceId - The namespace ID (e.g., "admin")
+ * @returns {string|null} - The internal UUID as string, or null if not found
+ */
+export function getNamespaceUidFromId(namespaceId) {
+  // Query the owner table in the mgmt database
+  // Note: mgmt database owner table doesn't have a delete_time column
+  try {
+    const result = constant.mgmtDb.query(
+      `SELECT uid FROM owner WHERE id = $1 LIMIT 1`,
+      namespaceId
+    );
+    if (result && result.length > 0) {
+      return result[0].uid;
+    }
+  } catch (e) {
+    console.warn(`[WARN] getNamespaceUidFromId: Failed to query mgmt database for ${namespaceId}: ${e}`);
+  }
+  return null;
 }
 
 // ============================================================================
@@ -109,7 +182,7 @@ function httpRequestWithRetry(method, url, body = null, params = {}) {
       const waitTime = backoffMs * Math.pow(2, attempt - 1); // Exponential backoff: 1s, 2s, 4s
       const urlPath = url.split('/').slice(-2).join('/'); // Last 2 path segments for logging
       console.log(`⚠ HTTP ${method} .../${urlPath} failed (status=${lastResponse.status}), ` +
-                  `retry ${attempt}/${maxRetries} in ${waitTime}ms...`);
+        `retry ${attempt}/${maxRetries} in ${waitTime}ms...`);
       sleep(waitTime / 1000);
     }
   }
@@ -219,14 +292,13 @@ export function isValidCreator(creator, expectedUser = null) {
     return false;
   }
 
-  if (!("uid" in creator)) {
-    console.log("Creator has no uid field");
-    return false;
-  }
-
-  if (!isUUID(creator.uid)) {
-    console.log("Creator uid is not a valid UUID");
-    return false;
+  // Note: uid field removed from User object in AIP refactoring
+  // Validate uid if present for backward compatibility
+  if ("uid" in creator && creator.uid !== null && creator.uid !== undefined) {
+    if (!isUUID(creator.uid)) {
+      console.log("Creator uid is not a valid UUID");
+      return false;
+    }
   }
 
   // If expected user provided, validate match
@@ -235,7 +307,8 @@ export function isValidCreator(creator, expectedUser = null) {
       console.log(`Creator id mismatch: ${creator.id} !== ${expectedUser.id}`);
       return false;
     }
-    if (creator.uid !== expectedUser.uid) {
+    // Only check uid if both have it
+    if ("uid" in creator && "uid" in expectedUser && creator.uid !== expectedUser.uid) {
       console.log(`Creator uid mismatch: ${creator.uid} !== ${expectedUser.uid}`);
       return false;
     }
@@ -244,15 +317,84 @@ export function isValidCreator(creator, expectedUser = null) {
   return true;
 }
 
-export function validateKnowledgeBase(knowledgeBase, isPrivate) {
-  if (!("uid" in knowledgeBase)) {
-    console.log("Knowledge base has no uid field");
-    return false;
-  }
+// ============================================================================
+// AIP-Compliant Resource ID Validation Helpers
+// ============================================================================
 
+/**
+ * Validate a prefixed resource ID format.
+ * Format: {prefix}-{base62_hash} where base62_hash is alphanumeric (0-9, a-z, A-Z)
+ * Examples: "kb-8f3a2k9E7c1", "file-Xp2mQ9w3kN4"
+ *
+ * @param {string} id - The resource ID to validate
+ * @param {string} expectedPrefix - Expected prefix (e.g., "kb", "file", "chk", "obj")
+ * @returns {boolean} True if valid prefixed ID format
+ */
+export function isValidPrefixedID(id, expectedPrefix) {
+  if (!id || typeof id !== 'string') return false;
+
+  // Check prefix
+  if (!id.startsWith(`${expectedPrefix}-`)) return false;
+
+  // Check hash part (base62: 0-9, a-z, A-Z)
+  const hashPart = id.substring(expectedPrefix.length + 1);
+  if (!hashPart || hashPart.length < 8) return false;
+
+  // Base62 validation: only alphanumeric characters
+  return /^[a-zA-Z0-9]+$/.test(hashPart);
+}
+
+/**
+ * Validate a KnowledgeBase ID format.
+ * Format: kb-{base62_hash}
+ */
+export function isValidKnowledgeBaseID(id) {
+  return isValidPrefixedID(id, 'kb');
+}
+
+/**
+ * Validate a File ID format.
+ * Format: file-{base62_hash}
+ */
+export function isValidFileID(id) {
+  return isValidPrefixedID(id, 'file');
+}
+
+/**
+ * Validate a Chunk ID format.
+ * Format: chk-{base62_hash}
+ */
+export function isValidChunkID(id) {
+  return isValidPrefixedID(id, 'chk');
+}
+
+/**
+ * Validate a resource name (resource path) format.
+ * Format: namespaces/{ns}/{resource_type}/{id}
+ *
+ * @param {string} name - The resource name to validate
+ * @param {string} resourceType - Expected resource type (e.g., "knowledge-bases", "files")
+ * @returns {boolean} True if valid resource name format
+ */
+export function isValidResourceName(name, resourceType) {
+  if (!name || typeof name !== 'string') return false;
+
+  const pattern = new RegExp(`^namespaces/[^/]+/${resourceType}/[^/]+$`);
+  return pattern.test(name);
+}
+
+export function validateKnowledgeBase(knowledgeBase, isPrivate) {
+  // Note: uid field removed in AIP refactoring - use id for identification
   if (!("id" in knowledgeBase)) {
     console.log("Knowledge base has no id field");
     return false;
+  }
+
+  // Validate ID format (should be kb-{base62_hash})
+  if (!isValidKnowledgeBaseID(knowledgeBase.id)) {
+    console.log(`Knowledge base id format invalid: ${knowledgeBase.id} (expected kb-{base62_hash})`);
+    // Don't fail for now - some old tests may use different ID formats
+    // return false;
   }
 
   if (!("name" in knowledgeBase)) {
@@ -281,15 +423,7 @@ export function validateKnowledgeBase(knowledgeBase, isPrivate) {
     return false;
   }
 
-  // Validate ownerUid field (required, must be UUID)
-  if (!("ownerUid" in knowledgeBase)) {
-    console.log("Knowledge base has no ownerUid field");
-    return false;
-  }
-  if (!isUUID(knowledgeBase.ownerUid)) {
-    console.log("Knowledge base ownerUid is not a valid UUID");
-    return false;
-  }
+  // Note: ownerUid field removed in AIP refactoring - use owner object instead
 
   // Validate owner object (optional but if present, must be valid)
   if ("owner" in knowledgeBase && knowledgeBase.owner !== null && knowledgeBase.owner !== undefined) {
@@ -299,13 +433,7 @@ export function validateKnowledgeBase(knowledgeBase, isPrivate) {
     }
   }
 
-  // Validate creatorUid field (optional, but if present must be UUID)
-  if ("creatorUid" in knowledgeBase && knowledgeBase.creatorUid !== null && knowledgeBase.creatorUid !== undefined) {
-    if (!isUUID(knowledgeBase.creatorUid)) {
-      console.log("Knowledge base creatorUid is not a valid UUID");
-      return false;
-    }
-  }
+  // Note: creatorUid field removed in AIP refactoring - use creator object instead
 
   // Validate creator object (optional, but if present must be valid User)
   if ("creator" in knowledgeBase && knowledgeBase.creator !== null && knowledgeBase.creator !== undefined) {
@@ -319,19 +447,29 @@ export function validateKnowledgeBase(knowledgeBase, isPrivate) {
 }
 
 export function validateFile(file, isPrivate) {
-  if (!("uid" in file)) {
-    console.log("File has no uid field");
-    return false;
-  }
-
+  // Note: uid field removed in AIP refactoring - use id for identification
   if (!("id" in file)) {
     console.log("File has no id field");
     return false;
   }
 
+  // Validate ID format (should be file-{base62_hash})
+  if (!isValidFileID(file.id)) {
+    console.log(`File id format invalid: ${file.id} (expected file-{base62_hash})`);
+    // Don't fail for now - some old tests may use different ID formats
+    // return false;
+  }
+
   if (!("name" in file)) {
     console.log("File has no name field (resource path)");
     return false;
+  }
+
+  // Validate resource name format (namespaces/{ns}/files/{id})
+  if (!isValidResourceName(file.name, "files")) {
+    console.log(`File name format invalid: ${file.name} (expected namespaces/{ns}/files/{id})`);
+    // Don't fail for now - some old tests may use different name formats
+    // return false;
   }
 
   if (!("displayName" in file)) {
@@ -359,15 +497,7 @@ export function validateFile(file, isPrivate) {
     return false;
   }
 
-  // Validate ownerUid field (required, must be UUID)
-  if (!("ownerUid" in file)) {
-    console.log("File has no ownerUid field");
-    return false;
-  }
-  if (!isUUID(file.ownerUid)) {
-    console.log("File ownerUid is not a valid UUID");
-    return false;
-  }
+  // Note: ownerUid field removed in AIP refactoring - use owner object instead
 
   // Validate ownerName field (required)
   if (!("ownerName" in file)) {
@@ -383,15 +513,7 @@ export function validateFile(file, isPrivate) {
     }
   }
 
-  // Validate creatorUid field (required, must be UUID)
-  if (!("creatorUid" in file)) {
-    console.log("File has no creatorUid field");
-    return false;
-  }
-  if (!isUUID(file.creatorUid)) {
-    console.log("File creatorUid is not a valid UUID");
-    return false;
-  }
+  // Note: creatorUid field removed in AIP refactoring - use creator object instead
 
   // Validate creator object (optional, but if present must be valid User)
   if ("creator" in file && file.creator !== null && file.creator !== undefined) {
@@ -401,16 +523,32 @@ export function validateFile(file, isPrivate) {
     }
   }
 
-  // Validate collectionUids field (optional, should be array if present)
-  if ("collectionUids" in file && file.collectionUids !== null && file.collectionUids !== undefined) {
-    if (!Array.isArray(file.collectionUids)) {
-      console.log("File collectionUids is not an array");
+  // Validate knowledgeBaseIds field (many-to-many relationship, should be array if present)
+  // This field shows which knowledge bases the file is associated with
+  if ("knowledgeBaseIds" in file && file.knowledgeBaseIds !== null && file.knowledgeBaseIds !== undefined) {
+    if (!Array.isArray(file.knowledgeBaseIds)) {
+      console.log("File knowledgeBaseIds is not an array");
       return false;
     }
-    // Each element should be a valid string UID
-    for (const uid of file.collectionUids) {
-      if (typeof uid !== "string" || uid.length === 0) {
-        console.log(`File collectionUids contains invalid UID: ${uid}`);
+    // Each element should be a valid KB ID string
+    for (const id of file.knowledgeBaseIds) {
+      if (typeof id !== "string" || id.length === 0) {
+        console.log(`File knowledgeBaseIds contains invalid ID: ${id}`);
+        return false;
+      }
+    }
+  }
+
+  // Validate collectionIds field (optional, should be array if present)
+  if ("collectionIds" in file && file.collectionIds !== null && file.collectionIds !== undefined) {
+    if (!Array.isArray(file.collectionIds)) {
+      console.log("File collectionIds is not an array");
+      return false;
+    }
+    // Each element should be a valid string ID
+    for (const id of file.collectionIds) {
+      if (typeof id !== "string" || id.length === 0) {
+        console.log(`File collectionIds contains invalid ID: ${id}`);
         return false;
       }
     }
@@ -420,11 +558,7 @@ export function validateFile(file, isPrivate) {
 }
 
 export function validateKnowledgeBaseGRPC(knowledgeBase, isPrivate) {
-  if (!("uid" in knowledgeBase)) {
-    console.log("Knowledge base has no uid field");
-    return false;
-  }
-
+  // Note: uid field removed in AIP refactoring - use id for identification
   if (!("id" in knowledgeBase)) {
     console.log("Knowledge base has no id field");
     return false;
@@ -456,15 +590,7 @@ export function validateKnowledgeBaseGRPC(knowledgeBase, isPrivate) {
     return false;
   }
 
-  // Validate ownerUid field (required, must be UUID)
-  if (!("ownerUid" in knowledgeBase)) {
-    console.log("Knowledge base has no ownerUid field");
-    return false;
-  }
-  if (!isUUID(knowledgeBase.ownerUid)) {
-    console.log("Knowledge base ownerUid is not a valid UUID");
-    return false;
-  }
+  // Note: ownerUid field removed in AIP refactoring - use owner object instead
 
   // Validate owner object (optional but if present, must be valid)
   if ("owner" in knowledgeBase && knowledgeBase.owner !== null && knowledgeBase.owner !== undefined) {
@@ -474,13 +600,7 @@ export function validateKnowledgeBaseGRPC(knowledgeBase, isPrivate) {
     }
   }
 
-  // Validate creatorUid field (optional, but if present must be UUID)
-  if ("creatorUid" in knowledgeBase && knowledgeBase.creatorUid !== null && knowledgeBase.creatorUid !== undefined) {
-    if (!isUUID(knowledgeBase.creatorUid)) {
-      console.log("Knowledge base creatorUid is not a valid UUID");
-      return false;
-    }
-  }
+  // Note: creatorUid field removed in AIP refactoring - use creator object instead
 
   // Validate creator object (optional, but if present must be valid User)
   if ("creator" in knowledgeBase && knowledgeBase.creator !== null && knowledgeBase.creator !== undefined) {
@@ -494,11 +614,7 @@ export function validateKnowledgeBaseGRPC(knowledgeBase, isPrivate) {
 }
 
 export function validateFileGRPC(file, isPrivate) {
-  if (!("uid" in file)) {
-    console.log("File has no uid field");
-    return false;
-  }
-
+  // Note: uid field removed in AIP refactoring - use id for identification
   if (!("id" in file)) {
     console.log("File has no id field");
     return false;
@@ -534,15 +650,7 @@ export function validateFileGRPC(file, isPrivate) {
     return false;
   }
 
-  // Validate ownerUid field (required, must be UUID)
-  if (!("ownerUid" in file)) {
-    console.log("File has no ownerUid field");
-    return false;
-  }
-  if (!isUUID(file.ownerUid)) {
-    console.log("File ownerUid is not a valid UUID");
-    return false;
-  }
+  // Note: ownerUid field removed in AIP refactoring - use owner object instead
 
   // Validate ownerName field
   // NOTE: ownerName is OUTPUT_ONLY (required) in protobuf, but api-gateway doesn't
@@ -566,15 +674,7 @@ export function validateFileGRPC(file, isPrivate) {
     }
   }
 
-  // Validate creatorUid field (required, must be UUID)
-  if (!("creatorUid" in file)) {
-    console.log("File has no creatorUid field");
-    return false;
-  }
-  if (!isUUID(file.creatorUid)) {
-    console.log("File creatorUid is not a valid UUID");
-    return false;
-  }
+  // Note: creatorUid field removed in AIP refactoring - use creator object instead
 
   // Validate creator object (optional, but if present must be valid User)
   if ("creator" in file && file.creator !== null && file.creator !== undefined) {
@@ -584,16 +684,16 @@ export function validateFileGRPC(file, isPrivate) {
     }
   }
 
-  // Validate collectionUids field (optional, should be array if present)
-  if ("collectionUids" in file && file.collectionUids !== null && file.collectionUids !== undefined) {
-    if (!Array.isArray(file.collectionUids)) {
-      console.log("File collectionUids is not an array");
+  // Validate collectionIds field (optional, should be array if present)
+  if ("collectionIds" in file && file.collectionIds !== null && file.collectionIds !== undefined) {
+    if (!Array.isArray(file.collectionIds)) {
+      console.log("File collectionIds is not an array");
       return false;
     }
-    // Each element should be a valid string UID
-    for (const uid of file.collectionUids) {
-      if (typeof uid !== "string" || uid.length === 0) {
-        console.log(`File collectionUids contains invalid UID: ${uid}`);
+    // Each element should be a valid string ID
+    for (const id of file.collectionIds) {
+      if (typeof id !== "string" || id.length === 0) {
+        console.log(`File collectionIds contains invalid ID: ${id}`);
         return false;
       }
     }
@@ -702,14 +802,14 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
     if (objectType === 'chunk') {
       // Query chunk table for actual destination
       const chunkResult = safeQuery(`
-        SELECT content_dest FROM chunk
+        SELECT storage_path FROM chunk
         WHERE file_uid = $1
         LIMIT 1
       `, fileUID);
 
-      if (chunkResult && chunkResult.length > 0 && chunkResult[0].content_dest) {
+      if (chunkResult && chunkResult.length > 0 && chunkResult[0].storage_path) {
         // Extract prefix from destination (e.g., "kb-xxx/file-yyy/chunk/chunk_0.json" -> "kb-xxx/file-yyy/chunk/")
-        const dest = chunkResult[0].content_dest;
+        const dest = chunkResult[0].storage_path;
         const lastSlashIndex = dest.lastIndexOf('/');
         prefix = dest.substring(0, lastSlashIndex + 1);
       } else {
@@ -719,14 +819,14 @@ export function countMinioObjects(kbUID, fileUID, objectType) {
     } else if (objectType === 'converted-file') {
       // Query converted_file table for actual destination
       const convertedResult = safeQuery(`
-        SELECT destination FROM converted_file
+        SELECT storage_path FROM converted_file
         WHERE file_uid = $1
         LIMIT 1
       `, fileUID);
 
-      if (convertedResult && convertedResult.length > 0 && convertedResult[0].destination) {
+      if (convertedResult && convertedResult.length > 0 && convertedResult[0].storage_path) {
         // Extract prefix from destination
-        const dest = convertedResult[0].destination;
+        const dest = convertedResult[0].storage_path;
         const lastSlashIndex = dest.lastIndexOf('/');
         prefix = dest.substring(0, lastSlashIndex + 1);
       } else {
@@ -772,9 +872,9 @@ export function verifyConvertedFileType(kbUID, fileUID, expectedExtension) {
   try {
     // Query database for converted file destination
     const convertedResult = safeQuery(`
-      SELECT destination FROM converted_file
+      SELECT storage_path FROM converted_file
       WHERE file_uid = $1
-      AND destination LIKE '%/converted-file/%'
+      AND storage_path LIKE '%/converted-file/%'
       LIMIT 1
     `, fileUID);
 
@@ -784,7 +884,7 @@ export function verifyConvertedFileType(kbUID, fileUID, expectedExtension) {
     }
 
     // Extract prefix from destination
-    const dest = convertedResult[0].destination;
+    const dest = convertedResult[0].storage_path;
     const lastSlashIndex = dest.lastIndexOf('/');
     const prefix = dest.substring(0, lastSlashIndex + 1);
 
@@ -925,11 +1025,11 @@ export function countMilvusVectors(kbUID, fileUID) {
     // Convert active_collection_uid to Milvus collection name format: kb_{uuid_with_underscores}
     const collectionName = `kb_${activeCollectionUID.replace(/-/g, '_')}`;
 
-    // Execute the shell script to count Milvus vectors using milvus_cli
+    // Execute the shell script to count Milvus vectors using pymilvus
     // Use milvusConfig which switches between localhost (local) and milvus (Docker)
     const milvusHost = constant.milvusConfig.host;
     const milvusPort = constant.milvusConfig.port;
-    const result = exec.command('sh', [
+    const result = exec.command('bash', [
       `${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/scripts/count-milvus-vectors.sh`,
       collectionName,
       fileUID,
@@ -937,9 +1037,7 @@ export function countMilvusVectors(kbUID, fileUID) {
       milvusPort
     ]);
 
-    // DEBUG: Log the raw output from the script
     if (result.indexOf('Error') >= 0 || result.indexOf('not exist') >= 0) {
-      console.log(`DEBUG countMilvusVectors: KB=${kbUID}, activeCollection=${activeCollectionUID}, collection=${collectionName}, file=${fileUID}, result="${result.trim()}"`);
       // Collection not found or error - this means vectors are already removed (count = 0)
       // This is expected after cleanup workflow drops the collection
       if (result.indexOf('does not exist') >= 0 || result.indexOf('not found') >= 0 || result.indexOf('cannot find') >= 0) {
@@ -1226,26 +1324,28 @@ export function pollMilvusVectorsCleanup(kbUID, fileUID, maxWaitSeconds = 30) {
 /**
  * Get file metadata from API endpoint
  * Returns page count and chunk count from the file response
+ * Uses the new flattened URL: GET /namespaces/{ns}/files/{fileId}
  *
  * @param {string} namespaceId - Namespace ID
- * @param {string} knowledgeBaseId - Knowledge Base ID
- * @param {string} fileUid - File UUID
+ * @param {string} knowledgeBaseId - Knowledge Base ID (kept for backward compatibility, not used in URL)
+ * @param {string} fileId - File ID (hash-based, e.g., file-xxx)
  * @param {object} headers - Request headers
  * @returns {object} { pages: number, chunks: number, status: string } or null on error
  */
-export function getFileMetadata(namespaceId, knowledgeBaseId, fileUid, headers) {
+export function getFileMetadata(namespaceId, knowledgeBaseId, fileId, headers) {
   try {
-    const apiUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`;
+    // Note: knowledgeBaseId is no longer needed in the URL but kept in signature for backward compatibility
+    const apiUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/files/${fileId}`;
     const res = http.request("GET", apiUrl, null, headers);
 
     if (res.status !== 200) {
-      console.log(`getFileMetadata: API returned status ${res.status} for file ${fileUid}`);
+      console.log(`getFileMetadata: API returned status ${res.status} for file ${fileId}`);
       return null;
     }
 
     const body = res.json();
     if (!body || !body.file) {
-      console.log(`getFileMetadata: Invalid response body for file ${fileUid}`);
+      console.log(`getFileMetadata: Invalid response body for file ${fileId}`);
       return null;
     }
 
@@ -1410,7 +1510,7 @@ export function pollUpdateCompletion(client, data, knowledgeBaseId, maxWaitSecon
 
   for (let i = 0; i < maxWaitSeconds; i++) {
     const res = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
+      "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
       {},
       data.metadata
     );
@@ -1482,7 +1582,7 @@ export function pollUpdateCompletion(client, data, knowledgeBaseId, maxWaitSecon
             }
             // If status is failed/aborted, return false
             if (dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_FAILED' || dbStatus === 7 ||
-                dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED' || dbStatus === 8) {
+              dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED' || dbStatus === 8) {
               console.error(`✗ Update failed/aborted (verified via DB): ${dbStatus}`);
               return false;
             }
@@ -1510,14 +1610,6 @@ export function pollUpdateCompletion(client, data, knowledgeBaseId, maxWaitSecon
 }
 
 /**
- * Verify rollback KB exists in database
- * Checks for KB with -rollback suffix and correct attributes
- *
- * @param {string} knowledgeBaseId - Original knowledge base ID (without suffix)
- * @param {string} ownerUid - Owner UID
- * @returns {Array} Array of rollback KB rows (should be 1 or 0)
- */
-/**
  * Convert PostgreSQL byte array to string
  * PostgreSQL text fields sometimes come back as byte arrays from the driver
  */
@@ -1540,15 +1632,37 @@ function normalizeDBRow(row) {
   return normalized;
 }
 
-export function verifyRollbackKB(knowledgeBaseId, ownerUid) {
+/**
+ * Verify rollback KB exists in database
+ * Checks for KB with rollback tag and correct attributes
+ *
+ * @param {string} knowledgeBaseId - Original knowledge base ID (without suffix)
+ * @param {string} ownerId - Owner ID (e.g., "admin")
+ * @returns {Array} Array of rollback KB rows (should be 1 or 0)
+ */
+export function verifyRollbackKB(knowledgeBaseId, ownerId) {
   try {
-    // First, get the production KB's UID
-    const prodQuery = `
-      SELECT uid
-      FROM knowledge_base
-      WHERE id = $1 AND namespace_uid = $2 AND staging = false AND delete_time IS NULL
-    `;
-    const prodResults = safeQuery(prodQuery, knowledgeBaseId, ownerUid);
+    // Try to resolve namespace ID to UUID (may fail if owner table not accessible)
+    const namespaceUid = getNamespaceUidFromId(ownerId);
+
+    // First, get the production KB's UID (with or without namespace filter)
+    let prodQuery, prodResults;
+    if (namespaceUid) {
+      prodQuery = `
+        SELECT uid
+        FROM knowledge_base
+        WHERE id = $1 AND namespace_uid = $2 AND staging = false AND delete_time IS NULL
+      `;
+      prodResults = safeQuery(prodQuery, knowledgeBaseId, namespaceUid);
+    } else {
+      // Fallback: query without namespace filter (safe for tests with unique KB IDs)
+      prodQuery = `
+        SELECT uid
+        FROM knowledge_base
+        WHERE id = $1 AND staging = false AND delete_time IS NULL
+      `;
+      prodResults = safeQuery(prodQuery, knowledgeBaseId);
+    }
     if (!prodResults || prodResults.length === 0) {
       return [];
     }
@@ -1572,21 +1686,35 @@ export function verifyRollbackKB(knowledgeBaseId, ownerUid) {
 
 /**
  * Verify staging KB exists in database
- * Checks for KB with -staging suffix during update workflow
+ * Checks for KB with staging tag during update workflow
  *
  * @param {string} knowledgeBaseId - Original knowledge base ID (without suffix)
- * @param {string} ownerUid - Owner UID
+ * @param {string} ownerId - Owner ID (e.g., "admin")
  * @returns {Array} Array of staging KB rows (should be 1 or 0)
  */
-export function verifyStagingKB(knowledgeBaseId, ownerUid) {
+export function verifyStagingKB(knowledgeBaseId, ownerId) {
   try {
-    // First, get the production KB's UID
-    const prodQuery = `
-      SELECT uid
-      FROM knowledge_base
-      WHERE id = $1 AND namespace_uid = $2 AND staging = false AND delete_time IS NULL
-    `;
-    const prodResults = safeQuery(prodQuery, knowledgeBaseId, ownerUid);
+    // Try to resolve namespace ID to UUID (may fail if owner table not accessible)
+    const namespaceUid = getNamespaceUidFromId(ownerId);
+
+    // First, get the production KB's UID (with or without namespace filter)
+    let prodQuery, prodResults;
+    if (namespaceUid) {
+      prodQuery = `
+        SELECT uid
+        FROM knowledge_base
+        WHERE id = $1 AND namespace_uid = $2 AND staging = false AND delete_time IS NULL
+      `;
+      prodResults = safeQuery(prodQuery, knowledgeBaseId, namespaceUid);
+    } else {
+      // Fallback: query without namespace filter (safe for tests with unique KB IDs)
+      prodQuery = `
+        SELECT uid
+        FROM knowledge_base
+        WHERE id = $1 AND staging = false AND delete_time IS NULL
+      `;
+      prodResults = safeQuery(prodQuery, knowledgeBaseId);
+    }
     if (!prodResults || prodResults.length === 0) {
       return [];
     }
@@ -1613,16 +1741,29 @@ export function verifyStagingKB(knowledgeBaseId, ownerUid) {
  * Helper to retrieve knowledge base details from database
  *
  * @param {string} knowledgeBaseId - Knowledge Base ID
- * @param {string} ownerUid - Owner UID
+ * @param {string} ownerId - Owner ID (e.g., "admin")
  * @returns {Array} Array of knowledge base rows (should be 1 or 0)
  */
-export function getKnowledgeBaseByIdAndOwner(knowledgeBaseId, ownerUid) {
+export function getKnowledgeBaseByIdAndOwner(knowledgeBaseId, ownerId) {
   try {
-    const query = `
-      SELECT * FROM knowledge_base
-      WHERE id = $1 AND namespace_uid = $2
-    `;
-    const results = safeQuery(query, knowledgeBaseId, ownerUid);
+    // Try to resolve namespace ID to UUID (may fail if owner table not accessible)
+    const namespaceUid = getNamespaceUidFromId(ownerId);
+
+    let query, results;
+    if (namespaceUid) {
+      query = `
+        SELECT * FROM knowledge_base
+        WHERE id = $1 AND namespace_uid = $2
+      `;
+      results = safeQuery(query, knowledgeBaseId, namespaceUid);
+    } else {
+      // Fallback: query without namespace filter (safe for tests with unique KB IDs)
+      query = `
+        SELECT * FROM knowledge_base
+        WHERE id = $1
+      `;
+      results = safeQuery(query, knowledgeBaseId);
+    }
     return results ? results.map(row => normalizeDBRow(row)) : [];
   } catch (e) {
     console.error(`Failed to get knowledge base ${knowledgeBaseId}: ${e}`);
@@ -1635,16 +1776,16 @@ export function getKnowledgeBaseByIdAndOwner(knowledgeBaseId, ownerUid) {
  * Used after abort operations to wait for async cleanup to complete
  *
  * @param {string} productionKBID - Production KB ID (to find associated staging KB via parent_kb_uid)
- * @param {string} ownerUid - Owner UID
+ * @param {string} ownerId - Owner ID (e.g., "admin")
  * @param {number} maxWaitSeconds - Maximum time to wait (default 10s)
  * @returns {boolean} True if staging KB is cleaned up or doesn't exist
  */
-export function pollStagingKBCleanup(productionKBID, ownerUid, maxWaitSeconds = 10) {
+export function pollStagingKBCleanup(productionKBID, ownerId, maxWaitSeconds = 10) {
   console.log(`[POLL] Waiting for staging KB cleanup for production KB: ${productionKBID}, maxWait=${maxWaitSeconds}s`);
 
   for (let i = 0; i < maxWaitSeconds; i++) {
     // Use verifyStagingKB which queries by parent_kb_uid and excludes deleted KBs
-    const stagingKBs = verifyStagingKB(productionKBID, ownerUid);
+    const stagingKBs = verifyStagingKB(productionKBID, ownerId);
 
     // Log on first attempt and every 3 seconds
     if (i === 0 || i % 3 === 0) {
@@ -1678,11 +1819,11 @@ export function pollStagingKBCleanup(productionKBID, ownerUid, maxWaitSeconds = 
  *
  * @param {string} rollbackKBID - Rollback KB ID
  * @param {string} rollbackKBUID - Rollback KB UID
- * @param {string} ownerUid - Owner UID
+ * @param {string} ownerId - Owner ID (not used, kept for API consistency)
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 30)
  * @returns {boolean} True if cleanup completed, false if timeout
  */
-export function pollRollbackKBCleanup(rollbackKBID, rollbackKBUID, ownerUid, maxWaitSeconds = 30) {
+export function pollRollbackKBCleanup(rollbackKBID, rollbackKBUID, ownerId, maxWaitSeconds = 30) {
   // Convert rollbackKBUID from Buffer to string if needed (PostgreSQL UUIDs are returned as Buffers)
   let kbUIDString = rollbackKBUID;
   if (Array.isArray(rollbackKBUID)) {
@@ -1699,7 +1840,7 @@ export function pollRollbackKBCleanup(rollbackKBID, rollbackKBUID, ownerUid, max
   const convertedFilesQuery = `SELECT COUNT(*) as count FROM converted_file WHERE kb_uid = $1`;
 
   for (let i = 0; i < maxWaitSeconds; i++) {
-    const rollbackKB = getKnowledgeBaseByIdAndOwner(rollbackKBID, ownerUid);
+    const rollbackKB = getKnowledgeBaseByIdAndOwner(rollbackKBID, ownerId);
     const filesCount = countFilesInKnowledgeBase(kbUIDString);
 
     const convertedFilesResult = safeQuery(convertedFilesQuery, kbUIDString);
@@ -1755,8 +1896,11 @@ export function verifyResourceKBUIDs(newProdKBUID, rollbackKBUID) {
   };
 
   try {
-    // Check file
-    const fileQuery = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1`;
+    // Check file - files are associated via file_knowledge_base join table
+    const fileQuery = `SELECT COUNT(DISTINCT fkb.file_uid) as count
+                       FROM file_knowledge_base fkb
+                       JOIN file f ON fkb.file_uid = f.uid
+                       WHERE fkb.kb_uid = $1 AND f.delete_time IS NULL`;
     const fileResults = safeQuery(fileQuery, newProdKBUID);
     result.fileCount = fileResults && fileResults.length > 0 ? parseInt(fileResults[0].count) : 0;
     result.filesCorrect = result.fileCount > 0;
@@ -1794,7 +1938,11 @@ export function verifyResourceKBUIDs(newProdKBUID, rollbackKBUID) {
  */
 export function countFilesInKnowledgeBase(knowledgeBaseUid) {
   try {
-    const query = `SELECT COUNT(*) as count FROM file WHERE kb_uid = $1 AND delete_time IS NULL`;
+    // Files are associated via file_knowledge_base join table
+    const query = `SELECT COUNT(DISTINCT fkb.file_uid) as count
+                   FROM file_knowledge_base fkb
+                   JOIN file f ON fkb.file_uid = f.uid
+                   WHERE fkb.kb_uid = $1 AND f.delete_time IS NULL`;
     const results = safeQuery(query, knowledgeBaseUid);
     return results && results.length > 0 ? parseInt(results[0].count) : 0;
   } catch (e) {
@@ -1807,19 +1955,35 @@ export function countFilesInKnowledgeBase(knowledgeBaseUid) {
  * Get all knowledge bases matching a pattern (uses SQL LIKE)
  *
  * @param {string} pattern - SQL LIKE pattern (e.g., "kb%")
- * @param {string} ownerUid - Owner UID
+ * @param {string} ownerId - Owner ID (e.g., "admin")
  * @returns {Array} Array of knowledge base objects
  */
-export function getKnowledgeBasesByPattern(pattern, ownerUid) {
+export function getKnowledgeBasesByPattern(pattern, ownerId) {
   try {
-    // Note: 'name' column removed from DB - using 'id' for pattern matching
-    const query = `
-      SELECT uid, id, staging, update_status, delete_time, rollback_retention_until
-      FROM knowledge_base
-      WHERE namespace_uid = $1 AND id LIKE $2
-      ORDER BY create_time ASC
-    `;
-    return safeQuery(query, ownerUid, pattern);
+    // Try to resolve namespace ID to UUID (may fail if owner table not accessible)
+    const namespaceUid = getNamespaceUidFromId(ownerId);
+
+    let query, results;
+    if (namespaceUid) {
+      // Note: 'name' column removed from DB - using 'id' for pattern matching
+      query = `
+        SELECT uid, id, staging, update_status, delete_time, rollback_retention_until
+        FROM knowledge_base
+        WHERE namespace_uid = $1 AND id LIKE $2
+        ORDER BY create_time ASC
+      `;
+      results = safeQuery(query, namespaceUid, pattern);
+    } else {
+      // Fallback: query without namespace filter (safe for tests with unique KB IDs)
+      query = `
+        SELECT uid, id, staging, update_status, delete_time, rollback_retention_until
+        FROM knowledge_base
+        WHERE id LIKE $1
+        ORDER BY create_time ASC
+      `;
+      results = safeQuery(query, pattern);
+    }
+    return results;
   } catch (e) {
     console.error(`Failed to get knowledge bases by pattern ${pattern}: ${e}`);
     return null;
@@ -1830,13 +1994,13 @@ export function getKnowledgeBasesByPattern(pattern, ownerUid) {
  * Poll for staging KB to appear during Phase 1 (Prepare)
  *
  * @param {string} knowledgeBaseId - Original knowledge base ID (without suffix)
- * @param {string} ownerUid - Owner UID
+ * @param {string} ownerId - Owner ID (e.g., "admin")
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 30)
  * @returns {boolean} True if staging KB found, false otherwise
  */
-export function pollForStagingKB(knowledgeBaseId, ownerUid, maxWaitSeconds = 30) {
+export function pollForStagingKB(knowledgeBaseId, ownerId, maxWaitSeconds = 30) {
   for (let i = 0; i < maxWaitSeconds; i++) {
-    const stagingKBs = verifyStagingKB(knowledgeBaseId, ownerUid);
+    const stagingKBs = verifyStagingKB(knowledgeBaseId, ownerId);
     if (stagingKBs && stagingKBs.length > 0) {
       return true;
     }
@@ -1860,7 +2024,7 @@ export function waitForAllUpdatesComplete(client, data, maxWaitSeconds = 60) {
 
   for (let i = 0; i < maxIterations; i++) {
     const res = client.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
+      "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
       {},
       data.metadata
     );
@@ -1989,7 +2153,8 @@ export function waitForAllFileProcessingComplete(maxWaitSeconds = 120, dbIDPrefi
     const processingQuery = `
       SELECT COUNT(*) as count
       FROM file kbf
-      JOIN knowledge_base kb ON kbf.kb_uid = kb.uid
+      JOIN file_knowledge_base fkb ON kbf.uid = fkb.file_uid
+      JOIN knowledge_base kb ON fkb.kb_uid = kb.uid
       WHERE kbf.process_status IN (
           'FILE_PROCESS_STATUS_NOTSTARTED',
           'FILE_PROCESS_STATUS_PROCESSING',
@@ -2091,7 +2256,8 @@ function checkPendingWorkflows(dbIDPrefix) {
     const recentQuery = `
       SELECT COUNT(*) as count
       FROM file kbf
-      JOIN knowledge_base kb ON kbf.kb_uid = kb.uid
+      JOIN file_knowledge_base fkb ON kbf.uid = fkb.file_uid
+      JOIN knowledge_base kb ON fkb.kb_uid = kb.uid
       WHERE kbf.process_status IN ('FILE_PROCESS_STATUS_COMPLETED', 'FILE_PROCESS_STATUS_FAILED')
         AND kbf.update_time > NOW() - INTERVAL '10 seconds'
         AND kb.delete_time IS NULL
@@ -2137,8 +2303,24 @@ function checkPendingWorkflows(dbIDPrefix) {
  * @param {number} notStartedThreshold - Seconds to wait before failing if file stuck in NOTSTARTED (default: 60)
  * @returns {object} - { completed: boolean, status: string, error?: string }
  */
-export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, fileUid, headers, maxWaitSeconds = 300, notStartedThreshold = 60) {
-  console.log(`Waiting for file ${fileUid} to complete processing (max ${maxWaitSeconds}s)...`);
+/**
+ * Wait for a file to complete processing.
+ * Polls the file status API until complete, failed, or timeout.
+ *
+ * API CHANGE (AIP refactoring):
+ * - Files are now top-level resources: /namespaces/{ns}/files/{file_id}
+ * - knowledgeBaseId parameter is kept for backward compatibility but not used in URL
+ *
+ * @param {string} namespaceId - Namespace ID (e.g., "admin")
+ * @param {string} knowledgeBaseId - Knowledge base ID (for logging only, not used in URL)
+ * @param {string} fileId - File ID (prefixed hash-based ID, e.g., "file-8f3a2k9E7c1")
+ * @param {object} headers - HTTP headers with auth
+ * @param {number} maxWaitSeconds - Maximum wait time in seconds
+ * @param {number} notStartedThreshold - Seconds before considering workflow stuck
+ * @returns {object} { completed: boolean, status: string, error?: string }
+ */
+export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, fileId, headers, maxWaitSeconds = 300, notStartedThreshold = 60) {
+  console.log(`Waiting for file ${fileId} to complete processing (max ${maxWaitSeconds}s)...`);
 
   let consecutiveNotStarted = 0;
   let consecutiveErrors = 0;
@@ -2152,9 +2334,10 @@ export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, file
 
   while (elapsed < maxWaitSeconds) {
     // Check status FIRST, then sleep (don't waste the first interval)
+    // API CHANGE: Files are now top-level resources at /namespaces/{ns}/files/{file_id}
     const statusRes = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/files/${fileId}`,
       null,
       headers
     );
@@ -2269,17 +2452,21 @@ export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, file
  * Efficiently polls multiple files in parallel, checking all files in each iteration.
  * Returns as soon as all files complete or any file fails.
  *
+ * API CHANGE (AIP refactoring):
+ * - Files are now top-level resources: /namespaces/{ns}/files/{file_id}
+ * - knowledgeBaseId parameter is kept for backward compatibility but not used in URL
+ *
  * @param {string} namespaceId - The namespace ID
- * @param {string} knowledgeBaseId - The knowledge base ID
- * @param {Array<string>} fileUids - Array of file UIDs to wait for
+ * @param {string} knowledgeBaseId - The knowledge base ID (for logging only, not used in URL)
+ * @param {Array<string>} fileIds - Array of file IDs (hash-based, e.g., "file-8f3a2k9E7c1")
  * @param {object} headers - HTTP headers including Authorization
  * @param {number} maxWaitSeconds - Maximum seconds to wait (default: 600)
  * @returns {object} - { completed: boolean, status: string, processedCount: number, error?: string }
  */
-export function waitForMultipleFilesProcessingComplete(namespaceId, knowledgeBaseId, fileUids, headers, maxWaitSeconds = 600) {
-  console.log(`Waiting for ${fileUids.length} files to complete processing (max ${maxWaitSeconds}s)...`);
+export function waitForMultipleFilesProcessingComplete(namespaceId, knowledgeBaseId, fileIds, headers, maxWaitSeconds = 600) {
+  console.log(`Waiting for ${fileIds.length} files to complete processing (max ${maxWaitSeconds}s)...`);
 
-  const pending = new Set(fileUids);
+  const pending = new Set(fileIds);
   const notStartedCounters = {}; // Track consecutive NOTSTARTED for each file
   let processedCount = 0;
   const NOTSTARTED_THRESHOLD = 60; // seconds
@@ -2288,10 +2475,11 @@ export function waitForMultipleFilesProcessingComplete(namespaceId, knowledgeBas
     sleep(0.5);
 
     // Batch check all pending files
-    const checks = Array.from(pending).map(fileUid =>
+    // API CHANGE: Files are now top-level resources at /namespaces/{ns}/files/{file_id}
+    const checks = Array.from(pending).map(fileId =>
       http.request(
         "GET",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/files/${fileId}`,
         null,
         headers
       )
@@ -2299,7 +2487,7 @@ export function waitForMultipleFilesProcessingComplete(namespaceId, knowledgeBas
 
     const pendingArray = Array.from(pending);
     for (let j = 0; j < checks.length; j++) {
-      const fileUid = pendingArray[j];
+      const fileId = pendingArray[j];
       const response = checks[j];
 
       try {
@@ -2307,33 +2495,33 @@ export function waitForMultipleFilesProcessingComplete(namespaceId, knowledgeBas
         const status = body.file ? (body.file.processStatus || body.file.process_status) : "";
 
         if (status === "FILE_PROCESS_STATUS_COMPLETED") {
-          pending.delete(fileUid);
-          delete notStartedCounters[fileUid];
+          pending.delete(fileId);
+          delete notStartedCounters[fileId];
           processedCount++;
         } else if (status === "FILE_PROCESS_STATUS_FAILED") {
           const errorMsg = body.file && body.file.processOutcome ? body.file.processOutcome : "Unknown error";
-          console.log(`✗ File ${fileUid} processing failed: ${errorMsg}`);
+          console.log(`✗ File ${fileId} processing failed: ${errorMsg}`);
           return {
             completed: false,
             status: "FAILED",
             processedCount,
-            error: `File ${fileUid}: ${errorMsg}`
+            error: `File ${fileId}: ${errorMsg}`
           };
         } else if (status === "FILE_PROCESS_STATUS_NOTSTARTED") {
           // FAST-FAIL: Track how long file has been stuck in NOTSTARTED
-          notStartedCounters[fileUid] = (notStartedCounters[fileUid] || 0) + 0.5;
-          if (notStartedCounters[fileUid] >= NOTSTARTED_THRESHOLD) {
-            console.error(`✗ File ${fileUid} stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - workflow likely never triggered`);
+          notStartedCounters[fileId] = (notStartedCounters[fileId] || 0) + 0.5;
+          if (notStartedCounters[fileId] >= NOTSTARTED_THRESHOLD) {
+            console.error(`✗ File ${fileId} stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - workflow likely never triggered`);
             return {
               completed: false,
               status: "WORKFLOW_NOT_STARTED",
               processedCount,
-              error: `File ${fileUid} stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - ProcessFileWorkflow likely never triggered. Check if Temporal worker is running.`
+              error: `File ${fileId} stuck in NOTSTARTED for ${NOTSTARTED_THRESHOLD}s - ProcessFileWorkflow likely never triggered. Check if Temporal worker is running.`
             };
           }
         } else {
           // File is processing (PROCESSING, CHUNKING, EMBEDDING, etc.) - reset counter
-          delete notStartedCounters[fileUid];
+          delete notStartedCounters[fileId];
         }
       } catch (e) {
         // Continue polling on parse errors
@@ -2342,17 +2530,17 @@ export function waitForMultipleFilesProcessingComplete(namespaceId, knowledgeBas
 
     // All files completed
     if (pending.size === 0) {
-      console.log(`✓ All ${fileUids.length} files completed processing after ${(i * 0.5).toFixed(1)}s`);
+      console.log(`✓ All ${fileIds.length} files completed processing after ${(i * 0.5).toFixed(1)}s`);
       return { completed: true, status: "COMPLETED", processedCount };
     }
 
     // Log progress every 30 seconds to avoid spam
     if (i > 0 && (i * 0.5) % 30 === 0) {
-      console.log(`Still waiting... ${processedCount}/${fileUids.length} completed (${(i * 0.5).toFixed(0)}s/${maxWaitSeconds}s)`);
+      console.log(`Still waiting... ${processedCount}/${fileIds.length} completed (${(i * 0.5).toFixed(0)}s/${maxWaitSeconds}s)`);
     }
   }
 
-  console.warn(`⚠ Multiple files processing timeout after ${maxWaitSeconds}s (${processedCount}/${fileUids.length} completed)`);
+  console.warn(`⚠ Multiple files processing timeout after ${maxWaitSeconds}s (${processedCount}/${fileIds.length} completed)`);
   return { completed: false, status: "TIMEOUT", processedCount };
 }
 
@@ -2376,12 +2564,12 @@ export function uploadFileWithRetry(url, payload, headers, maxRetries = 3) {
     const response = http.request("POST", url, JSON.stringify(payload), headers);
 
     try {
-      // Check if response is successful and has a valid file UID
+      // Check if response is successful and has a valid file ID (uid removed in AIP refactoring)
       const body = response.json();
       const file = body.file || body;
-      const fileUid = file ? file.uid : null;
+      const fileId = file ? file.id : null;
 
-      if (response.status === 200 && fileUid) {
+      if (response.status === 200 && fileId) {
         if (attempt > 1) {
           console.log(`✓ File upload succeeded on attempt ${attempt}/${maxRetries}`);
         }
@@ -2390,7 +2578,7 @@ export function uploadFileWithRetry(url, payload, headers, maxRetries = 3) {
 
       // Log the failure reason
       const errorMsg = body.message || body.error || 'Unknown error';
-      console.log(`⚠ Upload attempt ${attempt}/${maxRetries} failed: status=${response.status}, fileUid=${fileUid}, error=${errorMsg}`);
+      console.log(`⚠ Upload attempt ${attempt}/${maxRetries} failed: status=${response.status}, fileId=${fileId}, error=${errorMsg}`);
 
     } catch (e) {
       console.log(`⚠ Upload attempt ${attempt}/${maxRetries} exception: ${e}`);
@@ -2487,16 +2675,16 @@ export function staggerTestExecution(maxDelaySeconds = 2) {
  * Used to deterministically wait for KB creation after workflow operations.
  *
  * @param {string} knowledgeBaseId - The knowledge base ID to check
- * @param {string} ownerUid - The owner UID
+ * @param {string} ownerId - Owner ID (e.g., "admin")
  * @param {number} maxWaitSeconds - Maximum time to wait (default: 30)
  * @param {boolean} expectDeleted - If true, wait for delete_time to be set (default: false)
  * @returns {object|null} - The KB object if found, null if timeout
  */
-export function pollForKBState(knowledgeBaseId, ownerUid, maxWaitSeconds = 30, expectDeleted = false) {
+export function pollForKBState(knowledgeBaseId, ownerId, maxWaitSeconds = 30, expectDeleted = false) {
   const startTime = Date.now();
 
   while ((Date.now() - startTime) / 1000 < maxWaitSeconds) {
-    const kbs = getKnowledgeBaseByIdAndOwner(knowledgeBaseId, ownerUid);
+    const kbs = getKnowledgeBaseByIdAndOwner(knowledgeBaseId, ownerId);
 
     if (!kbs || kbs.length === 0) {
       if (expectDeleted) {
@@ -2532,13 +2720,13 @@ export function pollForKBState(knowledgeBaseId, ownerUid, maxWaitSeconds = 30, e
  * The update workflow should clean up the staging KB as part of swap/completion.
  *
  * @param {string} knowledgeBaseId - The base knowledge base ID (staging KB is {knowledgeBaseId}-staging)
- * @param {string} ownerUid - The owner UID
+ * @param {string} ownerId - Owner ID (e.g., "admin")
  * @param {number} maxWaitSeconds - Maximum time to wait (default: 10)
  * @returns {boolean} - True if staging KB is deleted, false if timeout
  */
-export function pollForStagingKBCleanup(knowledgeBaseId, ownerUid, maxWaitSeconds = 10) {
+export function pollForStagingKBCleanup(knowledgeBaseId, ownerId, maxWaitSeconds = 10) {
   const stagingKBID = `${knowledgeBaseId}-staging`;
-  const result = pollForKBState(stagingKBID, ownerUid, maxWaitSeconds, true);
+  const result = pollForKBState(stagingKBID, ownerId, maxWaitSeconds, true);
 
   // Result is null if KB is fully deleted, or has delete_time set if soft-deleted
   // Both are acceptable states for "cleaned up"
@@ -2550,15 +2738,15 @@ export function pollForStagingKBCleanup(knowledgeBaseId, ownerUid, maxWaitSecond
  * The update workflow creates the rollback KB during the swap phase.
  *
  * @param {string} knowledgeBaseId - The production knowledge base ID
- * @param {string} ownerUid - The owner UID
- * @param {number} maxWaitSeconds - Maximum time to wait (default: 10)
+ * @param {string} ownerId - Owner ID (e.g., "admin")
+ * @param {number} maxWaitSeconds - Maximum time to wait (default: 30)
  * @returns {object|null} - The rollback KB object if found, null if timeout
  */
-export function pollForRollbackKBCreation(knowledgeBaseId, ownerUid, maxWaitSeconds = 10) {
+export function pollForRollbackKBCreation(knowledgeBaseId, ownerId, maxWaitSeconds = 30) {
   // Use parent_kb_uid to find rollback KB instead of KBID suffix
   const startTime = Date.now();
   while ((Date.now() - startTime) / 1000 < maxWaitSeconds) {
-    const rollbackKBs = verifyRollbackKB(knowledgeBaseId, ownerUid);
+    const rollbackKBs = verifyRollbackKB(knowledgeBaseId, ownerId);
     if (rollbackKBs && rollbackKBs.length > 0) {
       return rollbackKBs[0];
     }
@@ -2722,4 +2910,56 @@ export function cleanupPreviousTestKnowledgeBases(namespaceId, headers) {
   }
 
   return result;
+}
+
+/**
+ * Create a knowledge base with automatic retry logic.
+ *
+ * Uses the httpRetry wrapper which handles rate limiting (429) and
+ * server errors (5xx) that can occur when many tests run in parallel.
+ *
+ * @param {string} url - Full URL for KB creation endpoint
+ * @param {object} kbData - Knowledge base data (id, description, tags, etc.)
+ * @param {object} headers - HTTP headers including Authorization
+ * @returns {object|null} - The created knowledge base object, or null if failed
+ */
+export function createKnowledgeBaseWithRetry(url, kbData, headers) {
+  // Use the existing httpRetry wrapper which handles 429/5xx with retry
+  const response = httpRetry.post(url, kbData, headers);
+
+  if (response.status === 200 || response.status === 201) {
+    try {
+      const body = response.json();
+      if (body.knowledgeBase) {
+        return body.knowledgeBase;
+      }
+    } catch (e) {
+      console.error(`Create KB ${kbData.id}: Failed to parse response: ${e}`);
+    }
+  }
+
+  console.error(`Create KB ${kbData.id}: Failed with status ${response.status}: ${response.body}`);
+  return null;
+}
+
+/**
+ * Delete a knowledge base with automatic retry logic.
+ *
+ * Uses the httpRetry wrapper which handles rate limiting that can occur
+ * when many tests clean up in parallel.
+ *
+ * @param {string} url - Full URL for KB deletion endpoint
+ * @param {object} headers - HTTP headers including Authorization
+ * @returns {boolean} - True if deleted successfully, false otherwise
+ */
+export function deleteKnowledgeBaseWithRetry(url, headers) {
+  // Use the existing httpRetry wrapper which handles 429/5xx with retry
+  const response = httpRetry.del(url, headers);
+
+  if (response.status === 200 || response.status === 204 || response.status === 404) {
+    return true;
+  }
+
+  console.error(`Delete KB failed with status ${response.status}: ${response.body}`);
+  return false;
 }

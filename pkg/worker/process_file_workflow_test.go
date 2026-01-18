@@ -201,7 +201,7 @@ func TestProcessFileWorkflow_GetFileMetadataFailure(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 
 	// Mock GetFileStatusActivity and GetFileMetadataActivity to return empty (file not found)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.Return([]repository.KnowledgeBaseFileModel{}, nil)
+	mockRepository.GetFilesByFileUIDsMock.Return([]repository.FileModel{}, nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 	env.RegisterActivity(w.GetFileMetadataActivity)
@@ -236,14 +236,13 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 
 	// Mock file and KB metadata
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.Return([]repository.KnowledgeBaseFileModel{
+	mockRepository.GetFilesByFileUIDsMock.Return([]repository.FileModel{
 		{
 			UID:           fileUID,
-			KBUID:         kbUID,
 			ProcessStatus: "FILE_PROCESS_STATUS_NOTSTARTED",
-			DisplayName:  "test.pdf",
+			DisplayName:   "test.pdf",
 			FileType:      "TYPE_PDF",
-			Destination:   "test/file.pdf",
+			StoragePath:   "test/file.pdf",
 		},
 	}, nil)
 
@@ -263,11 +262,11 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 	// GetDualProcessingTarget is called to check for dual-processing targets
 	mockRepository.GetDualProcessingTargetMock.Return(nil, nil)
 
-	// UpdateKnowledgeBaseFile is called when status updates
-	mockRepository.UpdateKnowledgeBaseFileMock.Return(&repository.KnowledgeBaseFileModel{}, nil)
+	// UpdateFile is called when status updates
+	mockRepository.UpdateFileMock.Return(&repository.FileModel{}, nil)
 
-	// UpdateKnowledgeFileMetadata is also called when status updates
-	mockRepository.UpdateKnowledgeFileMetadataMock.Return(nil)
+	// UpdateFileMetadata is also called when status updates
+	mockRepository.UpdateFileMetadataMock.Return(nil)
 
 	// Mock for DeleteOldConvertedFilesActivity - return empty list (no old files to delete)
 	mockRepository.GetAllConvertedFilesByFileUIDMock.Return([]repository.ConvertedFileModel{}, nil)
@@ -281,7 +280,7 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 	mockRepository.CreateConvertedFileWithDestinationMock.Return(&repository.ConvertedFileModel{
 		UID:         uuid.Must(uuid.NewV4()),
 		FileUID:     fileUID,
-		Destination: "converted/test.pdf",
+		StoragePath: "converted/test.pdf",
 	}, nil)
 
 	testSuite := &testsuite.WorkflowTestSuite{}

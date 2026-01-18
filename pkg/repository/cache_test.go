@@ -101,15 +101,3 @@ func TestCacheKey_DifferentKBs(t *testing.T) {
 	assert.Contains(t, key1, kb1.String())
 	assert.Contains(t, key2, kb2.String())
 }
-
-func TestCacheKeyPattern(t *testing.T) {
-	kbUID := uuid.Must(uuid.FromString("12345678-1234-1234-1234-123456789012"))
-	pattern := CacheKeyPattern(kbUID)
-
-	assert.Equal(t, "artifact:cache:kb:12345678-1234-1234-1234-123456789012:files:*", pattern)
-}
-
-func TestAllCacheKeysPattern(t *testing.T) {
-	pattern := AllCacheKeysPattern()
-	assert.Equal(t, "artifact:cache:*", pattern)
-}

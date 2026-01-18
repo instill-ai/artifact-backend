@@ -63,14 +63,14 @@ const http = helper.httpRetry;
 
 const client = new grpc.Client();
 client.load(
-    ["./proto"],
-    "artifact/artifact/v1alpha/artifact_private_service.proto"
+    ["proto"],
+    "artifact/v1alpha/artifact_private_service.proto"
 );
 
 export let options = {
     setupTimeout: '600s',
     teardownTimeout: '180s',
-    duration: '5m',  // Test with AI processing, update workflows, and retention periods
+    iterations: 1,  // Run once to completion - test with AI processing, update workflows, and retention periods
     insecureSkipTLSVerify: true,
     thresholds: {
         checks: ["rate == 1.0"],
@@ -154,6 +154,12 @@ export function setup() {
 }
 
 export function teardown(data) {
+    // Skip if test was disabled
+    if (!data) {
+        console.log("Teardown skipped (test was disabled)");
+        return;
+    }
+
     group("System Config Update Test: Teardown", () => {
         check(true, { [constant.banner('Teardown')]: () => true });
 
@@ -207,9 +213,14 @@ export function teardown(data) {
                      WHERE id IN (${knowledgeBaseIdsToDelete})
                      RETURNING uid
                  ),
+                 deleted_file_kb_links AS (
+                     DELETE FROM file_knowledge_base
+                     WHERE kb_uid IN (SELECT uid FROM deleted_kbs)
+                     RETURNING file_uid
+                 ),
                  deleted_files AS (
                      DELETE FROM file
-                     WHERE kb_uid IN (SELECT uid FROM deleted_kbs)
+                     WHERE uid IN (SELECT file_uid FROM deleted_file_kb_links)
                      RETURNING uid
                  ),
                  deleted_chunks AS (
@@ -249,6 +260,12 @@ export function teardown(data) {
 }
 
 export default function (data) {
+    // Guard against setup failure
+    if (!data || !data.metadata) {
+        console.error("Setup failed - skipping test");
+        return;
+    }
+
     // Connect gRPC client to private service
     client.connect(constant.artifactGRPCPrivateHost, {
         plaintext: true,
@@ -274,12 +291,10 @@ export default function (data) {
 
             // Create first KB with OpenAI
             const createReq1 = {
-                knowledgeBase: {
-                    displayName: displayName1,
-                    description: "Test knowledge base 1 for system config update",
-                    tags: ["test", "openai"],
-                    systemId: "openai"
-                }
+                displayName: displayName1,
+                description: "Test knowledge base 1 for system config update",
+                tags: ["test", "openai"],
+                systemId: "openai"
             };
 
             const createRes1 = http.request(
@@ -319,19 +334,20 @@ export default function (data) {
             });
 
             // Verify active_collection_uid is unique
+            const kb1Uid = helper.getKnowledgeBaseUidFromId(knowledgeBaseId1);
             const kb1CollectionCheck = helper.safeQuery(
                 `SELECT uid::text, active_collection_uid::text FROM knowledge_base WHERE uid = $1`,
-                kb1.uid
+                kb1Uid
             );
             if (kb1CollectionCheck && kb1CollectionCheck.length > 0) {
                 const collectionUID = kb1CollectionCheck[0].active_collection_uid;
                 const kbUIDFromDB = kb1CollectionCheck[0].uid;
-                check({ collectionUID, kbUID: kb1.uid }, {
+                check({ collectionUID, kbUID: kb1Uid }, {
                     "Phase 1: KB1 active_collection_uid is not null": () => collectionUID !== null,
                     "Phase 1: KB1 active_collection_uid != KB UID": () =>
-                        collectionUID !== kb1.uid && collectionUID !== kbUIDFromDB,
+                        collectionUID !== kb1Uid && collectionUID !== kbUIDFromDB,
                 });
-                console.log(`KB1 collection UID: ${collectionUID} (different from KB UID: ${kb1.uid})`);
+                console.log(`KB1 collection UID: ${collectionUID} (different from KB UID: ${kb1Uid})`);
             }
 
             if (!kb1 || !kb1.embeddingConfig) {
@@ -342,12 +358,10 @@ export default function (data) {
 
             // Create second KB with OpenAI
             const createReq2 = {
-                knowledgeBase: {
-                    displayName: displayName2,
-                    description: "Test knowledge base 2 for system config update",
-                    tags: ["test", "openai"],
-                    systemId: "openai"
-                }
+                displayName: displayName2,
+                description: "Test knowledge base 2 for system config update",
+                tags: ["test", "openai"],
+                systemId: "openai"
             };
 
             const createRes2 = http.request(
@@ -387,14 +401,14 @@ export default function (data) {
                 const filename = `${data.dbIDPrefix}sysconfig-initial-kb1-${i}.pdf`;
                 const uploadRes = http.request(
                     "POST",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId1}/files`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId1}`,
                     JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
                     data.header
                 );
 
                 if (uploadRes.status === 200) {
                     const fileObj = uploadRes.json().file;
-                    console.log(`KB1 File ${i} uploaded: uid=${fileObj ? fileObj.uid : 'missing'}`);
+                    console.log(`KB1 File ${i} uploaded: id=${fileObj ? fileObj.id : 'missing'}`);
                     initialFiles1.push(fileObj);
                 } else {
                     console.error(`KB1 File ${i} upload FAILED: status=${uploadRes.status}, body=${uploadRes.body}`);
@@ -413,14 +427,14 @@ export default function (data) {
                 const filename = `${data.dbIDPrefix}sysconfig-initial-kb2-${i}.txt`;
                 const uploadRes = http.request(
                     "POST",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId2}/files`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId2}`,
                     JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
                     data.header
                 );
 
                 if (uploadRes.status === 200) {
                     const fileObj = uploadRes.json().file;
-                    console.log(`KB2 File ${i} uploaded: uid=${fileObj ? fileObj.uid : 'missing'}`);
+                    console.log(`KB2 File ${i} uploaded: id=${fileObj ? fileObj.id : 'missing'}`);
                     initialFiles2.push(fileObj);
                 } else {
                     console.error(`KB2 File ${i} upload FAILED: status=${uploadRes.status}, body=${uploadRes.body}`);
@@ -440,32 +454,33 @@ export default function (data) {
             // Wait for processing completion using robust helper
             const allInitialFiles = [...initialFiles1, ...initialFiles2];
             console.log(`Waiting for ${allInitialFiles.length} initial files to process...`);
-            console.log(`File UIDs: ${allInitialFiles.map(f => f.uid).join(', ')}`);
+            console.log(`File IDs: ${allInitialFiles.map(f => f.id).join(', ')}`);
 
-            // Wait for files in KB1 (increased timeout for AI-intensive operations in CI)
+            // Wait for files in KB1 (timeout configured via env or default)
+            const fileProcessTimeout = parseInt(__ENV.FILE_PROCESS_TIMEOUT || '300'); // 5 min default
             if (initialFiles1.length > 0) {
-                console.log(`Waiting for ${initialFiles1.length} files in KB1...`);
+                console.log(`Waiting for ${initialFiles1.length} files in KB1 (timeout: ${fileProcessTimeout}s)...`);
                 const result1 = helper.waitForMultipleFilesProcessingComplete(
                     data.expectedOwner.id,
                     knowledgeBaseId1,
-                    initialFiles1.map(f => f.uid),
+                    initialFiles1.map(f => f.id),
                     data.header,
-                    900 // 15 minutes for AI conversion with rate limiting
+                    fileProcessTimeout
                 );
                 if (!result1.completed) {
                     console.log(`KB1 files incomplete: ${result1.status}, processed ${result1.processedCount}/${initialFiles1.length}`);
                 }
             }
 
-            // Wait for files in KB2 (increased timeout for AI-intensive operations in CI)
+            // Wait for files in KB2 (timeout configured via env or default)
             if (initialFiles2.length > 0) {
-                console.log(`Waiting for ${initialFiles2.length} files in KB2...`);
+                console.log(`Waiting for ${initialFiles2.length} files in KB2 (timeout: ${fileProcessTimeout}s)...`);
                 const result2 = helper.waitForMultipleFilesProcessingComplete(
                     data.expectedOwner.id,
                     knowledgeBaseId2,
-                    initialFiles2.map(f => f.uid),
+                    initialFiles2.map(f => f.id),
                     data.header,
-                    900 // 15 minutes for AI conversion with rate limiting
+                    fileProcessTimeout
                 );
                 if (!result2.completed) {
                     console.log(`KB2 files incomplete: ${result2.status}, processed ${result2.processedCount}/${initialFiles2.length}`);
@@ -485,8 +500,9 @@ export default function (data) {
             console.log("\n=== Phase 1.5: Verifying position data with OpenAI pipeline ===");
 
             if (initialFiles1.length > 0 && allCompleted) {
-                const pdfFileUid = initialFiles1[0].fileUid;
-                console.log(`Phase 1.5: Testing OpenAI-processed PDF file ${pdfFileUid}`);
+                const pdfFileId = initialFiles1[0].id;
+                const pdfFileUid = helper.getFileUidFromId(pdfFileId);
+                console.log(`Phase 1.5: Testing OpenAI-processed PDF file ${pdfFileId} (UID: ${pdfFileUid})`);
 
                 // 1. Verify converted_file has position_data with PageDelimiters
                 const convertedFileQuery = helper.safeQuery(
@@ -545,7 +561,7 @@ export default function (data) {
                 // 3. Verify chunk API returns UNIT_PAGE references
                 const chunksResp = http.request(
                     "GET",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId1}/files/${pdfFileUid}/chunks`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${pdfFileId}/chunks`,
                     null,
                     data.header
                 );
@@ -580,16 +596,16 @@ export default function (data) {
             // Store initial state for later validation
             data.kb1_initial = {
                 knowledgeBaseId: knowledgeBaseId1,
-                knowledgeBaseUid: kb1.uid,
+                knowledgeBaseUid: helper.getKnowledgeBaseUidFromId(knowledgeBaseId1),
                 fileCount: initialFiles1.length,
-                fileUids: initialFiles1.map(f => f.uid),
+                fileIds: initialFiles1.map(f => f.id),
             };
 
             data.kb2_initial = {
                 knowledgeBaseId: knowledgeBaseId2,
-                knowledgeBaseUid: kb2.uid,
+                knowledgeBaseUid: helper.getKnowledgeBaseUidFromId(knowledgeBaseId2),
                 fileCount: initialFiles2.length,
-                fileUids: initialFiles2.map(f => f.uid),
+                fileIds: initialFiles2.map(f => f.id),
             };
         });
 
@@ -608,7 +624,7 @@ export default function (data) {
 
             // Trigger update for both KBs using Gemini system
             const updateRes = client.invoke(
-                "artifact.artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
+                "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
                 {
                     knowledge_base_ids: [data.kb1_initial.knowledgeBaseId, data.kb2_initial.knowledgeBaseId],
                     system_id: "gemini"
@@ -642,8 +658,8 @@ export default function (data) {
             console.log("\n=== Phase 3: Waiting for staging KBs and verifying configs ===");
 
             // Wait for staging KBs to be created
-            const staging1Found = helper.pollForStagingKB(data.kb1_initial.knowledgeBaseId, data.expectedOwner.uid, 60);
-            const staging2Found = helper.pollForStagingKB(data.kb2_initial.knowledgeBaseId, data.expectedOwner.uid, 60);
+            const staging1Found = helper.pollForStagingKB(data.kb1_initial.knowledgeBaseId, data.expectedOwner.id, 60);
+            const staging2Found = helper.pollForStagingKB(data.kb2_initial.knowledgeBaseId, data.expectedOwner.id, 60);
 
             check({ staging1Found, staging2Found }, {
                 "Phase 3: Staging KB1 created": () => staging1Found === true,
@@ -652,15 +668,16 @@ export default function (data) {
 
             if (staging1Found && staging2Found) {
                 // Get staging KBs from database
-                const staging1 = helper.verifyStagingKB(data.kb1_initial.knowledgeBaseId, data.expectedOwner.uid);
-                const staging2 = helper.verifyStagingKB(data.kb2_initial.knowledgeBaseId, data.expectedOwner.uid);
+                const staging1 = helper.verifyStagingKB(data.kb1_initial.knowledgeBaseId, data.expectedOwner.id);
+                const staging2 = helper.verifyStagingKB(data.kb2_initial.knowledgeBaseId, data.expectedOwner.id);
 
                 if (staging1 && staging1.length > 0) {
                     console.log("Staging KB1 found in database");
 
                     // Query system_uid to verify it's pointing to Gemini system
+                    // System IDs are now hash-based (sys-xxx), so check model_family in config JSON
                     const systemQuery = helper.safeQuery(
-                        `SELECT s.id, s.config FROM system s
+                        `SELECT s.id, s.config->'rag'->'embedding'->>'model_family' as model_family FROM system s
                          JOIN knowledge_base kb ON kb.system_uid = s.uid
                          WHERE kb.uid = $1`,
                         staging1[0].uid
@@ -668,10 +685,11 @@ export default function (data) {
 
                     if (systemQuery && systemQuery.length > 0) {
                         const systemId = systemQuery[0].id;
-                        console.log(`Staging KB1 system_id: ${systemId}`);
+                        const modelFamily = systemQuery[0].model_family || "";
+                        console.log(`Staging KB1 system_id: ${systemId}, model_family: ${modelFamily}`);
 
-                        check({ systemId }, {
-                            "Phase 3: Staging KB1 uses Gemini system": () => systemId === "gemini",
+                        check({ modelFamily }, {
+                            "Phase 3: Staging KB1 uses Gemini system": () => modelFamily === "gemini",
                         });
                     }
                 }
@@ -680,7 +698,7 @@ export default function (data) {
                     console.log("Staging KB2 found in database");
 
                     const systemQuery = helper.safeQuery(
-                        `SELECT s.id FROM system s
+                        `SELECT s.id, s.config->'rag'->'embedding'->>'model_family' as model_family FROM system s
                          JOIN knowledge_base kb ON kb.system_uid = s.uid
                          WHERE kb.uid = $1`,
                         staging2[0].uid
@@ -688,10 +706,11 @@ export default function (data) {
 
                     if (systemQuery && systemQuery.length > 0) {
                         const systemId = systemQuery[0].id;
-                        console.log(`Staging KB2 system_id: ${systemId}`);
+                        const modelFamily = systemQuery[0].model_family || "";
+                        console.log(`Staging KB2 system_id: ${systemId}, model_family: ${modelFamily}`);
 
-                        check({ systemId }, {
-                            "Phase 3: Staging KB2 uses Gemini system": () => systemId === "gemini",
+                        check({ modelFamily }, {
+                            "Phase 3: Staging KB2 uses Gemini system": () => modelFamily === "gemini",
                         });
                     }
                 }
@@ -715,18 +734,19 @@ export default function (data) {
             console.log("Waiting for both KB updates to complete (polling concurrently)...");
             console.log(`  KB1 UID: ${data.kb1_initial.knowledgeBaseId}`);
             console.log(`  KB2 UID: ${data.kb2_initial.knowledgeBaseId}`);
-            console.log(`  Max wait: 600 seconds`);
+            const updateTimeout = parseInt(__ENV.UPDATE_TIMEOUT || '300'); // 5 min default
+            console.log(`  Max wait: ${updateTimeout} seconds`);
 
             let kb1UpdateCompleted = null; // null = pending, true = completed, false = failed
             let kb2UpdateCompleted = null;
             let kb1NotFoundCount = 0;
             let kb2NotFoundCount = 0;
-            const maxWaitSeconds = 600; // 10 minutes total
+            const maxWaitSeconds = updateTimeout;
             const MAX_NOT_FOUND_WAIT = 60; // Wait up to 60s for KB to appear (workflow startup)
 
             for (let i = 0; i < maxWaitSeconds; i++) {
                 const statusRes = client.invoke(
-                    "artifact.artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
+                    "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
                     {},
                     data.metadata
                 );
@@ -762,7 +782,7 @@ export default function (data) {
                                     console.log(`✓ KB1 update already completed (verified via DB)`);
                                     kb1UpdateCompleted = true;
                                 } else if (dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_FAILED' || dbStatus === 7 ||
-                                           dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED' || dbStatus === 8) {
+                                    dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED' || dbStatus === 8) {
                                     console.error(`✗ KB1 update failed/aborted (verified via DB): ${dbStatus}`);
                                     kb1UpdateCompleted = false;
                                 } else {
@@ -805,7 +825,7 @@ export default function (data) {
                                     console.log(`✓ KB2 update already completed (verified via DB)`);
                                     kb2UpdateCompleted = true;
                                 } else if (dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_FAILED' || dbStatus === 7 ||
-                                           dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED' || dbStatus === 8) {
+                                    dbStatus === 'KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED' || dbStatus === 8) {
                                     console.error(`✗ KB2 update failed/aborted (verified via DB): ${dbStatus}`);
                                     kb2UpdateCompleted = false;
                                 } else {
@@ -869,14 +889,14 @@ export default function (data) {
             if (!updateCompleted) {
                 // Get final status for diagnostics
                 const finalStatusRes = client.invoke(
-                    "artifact.artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
+                    "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
                     {},
                     data.metadata
                 );
 
                 if (finalStatusRes.status === grpc.StatusOK && finalStatusRes.message.details) {
-                    const kb1FinalStatus = finalStatusRes.message.details.find(d => d.uid === data.kb1_initial.knowledgeBaseId);
-                    const kb2FinalStatus = finalStatusRes.message.details.find(d => d.uid === data.kb2_initial.knowledgeBaseId);
+                    const kb1FinalStatus = finalStatusRes.message.details.find(d => d.knowledgeBaseId === data.kb1_initial.knowledgeBaseId);
+                    const kb2FinalStatus = finalStatusRes.message.details.find(d => d.knowledgeBaseId === data.kb2_initial.knowledgeBaseId);
 
                     if (!kb1UpdateCompleted) {
                         if (kb1FinalStatus) {
@@ -915,12 +935,12 @@ export default function (data) {
             // Verify production KBs now use Gemini
             console.log("Verifying production KBs now use Gemini config...");
 
-            const prodKB1 = helper.getKnowledgeBaseByIdAndOwner(data.kb1_initial.knowledgeBaseId, data.expectedOwner.uid);
-            const prodKB2 = helper.getKnowledgeBaseByIdAndOwner(data.kb2_initial.knowledgeBaseId, data.expectedOwner.uid);
+            const prodKB1 = helper.getKnowledgeBaseByIdAndOwner(data.kb1_initial.knowledgeBaseId, data.expectedOwner.id);
+            const prodKB2 = helper.getKnowledgeBaseByIdAndOwner(data.kb2_initial.knowledgeBaseId, data.expectedOwner.id);
 
             if (prodKB1 && prodKB1.length > 0) {
                 const systemQuery = helper.safeQuery(
-                    `SELECT s.id, s.config FROM system s
+                    `SELECT s.id, s.config->'rag'->'embedding'->>'model_family' as model_family FROM system s
                      JOIN knowledge_base kb ON kb.system_uid = s.uid
                      WHERE kb.uid = $1`,
                     prodKB1[0].uid
@@ -928,17 +948,18 @@ export default function (data) {
 
                 if (systemQuery && systemQuery.length > 0) {
                     const systemId = systemQuery[0].id;
-                    console.log(`Production KB1 system_id after swap: ${systemId}`);
+                    const modelFamily = systemQuery[0].model_family || "";
+                    console.log(`Production KB1 system_id after swap: ${systemId}, model_family: ${modelFamily}`);
 
-                    check({ systemId }, {
-                        "Phase 4: Production KB1 now uses Gemini": () => systemId === "gemini",
+                    check({ modelFamily }, {
+                        "Phase 4: Production KB1 now uses Gemini": () => modelFamily === "gemini",
                     });
                 }
             }
 
             if (prodKB2 && prodKB2.length > 0) {
                 const systemQuery = helper.safeQuery(
-                    `SELECT s.id, s.config FROM system s
+                    `SELECT s.id, s.config->'rag'->'embedding'->>'model_family' as model_family FROM system s
                      JOIN knowledge_base kb ON kb.system_uid = s.uid
                      WHERE kb.uid = $1`,
                     prodKB2[0].uid
@@ -946,10 +967,11 @@ export default function (data) {
 
                 if (systemQuery && systemQuery.length > 0) {
                     const systemId = systemQuery[0].id;
-                    console.log(`Production KB2 system_id after swap: ${systemId}`);
+                    const modelFamily = systemQuery[0].model_family || "";
+                    console.log(`Production KB2 system_id after swap: ${systemId}, model_family: ${modelFamily}`);
 
-                    check({ systemId }, {
-                        "Phase 4: Production KB2 now uses Gemini": () => systemId === "gemini",
+                    check({ modelFamily }, {
+                        "Phase 4: Production KB2 now uses Gemini": () => modelFamily === "gemini",
                     });
                 }
             }
@@ -957,8 +979,8 @@ export default function (data) {
             // Verify rollback KBs exist and use OpenAI
             console.log("Verifying rollback KBs exist and use OpenAI config...");
 
-            const rollback1 = helper.verifyRollbackKB(data.kb1_initial.knowledgeBaseId, data.expectedOwner.uid);
-            const rollback2 = helper.verifyRollbackKB(data.kb2_initial.knowledgeBaseId, data.expectedOwner.uid);
+            const rollback1 = helper.verifyRollbackKB(data.kb1_initial.knowledgeBaseId, data.expectedOwner.id);
+            const rollback2 = helper.verifyRollbackKB(data.kb2_initial.knowledgeBaseId, data.expectedOwner.id);
 
             check({ rollback1, rollback2 }, {
                 "Phase 4: Rollback KB1 exists": () => rollback1 && rollback1.length > 0,
@@ -967,7 +989,7 @@ export default function (data) {
 
             if (rollback1 && rollback1.length > 0) {
                 const systemQuery = helper.safeQuery(
-                    `SELECT s.id FROM system s
+                    `SELECT s.id, s.config->'rag'->'embedding'->>'model_family' as model_family FROM system s
                      JOIN knowledge_base kb ON kb.system_uid = s.uid
                      WHERE kb.uid = $1`,
                     rollback1[0].uid
@@ -975,10 +997,11 @@ export default function (data) {
 
                 if (systemQuery && systemQuery.length > 0) {
                     const systemId = systemQuery[0].id;
-                    console.log(`Rollback KB1 system_id: ${systemId}`);
+                    const modelFamily = systemQuery[0].model_family || "";
+                    console.log(`Rollback KB1 system_id: ${systemId}, model_family: ${modelFamily}`);
 
-                    check({ systemId }, {
-                        "Phase 4: Rollback KB1 preserves OpenAI config": () => systemId === "openai",
+                    check({ modelFamily }, {
+                        "Phase 4: Rollback KB1 preserves OpenAI config": () => modelFamily === "openai",
                     });
 
                     // Store rollback KB info
@@ -994,7 +1017,7 @@ export default function (data) {
 
             if (rollback2 && rollback2.length > 0) {
                 const systemQuery = helper.safeQuery(
-                    `SELECT s.id FROM system s
+                    `SELECT s.id, s.config->'rag'->'embedding'->>'model_family' as model_family FROM system s
                      JOIN knowledge_base kb ON kb.system_uid = s.uid
                      WHERE kb.uid = $1`,
                     rollback2[0].uid
@@ -1002,8 +1025,9 @@ export default function (data) {
 
                 if (systemQuery && systemQuery.length > 0) {
                     const systemId = systemQuery[0].id;
-                    check({ systemId }, {
-                        "Phase 4: Rollback KB2 preserves OpenAI config": () => systemId === "openai",
+                    const modelFamily = systemQuery[0].model_family || "";
+                    check({ modelFamily }, {
+                        "Phase 4: Rollback KB2 preserves OpenAI config": () => modelFamily === "openai",
                     });
 
                     data.kb2_rollback = {
@@ -1029,8 +1053,9 @@ export default function (data) {
             console.log("\n=== Phase 4.5: Verifying position data exists after Gemini conversion ===");
 
             // Check initial files that were reprocessed from OpenAI to Gemini
-            if (data.kb1_initial && data.kb1_initial.fileUids && data.kb1_initial.fileUids.length > 0) {
-                const testFileUid = data.kb1_initial.fileUids[0];
+            if (data.kb1_initial && data.kb1_initial.fileIds && data.kb1_initial.fileIds.length > 0) {
+                const testFileId = data.kb1_initial.fileIds[0];
+                const testFileUid = helper.getFileUidFromId(testFileId);
 
                 // Verify converted_file has position_data with PageDelimiters
                 const convertedFileQuery = helper.safeQuery(
@@ -1101,7 +1126,7 @@ export default function (data) {
                     const stagingKB1Check = helper.safeQuery(
                         `SELECT delete_time, update_status, update_workflow_id
                          FROM knowledge_base
-                         WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
+                         WHERE parent_kb_uid = (SELECT uid FROM knowledge_base WHERE id = $1) AND staging = true AND 'staging' = ANY(tags)`,
                         data.kb1_initial.knowledgeBaseId
                     );
 
@@ -1129,7 +1154,7 @@ export default function (data) {
                     const stagingKB2Check = helper.safeQuery(
                         `SELECT delete_time, update_status, update_workflow_id
                          FROM knowledge_base
-                         WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
+                         WHERE parent_kb_uid = (SELECT uid FROM knowledge_base WHERE id = $1) AND staging = true AND 'staging' = ANY(tags)`,
                         data.kb2_initial.knowledgeBaseId
                     );
 
@@ -1162,7 +1187,7 @@ export default function (data) {
             const stagingKB1Check = helper.safeQuery(
                 `SELECT delete_time, update_status, update_workflow_id
                  FROM knowledge_base
-                 WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
+                 WHERE parent_kb_uid = (SELECT uid FROM knowledge_base WHERE id = $1) AND staging = true AND 'staging' = ANY(tags)`,
                 data.kb1_initial.knowledgeBaseId
             );
 
@@ -1192,7 +1217,7 @@ export default function (data) {
             const stagingKB2Check = helper.safeQuery(
                 `SELECT delete_time, update_status, update_workflow_id
                  FROM knowledge_base
-                 WHERE parent_kb_uid = $1 AND staging = true AND 'staging' = ANY(tags)`,
+                 WHERE parent_kb_uid = (SELECT uid FROM knowledge_base WHERE id = $1) AND staging = true AND 'staging' = ANY(tags)`,
                 data.kb2_initial.knowledgeBaseId
             );
 
@@ -1239,7 +1264,7 @@ export default function (data) {
                 const filename = `${data.dbIDPrefix}sysconfig-retention-kb1-${i}.pdf`;
                 const uploadRes = http.request(
                     "POST",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb1_initial.knowledgeBaseId}/files`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${data.kb1_initial.knowledgeBaseId}`,
                     JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
                     data.header
                 );
@@ -1259,7 +1284,7 @@ export default function (data) {
                 const filename = `${data.dbIDPrefix}sysconfig-retention-kb2-${i}.md`;
                 const uploadRes = http.request(
                     "POST",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb2_initial.knowledgeBaseId}/files`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${data.kb2_initial.knowledgeBaseId}`,
                     JSON.stringify({ displayName: filename, type: "TYPE_MARKDOWN", content: constant.docSampleMd }),
                     data.header
                 );
@@ -1281,35 +1306,35 @@ export default function (data) {
             // Wait for processing in BOTH production AND rollback KBs
             // With sequential dual-processing, rollback KB files are triggered after production completes
             // We must wait for ALL files to complete in BOTH KBs before triggering rollback
-            const retentionFileUids = [...retentionFiles1, ...retentionFiles2].map(f => f.uid);
+            const retentionFileIds = [...retentionFiles1, ...retentionFiles2].map(f => f.id);
             console.log("Waiting for retention file processing to complete in production KBs...");
-            // Wait for production retention files using robust helper
-            console.log(`Waiting for ${retentionFileUids.length} production retention files...`);
+            console.log(`Waiting for ${retentionFileIds.length} production retention files...`);
 
-            // Wait for KB1 retention files (increased timeout for AI-intensive operations in CI)
+            // Wait for KB1 retention files (timeout configured via env or default)
+            const retentionTimeout = parseInt(__ENV.FILE_PROCESS_TIMEOUT || '300'); // 5 min default
             let kb1Result = { completed: true, processedCount: 0 };
             if (retentionFiles1.length > 0) {
                 kb1Result = helper.waitForMultipleFilesProcessingComplete(
                     data.expectedOwner.id,
                     data.kb1_initial.knowledgeBaseId,
-                    retentionFiles1.map(f => f.uid),
+                    retentionFiles1.map(f => f.id),
                     data.header,
-                    900 // 15 minutes for AI conversion with rate limiting
+                    retentionTimeout
                 );
                 if (!kb1Result.completed) {
                     console.error(`✗ KB1 retention files incomplete: ${kb1Result.status}, processed ${kb1Result.processedCount}/${retentionFiles1.length}`);
                 }
             }
 
-            // Wait for KB2 retention files (increased timeout for AI-intensive operations in CI)
+            // Wait for KB2 retention files (timeout configured via env or default)
             let kb2Result = { completed: true, processedCount: 0 };
             if (retentionFiles2.length > 0) {
                 kb2Result = helper.waitForMultipleFilesProcessingComplete(
                     data.expectedOwner.id,
                     data.kb2_initial.knowledgeBaseId,
-                    retentionFiles2.map(f => f.uid),
+                    retentionFiles2.map(f => f.id),
                     data.header,
-                    900 // 15 minutes for AI conversion with rate limiting
+                    retentionTimeout
                 );
                 if (!kb2Result.completed) {
                     console.error(`✗ KB2 retention files incomplete: ${kb2Result.status}, processed ${kb2Result.processedCount}/${retentionFiles2.length}`);
@@ -1319,7 +1344,7 @@ export default function (data) {
             const productionCompleted = kb1Result.completed && kb2Result.completed;
 
             if (productionCompleted) {
-                console.log(`✓ All ${retentionFileUids.length} production retention files processed`);
+                console.log(`✓ All ${retentionFileIds.length} production retention files processed`);
             } else {
                 console.error(`✗ Production retention files failed: KB1=${kb1Result.completed}, KB2=${kb2Result.completed}`);
             }
@@ -1356,16 +1381,18 @@ export default function (data) {
             }
 
             // Wait for rollback KB files - only wait for KB2 if rollback KB2 exists
+            // Increased timeout to 5 minutes (600 * 0.5s = 300s) to match production file processing time
             if (data.kb1_rollback && data.kb2_rollback) {
-                for (let i = 0; i < 240; i++) { // 240 * 0.5s = 120s (2 minutes)
+                for (let i = 0; i < 600; i++) { // 600 * 0.5s = 300s (5 minutes)
                     kb1Count = 0;
                     kb2Count = 0;
 
                     // Check files in rollback KB1 by filename (same filenames as production)
                     for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb1-1.pdf`, `${data.dbIDPrefix}sysconfig-retention-kb1-2.pdf`]) {
                         const fileQuery = helper.safeQuery(
-                            `SELECT process_status FROM file
-                             WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`,
+                            `SELECT f.process_status FROM file f
+                             INNER JOIN file_knowledge_base fkb ON f.uid = fkb.file_uid
+                             WHERE fkb.kb_uid = $1 AND f.display_name = $2 AND f.delete_time IS NULL`,
                             data.kb1_rollback.kbUid,
                             filename
                         );
@@ -1379,8 +1406,9 @@ export default function (data) {
                     if (data.kb2_rollback) {
                         for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb2-1.md`, `${data.dbIDPrefix}sysconfig-retention-kb2-2.md`]) {
                             const fileQuery = helper.safeQuery(
-                                `SELECT process_status FROM file
-                                 WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`,
+                                `SELECT f.process_status FROM file f
+                                 INNER JOIN file_knowledge_base fkb ON f.uid = fkb.file_uid
+                                 WHERE fkb.kb_uid = $1 AND f.display_name = $2 AND f.delete_time IS NULL`,
                                 data.kb2_rollback.kbUid,
                                 filename
                             );
@@ -1401,29 +1429,49 @@ export default function (data) {
                         break;
                     }
 
-                    if (i % 10 === 0 && i > 0) {
+                    if (i % 20 === 0 && i > 0) {
                         const kb2Status = data.kb2_rollback ? `${kb2Count}/2` : 'N/A (no rollback KB2)';
-                        console.log(`Waiting for rollback files... KB1: ${kb1Count}/2, KB2: ${kb2Status}`);
+                        console.log(`Waiting for rollback files... KB1: ${kb1Count}/2, KB2: ${kb2Status} (${i * 0.5}s elapsed)`);
 
-                        // DIAGNOSTIC: Check if files exist in rollback KB and their status
-                        if (i === 10) { // Only log once at 10s to avoid spam
-                            const diagQuery = helper.safeQuery(
-                                `SELECT filename, process_status, create_time, update_time
-                                 FROM file
-                                 WHERE kb_uid = $1 AND delete_time IS NULL
-                                 ORDER BY create_time DESC`,
+                        // DIAGNOSTIC: Check if files exist in rollback KBs and their status
+                        if (i === 20 || i === 60) { // Log diagnostics at 10s and 30s
+                            // KB1 diagnostics
+                            const diagQuery1 = helper.safeQuery(
+                                `SELECT f.display_name as filename, f.process_status, f.create_time, f.update_time
+                                 FROM file f
+                                 INNER JOIN file_knowledge_base fkb ON f.uid = fkb.file_uid
+                                 WHERE fkb.kb_uid = $1 AND f.delete_time IS NULL
+                                 ORDER BY f.create_time DESC`,
                                 data.kb1_rollback.kbUid
                             );
-                            if (diagQuery && diagQuery.length > 0) {
-                                console.log(`DIAGNOSTIC: Rollback KB1 has ${diagQuery.length} files:`);
-                                diagQuery.forEach(f => console.log(`  - ${f.filename}: ${f.process_status} (created: ${f.create_time})`));
+                            if (diagQuery1 && diagQuery1.length > 0) {
+                                console.log(`DIAGNOSTIC: Rollback KB1 has ${diagQuery1.length} files:`);
+                                diagQuery1.forEach(f => console.log(`  - ${f.filename}: ${f.process_status}`));
                             } else {
                                 console.log(`DIAGNOSTIC: Rollback KB1 has NO files - dual processing may have failed`);
                             }
 
+                            // KB2 diagnostics
+                            if (data.kb2_rollback) {
+                                const diagQuery2 = helper.safeQuery(
+                                    `SELECT f.display_name as filename, f.process_status, f.create_time, f.update_time
+                                     FROM file f
+                                     INNER JOIN file_knowledge_base fkb ON f.uid = fkb.file_uid
+                                     WHERE fkb.kb_uid = $1 AND f.delete_time IS NULL
+                                     ORDER BY f.create_time DESC`,
+                                    data.kb2_rollback.kbUid
+                                );
+                                if (diagQuery2 && diagQuery2.length > 0) {
+                                    console.log(`DIAGNOSTIC: Rollback KB2 has ${diagQuery2.length} files:`);
+                                    diagQuery2.forEach(f => console.log(`  - ${f.filename}: ${f.process_status}`));
+                                } else {
+                                    console.log(`DIAGNOSTIC: Rollback KB2 has NO files - dual processing may have failed`);
+                                }
+                            }
+
                             // Check production KB status
                             const prodKBStatus = helper.safeQuery(
-                                `SELECT update_status FROM knowledge_base WHERE uid = $1`,
+                                `SELECT update_status FROM knowledge_base WHERE id = $1`,
                                 data.kb1_initial.knowledgeBaseId
                             );
                             if (prodKBStatus && prodKBStatus.length > 0) {
@@ -1457,13 +1505,14 @@ export default function (data) {
             } else if (data.kb1_rollback) {
                 // Only KB1 rollback exists - wait for KB1 files only
                 console.log("Only KB1 rollback exists, waiting for KB1 rollback files only...");
-                for (let i = 0; i < 240; i++) { // 240 * 0.5s = 120s (2 minutes)
+                for (let i = 0; i < 600; i++) { // 600 * 0.5s = 300s (5 minutes)
                     kb1Count = 0;
 
                     for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb1-1.pdf`, `${data.dbIDPrefix}sysconfig-retention-kb1-2.pdf`]) {
                         const fileQuery = helper.safeQuery(
-                            `SELECT process_status FROM file
-                             WHERE kb_uid = $1 AND display_name = $2 AND delete_time IS NULL`,
+                            `SELECT f.process_status FROM file f
+                             INNER JOIN file_knowledge_base fkb ON f.uid = fkb.file_uid
+                             WHERE fkb.kb_uid = $1 AND f.display_name = $2 AND f.delete_time IS NULL`,
                             data.kb1_rollback.kbUid,
                             filename
                         );
@@ -1479,8 +1528,8 @@ export default function (data) {
                         break;
                     }
 
-                    if (i % 10 === 0 && i > 0) {
-                        console.log(`Waiting for KB1 rollback files... ${kb1Count}/2`);
+                    if (i % 20 === 0 && i > 0) {
+                        console.log(`Waiting for KB1 rollback files... ${kb1Count}/2 (${i * 0.5}s elapsed)`);
                     }
 
                     sleep(0.5);
@@ -1502,8 +1551,9 @@ export default function (data) {
             console.log("\n=== Phase 5.5: Verifying position data for multi-page PDF files ===");
 
             if (retentionFiles1.length > 0) {
-                const pdfFileUid = retentionFiles1[0].fileUid;
-                console.log(`Phase 5.5: Testing PDF file ${pdfFileUid}`);
+                const pdfFileId = retentionFiles1[0].id;
+                const pdfFileUid = helper.getFileUidFromId(pdfFileId);
+                console.log(`Phase 5.5: Testing PDF file ${pdfFileId} (UID: ${pdfFileUid})`);
 
                 // 1. Verify converted_file has position_data with PageDelimiters
                 const convertedFileQuery = helper.safeQuery(
@@ -1566,7 +1616,7 @@ export default function (data) {
                 // 3. Verify chunk API returns UNIT_PAGE references
                 const chunksResp = http.request(
                     "GET",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb1_initial.knowledgeBaseId}/files/${pdfFileUid}/chunks`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${pdfFileId}/chunks`,
                     null,
                     data.header
                 );
@@ -1611,9 +1661,9 @@ export default function (data) {
 
             console.log("Phase 5.5: Position data verification complete for PDF files");
 
-            // Store retention file info
-            data.kb1_retention_files = retentionFiles1.map(f => f.uid);
-            data.kb2_retention_files = retentionFiles2.map(f => f.uid);
+            // Store retention file IDs for later phases
+            data.kb1_retention_file_ids = retentionFiles1.map(f => f.id);
+            data.kb2_retention_file_ids = retentionFiles2.map(f => f.id);
         });
 
         // ====================================================================
@@ -1628,22 +1678,35 @@ export default function (data) {
             console.log("\n=== Phase 6: Verifying dual processing occurred ===");
 
             // Check that files exist in both production and rollback KBs
-            if (data.kb1_rollback && data.kb1_retention_files) {
-                const prodKB1FileCount = helper.countFilesInKnowledgeBase(data.kb1_initial.knowledgeBaseId);
+            if (data.kb1_rollback && data.kb1_retention_file_ids) {
+                // Get the production KB1 UID from the hash-based ID
+                const prodKB1UidQuery = helper.safeQuery(
+                    `SELECT uid FROM knowledge_base WHERE id = $1`,
+                    data.kb1_initial.knowledgeBaseId
+                );
+                const prodKB1Uid = prodKB1UidQuery && prodKB1UidQuery.length > 0 ? prodKB1UidQuery[0].uid : null;
+
+                if (!prodKB1Uid) {
+                    console.error(`Phase 6: Could not find production KB1 UID for ID ${data.kb1_initial.knowledgeBaseId}`);
+                    return;
+                }
+
+                const prodKB1FileCount = helper.countFilesInKnowledgeBase(prodKB1Uid);
                 const rollbackKB1FileCount = helper.countFilesInKnowledgeBase(data.kb1_rollback.kbUid);
 
                 console.log(`KB1 - Production files: ${prodKB1FileCount}, Rollback files: ${rollbackKB1FileCount}`);
 
                 check({ prodKB1FileCount, rollbackKB1FileCount }, {
-                    "Phase 6: KB1 production has all files": () => prodKB1FileCount >= (data.kb1_initial.fileCount + data.kb1_retention_files.length),
-                    "Phase 6: KB1 rollback has all files (dual processing)": () => rollbackKB1FileCount >= (data.kb1_initial.fileCount + data.kb1_retention_files.length),
+                    "Phase 6: KB1 production has all files": () => prodKB1FileCount >= (data.kb1_initial.fileCount + data.kb1_retention_file_ids.length),
+                    "Phase 6: KB1 rollback has all files (dual processing)": () => rollbackKB1FileCount >= (data.kb1_initial.fileCount + data.kb1_retention_file_ids.length),
                 });
 
                 // Verify files in rollback KB
                 for (const filename of [`${data.dbIDPrefix}sysconfig-retention-kb1-1.pdf`, `${data.dbIDPrefix}sysconfig-retention-kb1-2.pdf`]) {
                     const fileQuery = helper.safeQuery(
-                        `SELECT COUNT(*) as count FROM file
-                         WHERE kb_uid = $1 AND display_name = $2`,
+                        `SELECT COUNT(*) as count FROM file f
+                         INNER JOIN file_knowledge_base fkb ON f.uid = fkb.file_uid
+                         WHERE fkb.kb_uid = $1 AND f.display_name = $2`,
                         data.kb1_rollback.kbUid,
                         filename
                     );
@@ -1656,15 +1719,27 @@ export default function (data) {
             }
 
             // Similar check for KB2
-            if (data.kb2_rollback && data.kb2_retention_files) {
-                const prodKB2FileCount = helper.countFilesInKnowledgeBase(data.kb2_initial.knowledgeBaseId);
+            if (data.kb2_rollback && data.kb2_retention_file_ids) {
+                // Get the production KB2 UID from the hash-based ID
+                const prodKB2UidQuery = helper.safeQuery(
+                    `SELECT uid FROM knowledge_base WHERE id = $1`,
+                    data.kb2_initial.knowledgeBaseId
+                );
+                const prodKB2Uid = prodKB2UidQuery && prodKB2UidQuery.length > 0 ? prodKB2UidQuery[0].uid : null;
+
+                if (!prodKB2Uid) {
+                    console.error(`Phase 6: Could not find production KB2 UID for ID ${data.kb2_initial.knowledgeBaseId}`);
+                    return;
+                }
+
+                const prodKB2FileCount = helper.countFilesInKnowledgeBase(prodKB2Uid);
                 const rollbackKB2FileCount = helper.countFilesInKnowledgeBase(data.kb2_rollback.kbUid);
 
                 console.log(`KB2 - Production files: ${prodKB2FileCount}, Rollback files: ${rollbackKB2FileCount}`);
 
                 check({ prodKB2FileCount, rollbackKB2FileCount }, {
-                    "Phase 6: KB2 production has all files": () => prodKB2FileCount >= (data.kb2_initial.fileCount + data.kb2_retention_files.length),
-                    "Phase 6: KB2 rollback has all files (dual processing)": () => rollbackKB2FileCount >= (data.kb2_initial.fileCount + data.kb2_retention_files.length),
+                    "Phase 6: KB2 production has all files": () => prodKB2FileCount >= (data.kb2_initial.fileCount + data.kb2_retention_file_ids.length),
+                    "Phase 6: KB2 rollback has all files (dual processing)": () => rollbackKB2FileCount >= (data.kb2_initial.fileCount + data.kb2_retention_file_ids.length),
                 });
             }
 
@@ -1684,9 +1759,9 @@ export default function (data) {
 
             // Rollback KB1 only (keep KB2 for retention expiry test)
             const rollbackRes = client.invoke(
-                "artifact.artifact.v1alpha.ArtifactPrivateService/RollbackAdmin",
+                "artifact.v1alpha.ArtifactPrivateService/RollbackAdmin",
                 {
-                    name: `users/${data.expectedOwner.uid}/knowledge-bases/${data.kb1_initial.knowledgeBaseId}`,
+                    name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb1_initial.knowledgeBaseId}`,
                 },
                 data.metadata
             );
@@ -1719,7 +1794,7 @@ export default function (data) {
             console.log("\n=== Phase 8: Verifying rollback restored OpenAI config ===");
 
             // Check production KB1 now uses OpenAI again
-            const prodKB1 = helper.getKnowledgeBaseByIdAndOwner(data.kb1_initial.knowledgeBaseId, data.expectedOwner.uid);
+            const prodKB1 = helper.getKnowledgeBaseByIdAndOwner(data.kb1_initial.knowledgeBaseId, data.expectedOwner.id);
 
             if (prodKB1 && prodKB1.length > 0) {
                 check(prodKB1[0], {
@@ -1727,24 +1802,25 @@ export default function (data) {
                 });
 
                 const systemQuery = helper.safeQuery(
-                    `SELECT s.id FROM system s
+                    `SELECT s.slug FROM system s
                      JOIN knowledge_base kb ON kb.system_uid = s.uid
                      WHERE kb.uid = $1`,
                     prodKB1[0].uid
                 );
 
                 if (systemQuery && systemQuery.length > 0) {
-                    const systemId = systemQuery[0].id;
-                    console.log(`Production KB1 system_id after rollback: ${systemId}`);
+                    const systemSlug = systemQuery[0].slug;
+                    console.log(`Production KB1 system_slug after rollback: ${systemSlug}`);
 
-                    check({ systemId }, {
-                        "Phase 8: KB1 restored to OpenAI config": () => systemId === "openai",
+                    check({ systemSlug }, {
+                        "Phase 8: KB1 restored to OpenAI config": () => systemSlug === "openai",
                     });
                 }
 
                 // Verify all files are still present
                 const fileCount = helper.countFilesInKnowledgeBase(prodKB1[0].uid);
-                const expectedCount = data.kb1_initial.fileCount + data.kb1_retention_files.length;
+                const retentionFileCount = data.kb1_retention_file_ids ? data.kb1_retention_file_ids.length : 0;
+                const expectedCount = data.kb1_initial.fileCount + retentionFileCount;
 
                 console.log(`KB1 after rollback - files: ${fileCount}, expected: ${expectedCount}`);
 
@@ -1757,9 +1833,10 @@ export default function (data) {
                 // ====================================================================
                 console.log("\n=== Phase 8.5: Verifying position data survived rollback (back to OpenAI) ===");
 
-                if (data.kb1_retention_files && data.kb1_retention_files.length > 0) {
-                    const pdfFileUid = data.kb1_retention_files[0];
-                    console.log(`Phase 8.5: Testing PDF file ${pdfFileUid} after rollback`);
+                if (data.kb1_retention_file_ids && data.kb1_retention_file_ids.length > 0) {
+                    const pdfFileId = data.kb1_retention_file_ids[0];
+                    const pdfFileUid = helper.getFileUidFromId(pdfFileId);
+                    console.log(`Phase 8.5: Testing PDF file ${pdfFileId} (UID: ${pdfFileUid}) after rollback`);
 
                     // 1. Verify converted_file still has position_data with PageDelimiters
                     const convertedFileQuery = helper.safeQuery(
@@ -1816,7 +1893,7 @@ export default function (data) {
                     // 3. Verify chunk API still returns UNIT_PAGE references
                     const chunksResp = http.request(
                         "GET",
-                        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb1_initial.knowledgeBaseId}/files/${pdfFileUid}/chunks`,
+                        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${pdfFileId}/chunks`,
                         null,
                         data.header
                     );
@@ -1864,9 +1941,9 @@ export default function (data) {
             // For KB2, we'll trigger retention expiry manually
             // First, set retention to a very short period (1 second)
             const setRetentionRes = client.invoke(
-                "artifact.artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
+                "artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
                 {
-                    name: `users/${data.expectedOwner.uid}/knowledge-bases/${data.kb2_initial.knowledgeBaseId}`,
+                    name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb2_initial.knowledgeBaseId}`,
                     duration: 1,
                     time_unit: "TIME_UNIT_SECOND",
                 },
@@ -1883,9 +1960,9 @@ export default function (data) {
 
             // Manually trigger purge
             const purgeRes = client.invoke(
-                "artifact.artifact.v1alpha.ArtifactPrivateService/PurgeRollbackAdmin",
+                "artifact.v1alpha.ArtifactPrivateService/PurgeRollbackAdmin",
                 {
-                    name: `users/${data.expectedOwner.uid}/knowledge-bases/${data.kb2_initial.knowledgeBaseId}`,
+                    name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${data.kb2_initial.knowledgeBaseId}`,
                 },
                 data.metadata
             );
@@ -1919,7 +1996,7 @@ export default function (data) {
                 const cleanedUp = helper.pollRollbackKBCleanup(
                     data.kb2_rollback.knowledgeBaseId,
                     data.kb2_rollback.kbUid,
-                    data.expectedOwner.uid,
+                    data.expectedOwner.id,
                     60
                 );
 
@@ -1952,7 +2029,7 @@ export default function (data) {
                 }
 
                 // Verify production KB2 still works normally
-                const prodKB2 = helper.getKnowledgeBaseByIdAndOwner(data.kb2_initial.knowledgeBaseId, data.expectedOwner.uid);
+                const prodKB2 = helper.getKnowledgeBaseByIdAndOwner(data.kb2_initial.knowledgeBaseId, data.expectedOwner.id);
 
                 if (prodKB2 && prodKB2.length > 0) {
                     check(prodKB2[0], {
@@ -1961,7 +2038,7 @@ export default function (data) {
                     });
 
                     const fileCount = helper.countFilesInKnowledgeBase(prodKB2[0].uid);
-                    const expectedCount = data.kb2_initial.fileCount + data.kb2_retention_files.length;
+                    const expectedCount = data.kb2_initial.fileCount + data.kb2_retention_file_ids.length;
 
                     check({ fileCount }, {
                         "Phase 9: Production KB2 still has all files": () => fileCount >= expectedCount,

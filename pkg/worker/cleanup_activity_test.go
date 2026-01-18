@@ -60,13 +60,13 @@ func TestDeleteOriginalFileActivity_Success(t *testing.T) {
 	mockStorage.DeleteFileMock.Return(nil)
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{
-			{UID: fileUID, Destination: destination},
+		Then([]repository.FileModel{
+			{UID: fileUID, StoragePath: destination},
 		}, nil)
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
-	mockRepository.DeleteObjectByDestinationMock.Return(nil)
+	mockRepository.DeleteObjectByStoragePathMock.Return(nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
@@ -88,9 +88,9 @@ func TestDeleteOriginalFileActivity_FileNotFound(t *testing.T) {
 	bucket := "test-bucket"
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{}, nil)
+		Then([]repository.FileModel{}, nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
@@ -113,10 +113,10 @@ func TestDeleteOriginalFileActivity_NoDestination(t *testing.T) {
 	bucket := "test-bucket"
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{
-			{UID: fileUID, Destination: ""}, // No destination
+		Then([]repository.FileModel{
+			{UID: fileUID, StoragePath: ""}, // No destination
 		}, nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
@@ -148,8 +148,8 @@ func TestDeleteConvertedFileActivity_Success(t *testing.T) {
 		When(minimock.AnyContext, fileUID).
 		Then([]repository.ConvertedFileModel{
 			{
-				UID:   convertedFileUID,
-				KBUID: kbUID,
+				UID:              convertedFileUID,
+				KnowledgeBaseUID: kbUID,
 			},
 		}, nil)
 
@@ -210,8 +210,8 @@ func TestDeleteTextChunksFromMinIOActivity_Success(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 	mockRepository.ListTextChunksByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
-		Then([]repository.TextChunkModel{
-			{UID: textChunkUID, KBUID: kbUID},
+		Then([]repository.ChunkModel{
+			{UID: textChunkUID, KnowledgeBaseUID: kbUID},
 		}, nil)
 
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
@@ -246,7 +246,7 @@ func TestDeleteEmbeddingsFromVectorDBActivity_Success(t *testing.T) {
 	mockRepository.ListEmbeddingsByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
 		Then([]repository.EmbeddingModel{
-			{UID: embeddingUID, KBUID: kbUID},
+			{UID: embeddingUID, KnowledgeBaseUID: kbUID},
 		}, nil)
 
 	// Mock for getting active_collection_uid
@@ -284,7 +284,7 @@ func TestDeleteEmbeddingsFromVectorDBActivity_CollectionNotFound(t *testing.T) {
 	mockRepository.ListEmbeddingsByKBFileUIDMock.
 		When(minimock.AnyContext, fileUID).
 		Then([]repository.EmbeddingModel{
-			{UID: embeddingUID, KBUID: kbUID},
+			{UID: embeddingUID, KnowledgeBaseUID: kbUID},
 		}, nil)
 
 	// Mock for getting active_collection_uid

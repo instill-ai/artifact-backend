@@ -7,8 +7,8 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/v1beta"
 	filetype "github.com/instill-ai/x/file"
 )
 
@@ -26,7 +26,7 @@ const (
 
 // TextChunkResult contains the chunking result and metadata
 type TextChunkResult struct {
-	TextChunks []types.TextChunk
+	TextChunks []types.Chunk
 
 	// PipelineRelease is the pipeline used for chunking
 	PipelineRelease Release
@@ -235,7 +235,7 @@ func enhanceErrorWithPipelineMetadata(err error, resp *pipelinepb.TriggerNamespa
 
 	// Add pipeline identity first for context
 	if pipelineRelease != nil {
-		pipelineID := fmt.Sprintf("pipeline=%s/%s@%s", pipelineRelease.Namespace, pipelineRelease.ID, pipelineRelease.Version)
+		pipelineID := fmt.Sprintf("pipeline=%s/%s@%s", pipelineRelease.Namespace, pipelineRelease.Slug(), pipelineRelease.Version)
 		metadataInfo = append(metadataInfo, pipelineID)
 	}
 

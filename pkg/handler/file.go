@@ -26,11 +26,42 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	filetype "github.com/instill-ai/x/file"
 	logx "github.com/instill-ai/x/log"
 )
+
+// filterRequestWrapper implements filtering.Request interface to pass a custom filter string
+// to the AIP-160 filter parser. This is used to strip knowledge_base_id from the filter
+// before parsing, since we handle it separately for junction table joins.
+type filterRequestWrapper struct {
+	filter string
+}
+
+func (r filterRequestWrapper) GetFilter() string {
+	return r.filter
+}
+
+// parseNamespaceFromParentFile parses a parent resource name of format "namespaces/{namespace}"
+// and returns the namespace_id
+func parseNamespaceFromParentFile(parent string) (namespaceID string, err error) {
+	parts := strings.Split(parent, "/")
+	if len(parts) != 2 || parts[0] != "namespaces" {
+		return "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}")
+	}
+	return parts[1], nil
+}
+
+// parseFileFromName parses a resource name of format "namespaces/{namespace}/files/{file}"
+// and returns the namespace_id and file_id
+func parseFileFromName(name string) (namespaceID, fileID string, err error) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "files" {
+		return "", "", fmt.Errorf("invalid file name format, expected namespaces/{namespace}/files/{file}")
+	}
+	return parts[1], parts[3], nil
+}
 
 // CreateFile adds a file to a knowledge base (AIP-compliant version of UploadKnowledgeBaseFile).
 // It handles file upload, validation, ACL checks, dual processing for staging/rollback KBs,
@@ -48,12 +79,21 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		return nil, err
 	}
 
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	// Parse namespace from parent
+	namespaceID, err := parseNamespaceFromParentFile(req.GetParent())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing parent: %w", err),
+			"Invalid parent format. Expected: namespaces/{namespace}",
+		)
+	}
+
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to get namespace. err: %w", err),
@@ -61,9 +101,14 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		)
 	}
 	// ACL - check user's permission to write knowledge base
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.KnowledgeBaseId)
+	kbID := req.GetKnowledgeBaseId()
+	logger.Debug("CreateFile: looking up KB",
+		zap.String("knowledge_base_id", kbID),
+		zap.String("namespace_uid", ns.NsUID.String()),
+		zap.String("namespace_id", ns.NsID))
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, kbID)
 	if err != nil {
-		logger.Error("failed to get knowledge base", zap.Error(err))
+		logger.Error("failed to get knowledge base", zap.Error(err), zap.String("kb_id_received", kbID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
 			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
@@ -134,20 +179,23 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		return nil, fmt.Errorf("generating file UID: %w", err)
 	}
 
-	// Generate hash-based ID from display_name and UID
-	// Format: {slug}-{sha256(uid)[:8]}
-	fileID := utils.GenerateResourceID(req.GetFile().GetDisplayName(), fileUID)
+	// Generate prefixed hash-based ID from UID
+	// Format: file-{base62(sha256(uid)[:10])}
+	fileID := utils.GeneratePrefixedResourceID(utils.PrefixFile, fileUID)
+
+	// Generate slug from display name for URL-friendly access
+	fileSlug := utils.GenerateSlug(req.GetFile().GetDisplayName())
 
 	// upload file to minio and database
 	// Inherit RAG version from parent knowledge base
-	kbFile := repository.KnowledgeBaseFileModel{
+	kbFile := repository.FileModel{
 		UID:                       fileUID,
 		ID:                        fileID,
 		DisplayName:               req.GetFile().GetDisplayName(),
+		Slug:                      fileSlug,
 		Description:               req.GetFile().GetDescription(),
 		FileType:                  req.File.Type.String(),
 		NamespaceUID:              ns.NsUID,
-		KBUID:                     kb.UID,
 		ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
 		ExternalMetadataUnmarshal: md,
 		Tags:                      repository.TagsArray(req.GetFile().GetTags()),
@@ -233,7 +281,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		destination := object.GetBlobObjectPath(ns.NsUID, objectUID)
 
 		kbFile.CreatorUID = creatorUID
-		kbFile.Destination = destination
+		kbFile.StoragePath = destination
 
 		fileSize, _ := getFileSize(req.File.Content)
 		kbFile.Size = fileSize
@@ -245,7 +293,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		}
 
 		if !obj.IsUploaded {
-			if !strings.HasPrefix(obj.Destination, "ns-") {
+			if !strings.HasPrefix(obj.StoragePath, "ns-") {
 				return nil, errorsx.AddMessage(
 					fmt.Errorf("file has not been uploaded yet"),
 					"File upload is not complete. Please wait for the upload to finish and try again.",
@@ -253,7 +301,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			}
 
 			// Check if file exists in minio and get its metadata
-			fileMetadata, err := ph.service.Repository().GetMinIOStorage().GetFileMetadata(ctx, object.BlobBucketName, obj.Destination)
+			fileMetadata, err := ph.service.Repository().GetMinIOStorage().GetFileMetadata(ctx, object.BlobBucketName, obj.StoragePath)
 			if err != nil {
 				logger.Error("failed to get file from minio", zap.Error(err))
 				return nil, err
@@ -272,28 +320,28 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			}
 		}
 
-		kbFile.DisplayName = obj.Name
+		kbFile.DisplayName = obj.DisplayName
 		kbFile.CreatorUID = obj.CreatorUID
-		kbFile.Destination = obj.Destination
+		kbFile.StoragePath = obj.StoragePath
 		kbFile.Size = obj.Size
 
-		req.File.Type = determineFileType(obj.Name)
+		req.File.Type = determineFileType(obj.DisplayName)
 
 		// Special handling for WebM files - determine if audio-only or video by inspecting content
-		if strings.HasSuffix(strings.ToLower(obj.Name), ".webm") {
+		if strings.HasSuffix(strings.ToLower(obj.DisplayName), ".webm") {
 			// Read the file to detect codec type
 			// Note: GetFile reads entire file, but detectWebMType only checks first 8KB
-			fileBytes, err := ph.service.Repository().GetMinIOStorage().GetFile(ctx, object.BlobBucketName, obj.Destination)
+			fileBytes, err := ph.service.Repository().GetMinIOStorage().GetFile(ctx, object.BlobBucketName, obj.StoragePath)
 			if err == nil && len(fileBytes) > 0 {
 				// Encode to base64 for detectWebMType function
 				base64Content := base64.StdEncoding.EncodeToString(fileBytes)
 				req.File.Type = detectWebMType(base64Content)
 				logger.Info("Detected WebM type from content",
-					zap.String("filename", obj.Name),
+					zap.String("filename", obj.DisplayName),
 					zap.String("type", req.File.Type.String()))
 			} else {
 				logger.Warn("Failed to read WebM file for type detection, defaulting to video",
-					zap.String("filename", obj.Name),
+					zap.String("filename", obj.DisplayName),
 					zap.Error(err))
 			}
 			// If we can't read the file, keep the default WEBM_VIDEO type
@@ -312,7 +360,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	// create knowledge base file in database
 	// Note: CreateKnowledgeBaseFile now atomically handles both file creation
 	// and knowledge base usage increment in a single transaction
-	res, err := ph.service.Repository().CreateKnowledgeBaseFile(ctx, kbFile, nil)
+	res, err := ph.service.Repository().CreateFile(ctx, kbFile, kb.UID, nil)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("creating knowledge base file: %w", err),
@@ -335,7 +383,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		zap.String("fileUID", res.UID.String()),
 		zap.String("filename", res.DisplayName),
 		zap.String("kbUID", kb.UID.String()),
-		zap.String("kbID", kb.KBID),
+		zap.String("kbID", kb.ID),
 		zap.String("updateStatus", kb.UpdateStatus))
 
 	dualTarget, err := ph.service.Repository().GetDualProcessingTarget(ctx, kb)
@@ -356,7 +404,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			zap.String("fileUID", res.UID.String()),
 			zap.String("filename", res.DisplayName),
 			zap.String("kbUID", kb.UID.String()),
-			zap.String("kbID", kb.KBID),
+			zap.String("kbID", kb.ID),
 			zap.String("updateStatus", kb.UpdateStatus))
 	}
 
@@ -382,7 +430,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		// This file record will reference the same original file in MinIO
 		// but will have different processed outputs (chunks, embeddings)
 
-		// Pre-generate UID and hash-based ID for the target file
+		// Pre-generate UID and prefixed hash-based ID for the target file
 		targetFileUID, err := uuid.NewV4()
 		if err != nil {
 			logger.Error("Failed to generate target file UID",
@@ -390,9 +438,9 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 				zap.String("prodFileName", res.DisplayName))
 			return nil, fmt.Errorf("generating target file UID: %w", err)
 		}
-		targetFileID := utils.GenerateResourceID(res.DisplayName, targetFileUID)
+		targetFileID := utils.GeneratePrefixedResourceID(utils.PrefixFile, targetFileUID)
 
-		targetFile := repository.KnowledgeBaseFileModel{
+		targetFile := repository.FileModel{
 			UID:                       targetFileUID,
 			ID:                        targetFileID,
 			DisplayName:               res.DisplayName,
@@ -400,8 +448,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			FileType:                  res.FileType,
 			NamespaceUID:              res.NamespaceUID,
 			CreatorUID:                res.CreatorUID,
-			KBUID:                     dualTarget.TargetKB.UID, // Different KB (staging or rollback)
-			Destination:               res.Destination,         // Same source file
+			StoragePath:               res.StoragePath, // Same source file
 			Size:                      res.Size,
 			ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
 			ExternalMetadataUnmarshal: res.ExternalMetadataUnmarshal,
@@ -411,10 +458,10 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		// CRITICAL FIX: Retry dual file creation up to 3 times with exponential backoff
 		// Under sustained load, DB connections or transactions can fail temporarily.
 		// Without retries, SynchronizeKBActivity gets stuck forever waiting for file counts to match.
-		var targetFileRes *repository.KnowledgeBaseFileModel
+		var targetFileRes *repository.FileModel
 		maxRetries := 3
 		for attempt := 1; attempt <= maxRetries; attempt++ {
-			targetFileRes, err = ph.service.Repository().CreateKnowledgeBaseFile(ctx, targetFile, nil)
+			targetFileRes, err = ph.service.Repository().CreateFile(ctx, targetFile, dualTarget.TargetKB.UID, nil)
 			if err == nil {
 				break // Success
 			}
@@ -437,7 +484,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 				zap.String("prodFileName", res.DisplayName),
 				zap.String("prodFileUID", res.UID.String()),
 				zap.String("targetKBUID", dualTarget.TargetKB.UID.String()),
-				zap.String("targetKBID", dualTarget.TargetKB.KBID),
+				zap.String("targetKBID", dualTarget.TargetKB.ID),
 				zap.String("phase", dualTarget.Phase),
 				zap.Int("attempts", maxRetries))
 			// Log error but don't fail the upload - production file upload succeeded
@@ -491,7 +538,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			zap.String("fileUID", res.UID.String()),
 			zap.String("filename", res.DisplayName),
 			zap.String("kbUID", kb.UID.String()),
-			zap.String("kbID", kb.KBID),
+			zap.String("kbID", kb.ID),
 			zap.String("updateStatus", kb.UpdateStatus))
 		// Don't fail the upload - file record exists and can be processed later
 	} else {
@@ -499,7 +546,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			zap.String("fileUID", res.UID.String()),
 			zap.String("filename", res.DisplayName),
 			zap.String("kbUID", kb.UID.String()),
-			zap.String("kbID", kb.KBID),
+			zap.String("kbID", kb.ID),
 			zap.String("updateStatus", kb.UpdateStatus),
 			zap.Bool("hasDualProcessing", dualTarget != nil && dualTarget.IsNeeded))
 	}
@@ -510,15 +557,13 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 
 	return &artifactpb.CreateFileResponse{
 		File: &artifactpb.File{
-			Uid:                res.UID.String(),
 			Id:                 res.ID,
-			OwnerUid:           res.NamespaceUID.String(),
+			Slug:               res.Slug,
 			OwnerName:          ns.Name(),
 			Owner:              owner,
-			CreatorUid:         res.CreatorUID.String(),
 			Creator:            creator,
-			KnowledgeBaseId:   res.KBUID.String(),
-			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, res.ID),
+			KnowledgeBaseIds:   []string{kb.ID}, // Initial KB association
+			Name:               fmt.Sprintf("namespaces/%s/files/%s", namespaceID, res.ID),
 			DisplayName:        res.DisplayName,
 			Type:               req.File.Type,
 			CreateTime:         timestamppb.New(*res.CreateTime),
@@ -531,12 +576,12 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			ObjectUid:          req.File.ObjectUid,
 			ConvertingPipeline: res.ConvertingPipeline(),
 			Tags:               res.Tags,
-			CollectionUids:     extractCollectionUIDs(res.Tags),
+			CollectionIds:      extractCollectionUIDs(res.Tags),
 		},
 	}, nil
 }
 
-// ListFiles lists files in a knowledge base with pagination and filtering (AIP-compliant version of ListKnowledgeBaseFiles).
+// ListFiles lists files in a namespace with pagination and filtering (AIP-compliant version of ListKnowledgeBaseFiles).
 // Supports filtering by file IDs and process status, with token/chunk count enrichment.
 func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFilesRequest) (*artifactpb.ListFilesResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
@@ -547,49 +592,165 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		return nil, err
 	}
 
-	// ACL - check if the creator can list files in this knowledge base. ACL using uid to check the certain namespace resource.
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	// Parse namespace from parent
+	namespaceID, err := parseNamespaceFromParentFile(req.GetParent())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing parent: %w", err),
+			"Invalid parent format. Expected: namespaces/{namespace}",
+		)
+	}
+
+	// ACL - check if the creator can list files in this namespace
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get namespace: %w", err),
-			"Unable to access the specified namespace. Please check the namespace ID and try again.",
-		)
-	}
-	// ACL - check user's permission to write knowledge base
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.KnowledgeBaseId)
-	if err != nil {
-		logger.Error("failed to get knowledge base", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
-			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
-		)
-	}
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
-	if err != nil {
-		logger.Error("failed to check permission", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
-			"Unable to verify access permissions. Please try again.",
-		)
-	}
-	if !granted {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized),
-			"You don't have permission to view this knowledge base. Please contact the owner for access.",
+			fmt.Errorf("%w: namespace %q", errorsx.ErrNotFound, namespaceID),
+			"The specified namespace does not exist. Please check the namespace ID and try again.",
 		)
 	}
 
-	// Parse AIP-160 filter expression
+	// Check namespace-level permission first - users can only list files in namespaces they have access to
+	// For user namespaces: user UID must match namespace UID
+	// For organization namespaces: user must be a member of the organization
+	if err := ph.service.CheckNamespacePermission(ctx, ns); err != nil {
+		logger.Error("namespace permission denied",
+			zap.Error(err),
+			zap.String("namespaceID", namespaceID),
+			zap.String("authUID", authUID))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no permission to list files in namespace", errorsx.ErrUnauthorized),
+			"You don't have permission to list files in this namespace.",
+		)
+	}
+
+	// Extract knowledge_base_id from filter if provided (AIP-160 uses snake_case with spaces)
+	// If KB filter is specified, we'll also check KB-level permissions
+	kbID := ""
+	filter := req.GetFilter()
+	if filter != "" {
+		// Try to extract knowledge_base_id from filter
+		// Note: This is a simplified approach; proper AIP-160 filter parsing should be used
+		// AIP-160 format: knowledge_base_id = "value" (with spaces around =)
+		if strings.Contains(filter, "knowledge_base_id") {
+			// Remove spaces around = for easier parsing: knowledge_base_id = "value" -> knowledge_base_id="value"
+			normalizedFilter := strings.ReplaceAll(filter, " = ", "=")
+			normalizedFilter = strings.ReplaceAll(normalizedFilter, "= ", "=")
+			normalizedFilter = strings.ReplaceAll(normalizedFilter, " =", "=")
+			if strings.Contains(normalizedFilter, "knowledge_base_id=") {
+				parts := strings.Split(normalizedFilter, "knowledge_base_id=")
+				if len(parts) > 1 {
+					// Extract value, handling potential AND/OR operators
+					value := strings.Split(parts[1], " ")[0]
+					kbID = strings.Trim(value, "\"'")
+				}
+			}
+		}
+	}
+
+	// Strip knowledge_base_id from filter for AIP-160 parsing since we handle it manually above.
+	// The file table doesn't have a knowledge_base_id column - it's in the junction table.
+	// We use the manually extracted kbID to join with the junction table.
+	strippedFilter := filter
+	if filter != "" && strings.Contains(filter, "knowledge_base_id") {
+		// Remove the knowledge_base_id clause from the filter
+		// Handle formats like: "knowledge_base_id = \"value\"", "knowledge_base_id=\"value\""
+		// Also handle AND/OR operators
+		normalizedFilter := strings.ReplaceAll(filter, " = ", "=")
+		normalizedFilter = strings.ReplaceAll(normalizedFilter, "= ", "=")
+		normalizedFilter = strings.ReplaceAll(normalizedFilter, " =", "=")
+
+		// Find and remove knowledge_base_id clause
+		if strings.Contains(normalizedFilter, "knowledge_base_id=") {
+			parts := strings.SplitN(normalizedFilter, "knowledge_base_id=", 2)
+			if len(parts) > 1 {
+				// Find the end of the value (look for next AND/OR or end of string)
+				valuePart := parts[1]
+				// Skip the quoted value
+				if len(valuePart) > 0 && (valuePart[0] == '"' || valuePart[0] == '\'') {
+					quote := string(valuePart[0])
+					endIdx := strings.Index(valuePart[1:], quote)
+					if endIdx != -1 {
+						remainingAfterValue := valuePart[endIdx+2:]
+						// Remove leading AND/OR operators
+						remainingAfterValue = strings.TrimSpace(remainingAfterValue)
+						if strings.HasPrefix(strings.ToUpper(remainingAfterValue), "AND ") {
+							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "AND ")
+							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "and ")
+						} else if strings.HasPrefix(strings.ToUpper(remainingAfterValue), "OR ") {
+							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "OR ")
+							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "or ")
+						}
+						strippedFilter = strings.TrimSpace(parts[0] + remainingAfterValue)
+					}
+				} else {
+					// Unquoted value - find the next space or end
+					endIdx := strings.IndexAny(valuePart, " \t")
+					if endIdx == -1 {
+						strippedFilter = strings.TrimSpace(parts[0])
+					} else {
+						remainingAfterValue := strings.TrimSpace(valuePart[endIdx:])
+						if strings.HasPrefix(strings.ToUpper(remainingAfterValue), "AND ") {
+							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "AND ")
+							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "and ")
+						} else if strings.HasPrefix(strings.ToUpper(remainingAfterValue), "OR ") {
+							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "OR ")
+							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "or ")
+						}
+						strippedFilter = strings.TrimSpace(parts[0] + remainingAfterValue)
+					}
+				}
+			}
+		}
+		// Handle trailing AND/OR from removal
+		strippedFilter = strings.TrimSuffix(strings.TrimSpace(strippedFilter), "AND")
+		strippedFilter = strings.TrimSuffix(strings.TrimSpace(strippedFilter), "and")
+		strippedFilter = strings.TrimSuffix(strings.TrimSpace(strippedFilter), "OR")
+		strippedFilter = strings.TrimSuffix(strings.TrimSpace(strippedFilter), "or")
+		strippedFilter = strings.TrimSpace(strippedFilter)
+	}
+
+	var kb *repository.KnowledgeBaseModel
+	if kbID != "" {
+		kb, err = ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, kbID)
+		if err != nil {
+			logger.Error("failed to get knowledge base", zap.Error(err), zap.String("kbID", kbID))
+			return nil, errorsx.AddMessage(
+				fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
+				"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
+			)
+		}
+		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+		if err != nil {
+			logger.Error("failed to check permission", zap.Error(err))
+			return nil, errorsx.AddMessage(
+				fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
+				"Unable to verify access permissions. Please try again.",
+			)
+		}
+		if !granted {
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized),
+				"You don't have permission to view this knowledge base. Please contact the owner for access.",
+			)
+		}
+	}
+
+	// Parse AIP-160 filter expression (without knowledge_base_id which is handled separately)
 	declarations, err := filtering.NewDeclarations([]filtering.DeclarationOption{
 		filtering.DeclareStandardFunctions(),
 		filtering.DeclareIdent("uid", filtering.TypeString),
 		filtering.DeclareIdent("id", filtering.TypeString),
 		filtering.DeclareIdent("process_status", filtering.TypeString),
+		// Note: knowledge_base_id is NOT declared here because:
+		// 1. We handle it manually above for KB lookup and junction table join
+		// 2. The file table doesn't have a knowledge_base_id column
+		// 3. We strip it from the filter before passing to the AIP-160 parser
 	}...)
 	if err != nil {
 		logger.Error("failed to create filter declarations", zap.Error(err))
@@ -599,21 +760,28 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		)
 	}
 
-	filter, err := filtering.ParseFilter(req, declarations)
+	// Use filterRequestWrapper to pass the stripped filter (without knowledge_base_id) to the parser
+	parsedFilter, err := filtering.ParseFilter(filterRequestWrapper{filter: strippedFilter}, declarations)
 	if err != nil {
-		logger.Error("failed to parse filter", zap.Error(err))
+		logger.Error("failed to parse filter", zap.Error(err), zap.String("strippedFilter", strippedFilter))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("invalid filter expression: %w", err),
 			"Unable to parse filter. Please check the filter syntax and try again.",
 		)
 	}
 
-	kbFileList, err := ph.service.Repository().ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
+	// Determine KBUID for the query - empty string if kb is nil (list all files in namespace)
+	kbUIDStr := ""
+	if kb != nil {
+		kbUIDStr = kb.UID.String()
+	}
+
+	kbFileList, err := ph.service.Repository().ListFiles(ctx, repository.KnowledgeBaseFileListParams{
 		OwnerUID:  ns.NsUID.String(),
-		KBUID:     kb.UID.String(),
+		KBUID:     kbUIDStr,
 		PageSize:  int(req.GetPageSize()),
 		PageToken: req.GetPageToken(),
-		Filter:    filter,
+		Filter:    parsedFilter,
 	})
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -650,9 +818,24 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 	// Fetch owner once (same for all files in this KB)
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
 
+	// Fetch KB IDs for all files in batch (needed when kb filter is not provided)
+	var fileToKBIDs map[types.FileUIDType][]string
+	if kb == nil {
+		fileUIDs := make([]types.FileUIDType, len(kbFileList.Files))
+		for i, f := range kbFileList.Files {
+			fileUIDs[i] = f.UID
+		}
+		fileToKBIDs, err = ph.service.Repository().GetKnowledgeBaseIDsForFiles(ctx, fileUIDs)
+		if err != nil {
+			logger.Warn("failed to fetch KB IDs for files", zap.Error(err))
+			// Continue with empty KB IDs rather than failing
+			fileToKBIDs = make(map[types.FileUIDType][]string)
+		}
+	}
+
 	files := make([]*artifactpb.File, 0, len(kbFileList.Files))
 	for _, kbFile := range kbFileList.Files {
-		objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.Destination, "/")[1], "obj-"))
+		objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.StoragePath, "/")[1], "obj-"))
 
 		// Runtime migration for legacy files: files uploaded before the new object-based flow
 		// were stored in the "uploaded-file" folder.
@@ -666,10 +849,10 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		// TODO: this is just a temporary solution, our Console need to
 		// adopt the new flow. So the old flow can be deprecated and
 		// removed.
-		if strings.Split(kbFile.Destination, "/")[1] == "uploaded-file" {
-			filename := strings.Split(kbFile.Destination, "/")[2]
+		if strings.Split(kbFile.StoragePath, "/")[1] == "uploaded-file" {
+			filename := strings.Split(kbFile.StoragePath, "/")[2]
 
-			content, err := ph.service.Repository().GetMinIOStorage().GetFile(ctx, config.Config.Minio.BucketName, kbFile.Destination)
+			content, err := ph.service.Repository().GetMinIOStorage().GetFile(ctx, config.Config.Minio.BucketName, kbFile.StoragePath)
 			if err != nil {
 				return nil, errorsx.AddMessage(
 					fmt.Errorf("fetching file blob: %w", err),
@@ -689,8 +872,8 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 
 			newDestination := object.GetBlobObjectPath(ns.NsUID, objectUID)
 			fmt.Println("newDestination", newDestination)
-			_, err = ph.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), map[string]any{
-				repository.KnowledgeBaseFileColumn.Destination: newDestination,
+			_, err = ph.service.Repository().UpdateFile(ctx, kbFile.UID.String(), map[string]any{
+				repository.FileColumn.StoragePath: newDestination,
 			})
 			if err != nil {
 				return nil, errorsx.AddMessage(
@@ -702,10 +885,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		}
 
 		downloadURL := ""
-		response, err := ph.service.GetDownloadURL(ctx, &artifactpb.GetObjectDownloadURLRequest{
-			NamespaceId: ns.NsID,
-			ObjectUid:   objectUID.String(),
-		}, ns.NsUID, ns.NsID)
+		response, err := ph.service.GetDownloadURLByObjectUID(ctx, objectUID, ns.NsUID, ns.NsID, 1, "")
 		if err == nil {
 			downloadURL = response.GetDownloadUrl()
 		}
@@ -718,16 +898,22 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		if fileID == "" {
 			fileID = kbFile.UID.String()
 		}
+		// Determine KnowledgeBaseIds - use KB from filter if provided, otherwise use batch lookup
+		var knowledgeBaseIDs []string
+		if kb != nil {
+			knowledgeBaseIDs = []string{kb.ID}
+		} else if fileToKBIDs != nil {
+			knowledgeBaseIDs = fileToKBIDs[kbFile.UID]
+		}
+
 		file := &artifactpb.File{
-			Uid:                kbFile.UID.String(),
 			Id:                 fileID,
-			OwnerUid:           kbFile.NamespaceUID.String(),
+			Slug:               kbFile.Slug,
 			OwnerName:          ns.Name(),
 			Owner:              owner,
-			CreatorUid:         kbFile.CreatorUID.String(),
 			Creator:            creator,
-			KnowledgeBaseId:   kbFile.KBUID.String(),
-			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", req.NamespaceId, req.KnowledgeBaseId, fileID),
+			KnowledgeBaseIds:   knowledgeBaseIDs,
+			Name:               fmt.Sprintf("namespaces/%s/files/%s", namespaceID, fileID),
 			DisplayName:        kbFile.DisplayName,
 			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
 			CreateTime:         timestamppb.New(*kbFile.CreateTime),
@@ -741,7 +927,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
 			Tags:               []string(kbFile.Tags),
-			CollectionUids:     extractCollectionUIDs(kbFile.Tags),
+			CollectionIds:      extractCollectionUIDs(kbFile.Tags),
 		}
 
 		// Include status message (error or success message)
@@ -768,19 +954,27 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 	}, nil
 }
 
-// GetFile retrieves a file from a knowledge base with support for different views (AIP-compliant version of GetKnowledgeBaseFile).
+// GetFile retrieves a file with support for different views (AIP-compliant).
 // Supports VIEW_BASIC, VIEW_FULL (metadata), VIEW_SUMMARY, VIEW_CONTENT, VIEW_STANDARD_FILE_TYPE (standardized files), VIEW_ORIGINAL_FILE_TYPE (original files), and VIEW_CACHE (Gemini cache).
 func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileRequest) (*artifactpb.GetFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
+	// Parse resource name to get namespace_id and file_id
+	namespaceID, fileID, err := parseFileFromName(req.GetName())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing file name: %w", err),
+			"Invalid file name format. Expected: namespaces/{namespace}/files/{file}",
+		)
+	}
+
 	// Get the file metadata first
-	filterExpr := fmt.Sprintf(`id = "%s"`, req.FileId)
+	filterExpr := fmt.Sprintf(`id = "%s"`, fileID)
 	pageSize := int32(1)
 	files, err := ph.ListFiles(ctx, &artifactpb.ListFilesRequest{
-		NamespaceId:     req.NamespaceId,
-		KnowledgeBaseId: req.KnowledgeBaseId,
-		PageSize:        &pageSize,
-		Filter:          &filterExpr,
+		Parent:   fmt.Sprintf("namespaces/%s", namespaceID),
+		PageSize: &pageSize,
+		Filter:   &filterExpr,
 	})
 	if err != nil {
 		return nil, err
@@ -806,26 +1000,34 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		}, nil
 	}
 
-	// Get namespace and KB for MinIO/cache access
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	// Get namespace for MinIO/cache access (validate it exists)
+	_, err = ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Warn("failed to get namespace for view content", zap.Error(err))
 		return &artifactpb.GetFileResponse{File: file}, nil
 	}
 
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.KnowledgeBaseId)
-	if err != nil {
-		logger.Warn("failed to get knowledge base for view content", zap.Error(err))
-		return &artifactpb.GetFileResponse{File: file}, nil
-	}
-
-	// Look up file by hash-based ID
-	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
+	// Look up file by hash-based ID to get the KB UID
+	kbFiles, err := ph.service.Repository().GetFilesByFileIDs(ctx, []string{fileID})
 	if err != nil || len(kbFiles) == 0 {
 		logger.Warn("failed to get file for view content", zap.Error(err))
 		return &artifactpb.GetFileResponse{File: file}, nil
 	}
 	kbFile := kbFiles[0]
+
+	// Get knowledge base UIDs associated with this file
+	kbUIDs, err := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, kbFile.UID)
+	if err != nil || len(kbUIDs) == 0 {
+		logger.Warn("failed to get KB associations for file", zap.Error(err))
+		return &artifactpb.GetFileResponse{File: file}, nil
+	}
+
+	// Get knowledge base for content access (use first associated KB)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByUID(ctx, kbUIDs[0])
+	if err != nil {
+		logger.Warn("failed to get knowledge base for view content", zap.Error(err))
+		return &artifactpb.GetFileResponse{File: file}, nil
+	}
 
 	// Check which storage provider is requested
 	storageProvider := req.GetStorageProvider()
@@ -1022,7 +1224,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			filename := fmt.Sprintf("%s-summary.md", kbFile.DisplayName)
 			fileURL, err := getFileURL(
 				config.Config.Minio.BucketName,
-				convertedFile.Destination,
+				convertedFile.StoragePath,
 				filename,
 				convertedFile.ContentType, // Usually "text/markdown"
 			)
@@ -1051,7 +1253,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			filename := fmt.Sprintf("%s-content.md", kbFile.DisplayName)
 			fileURL, err := getFileURL(
 				config.Config.Minio.BucketName,
-				convertedFile.Destination,
+				convertedFile.StoragePath,
 				filename,
 				convertedFile.ContentType, // Usually "text/markdown"
 			)
@@ -1104,7 +1306,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 				filename := fmt.Sprintf("%s.%s", kbFile.DisplayName, fileExtension)
 				fileURL, err := getFileURL(
 					config.Config.Minio.BucketName,
-					convertedFile.Destination,
+					convertedFile.StoragePath,
 					filename,
 					convertedFile.ContentType,
 				)
@@ -1137,7 +1339,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		fileProtoType := artifactpb.File_Type(fileType)
 
 		// Get the appropriate bucket for this file
-		bucket := object.BucketFromDestination(kbFile.Destination)
+		bucket := object.BucketFromDestination(kbFile.StoragePath)
 
 		// Get MIME type for the original file
 		contentType := filetype.FileTypeToMimeType(fileProtoType)
@@ -1145,7 +1347,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		// Generate file URL for the original file
 		fileURL, err := getFileURL(
 			bucket,
-			kbFile.Destination,
+			kbFile.StoragePath,
 			kbFile.DisplayName,
 			contentType,
 		)
@@ -1214,14 +1416,14 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			)
 			if err == nil && convertedFile != nil {
 				bucketName = config.Config.Minio.BucketName
-				objectName = convertedFile.Destination
+				objectName = convertedFile.StoragePath
 				fileProtoType = artifactpb.File_TYPE_PDF
 				logger.Info("Using converted PDF for cache creation",
 					zap.String("destination", objectName))
 			} else {
 				// Use original file
-				bucketName = object.BucketFromDestination(kbFile.Destination)
-				objectName = kbFile.Destination
+				bucketName = object.BucketFromDestination(kbFile.StoragePath)
+				objectName = kbFile.StoragePath
 			}
 
 			// Create cache using service method
@@ -1270,13 +1472,22 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 	}, nil
 }
 
-// DeleteFile deletes a file from a knowledge base (AIP-compliant version of DeleteKnowledgeBaseFile).
+// DeleteFile deletes a file (AIP-compliant).
 // Handles soft deletion, dual deletion for staging/rollback KBs, and triggers cleanup workflows.
 func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteFileRequest) (*artifactpb.DeleteFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
+	// Parse resource name to get namespace_id and file_id
+	_, fileID, err := parseFileFromName(req.GetName())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing file name: %w", err),
+			"Invalid file name format. Expected: namespaces/{namespace}/files/{file}",
+		)
+	}
+
 	// Get authenticated user UID for ACL checks
-	_, err := getUserUIDFromContext(ctx)
+	_, err = getUserUIDFromContext(ctx)
 	if err != nil {
 		logger.Error("failed to get user id from header", zap.Error(err))
 		return nil, errorsx.AddMessage(
@@ -1286,7 +1497,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	}
 
 	// ACL - check user's permission to write knowledge base of kb file
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
+	kbfs, err := ph.service.Repository().GetFilesByFileIDs(ctx, []string{fileID})
 	if err != nil {
 		logger.Error("failed to get knowledge base files", zap.Error(err))
 		return nil, errorsx.AddMessage(
@@ -1300,8 +1511,18 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 		)
 	}
 
+	// Get KB UIDs from junction table
+	fileKBUIDs, err := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, kbfs[0].UID)
+	if err != nil || len(fileKBUIDs) == 0 {
+		logger.Error("failed to get KB associations for file", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not associated with any knowledge base: %w", errorsx.ErrNotFound),
+			"File is not associated with any knowledge base.",
+		)
+	}
+
 	// Get the KB to determine if it's a staging/rollback KB
-	kb, err := ph.service.Repository().GetKnowledgeBaseByUID(ctx, kbfs[0].KBUID)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByUID(ctx, fileKBUIDs[0])
 	if err != nil {
 		logger.Error("failed to get knowledge base", zap.Error(err))
 		return nil, errorsx.AddMessage(
@@ -1316,12 +1537,12 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	// 2. Users have permission on the production KB, not on temporary staging/rollback KBs
 	// 3. File operations on staging/rollback KBs (via dual processing/deletion) should be allowed
 	//    if the user has permission on the production KB
-	var aclCheckKBUID types.KBUIDType
+	var aclCheckKBUID types.KnowledgeBaseUIDType
 	if kb.Staging {
 		// Use parent_kb_uid to get production KB UID for ACL check
 		if kb.ParentKBUID == nil {
 			logger.Error("staging/rollback KB missing parent_kb_uid",
-				zap.String("stagingKBID", kb.KBID),
+				zap.String("stagingKBID", kb.ID),
 				zap.String("stagingKBUID", kb.UID.String()))
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("staging/rollback KB missing parent reference"),
@@ -1330,11 +1551,11 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 		}
 		aclCheckKBUID = *kb.ParentKBUID
 		logger.Info("Checking permission against production KB for staging/rollback file deletion",
-			zap.String("fileKBUID", kbfs[0].KBUID.String()),
+			zap.String("fileKBUID", fileKBUIDs[0].String()),
 			zap.String("prodKBUID", aclCheckKBUID.String()))
 	} else {
 		// Normal production KB - check permission directly
-		aclCheckKBUID = kbfs[0].KBUID
+		aclCheckKBUID = fileKBUIDs[0]
 	}
 
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", aclCheckKBUID, "writer")
@@ -1385,16 +1606,16 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 		)
 	}
 
-	// check if file uid is empty
-	if req.FileId == "" {
+	// check if file id is empty
+	if fileID == "" {
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: file uid is required", errorsx.ErrInvalidArgument),
+			fmt.Errorf("%w: file id is required", errorsx.ErrInvalidArgument),
 			"File ID is required. Please specify which file to delete.",
 		)
 	}
 
 	// Look up file by hash-based ID
-	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
+	files, err := ph.service.Repository().GetFilesByFileIDs(ctx, []string{fileID})
 	if err != nil {
 		return nil, err
 	}
@@ -1408,7 +1629,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 
 	// Soft-delete the file record first to make it immediately invisible to users
 	// This ensures a responsive user experience regardless of cleanup workflow status
-	err = ph.service.Repository().DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, fUID)
+	err = ph.service.Repository().DeleteFileAndDecreaseUsage(ctx, fUID)
 	if err != nil {
 		logger.Error("failed to delete knowledge base file and decrease usage", zap.Error(err))
 		return nil, err
@@ -1421,7 +1642,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	// 3. Phase 6 (retention): Delete from both production and rollback
 	logger.Info("Checking dual deletion requirements",
 		zap.String("kbUID", kb.UID.String()),
-		zap.String("kbID", kb.KBID),
+		zap.String("kbID", kb.ID),
 		zap.String("status", kb.UpdateStatus),
 		zap.Bool("staging", kb.Staging))
 
@@ -1448,10 +1669,10 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 		// We retry up to 30 times (30 seconds total) to find the file before giving up
 		// INCREASED from 10s to 30s to handle heavy concurrent load scenarios where file
 		// creation takes longer due to DB transaction commit timing and goroutine scheduling
-		var targetFiles []repository.KnowledgeBaseFileModel
+		var targetFiles []repository.FileModel
 		maxRetries := 30
 		for attempt := 0; attempt < maxRetries; attempt++ {
-			targetFiles, err = ph.service.Repository().GetKnowledgeBaseFilesByName(ctx, dualTarget.TargetKB.UID, files[0].DisplayName)
+			targetFiles, err = ph.service.Repository().GetFilesByName(ctx, dualTarget.TargetKB.UID, files[0].DisplayName)
 			if err != nil {
 				logger.Warn("Failed to find target file for dual deletion",
 					zap.Error(err),
@@ -1493,7 +1714,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 			targetFile := targetFiles[0]
 
 			// Soft-delete the target file
-			err = ph.service.Repository().DeleteKnowledgeBaseFileAndDecreaseUsage(ctx, targetFile.UID)
+			err = ph.service.Repository().DeleteFileAndDecreaseUsage(ctx, targetFile.UID)
 			if err != nil {
 				logger.Error("Failed to delete target file during dual deletion",
 					zap.Error(err),
@@ -1561,8 +1782,17 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateFileRequest) (*artifactpb.UpdateFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
+	// Parse resource name from file.name
+	_, fileID, err := parseFileFromName(req.GetFile().GetName())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing file name: %w", err),
+			"Invalid file name format. Expected: namespaces/{namespace}/files/{file}",
+		)
+	}
+
 	// Validate authentication
-	_, err := getUserUIDFromContext(ctx)
+	_, err = getUserUIDFromContext(ctx)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to get user id from header: %v: %w", err, errorsx.ErrUnauthenticated),
@@ -1570,21 +1800,31 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 		)
 	}
 
-	// Get namespace
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
-	if err != nil {
+	// Get file by hash-based ID to get KB UID
+	kbFiles, err := ph.service.Repository().GetFilesByFileIDs(ctx, []string{fileID})
+	if err != nil || len(kbFiles) == 0 {
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("fetching namespace: %w", err),
-			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
+			"File not found. Please check the file ID and try again.",
+		)
+	}
+	kbFile := kbFiles[0]
+
+	// Get KB UIDs from junction table
+	kbUIDs, err := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, kbFile.UID)
+	if err != nil || len(kbUIDs) == 0 {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not associated with any knowledge base: %w", errorsx.ErrNotFound),
+			"File is not associated with any knowledge base.",
 		)
 	}
 
-	// Get knowledge base
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.KnowledgeBaseId)
+	// Get knowledge base for ACL check
+	kb, err := ph.service.Repository().GetKnowledgeBaseByUID(ctx, kbUIDs[0])
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("fetching knowledge base: %w", err),
-			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
+			"Unable to access the knowledge base. Please try again.",
 		)
 	}
 
@@ -1603,15 +1843,20 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 		)
 	}
 
-	// Get file by hash-based ID
-	kbFiles, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
+	// Parse namespace ID from the file name
+	namespaceID, _, _ := parseFileFromName(req.GetFile().GetName())
+
+	// Get namespace for owner lookup
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
+	if err != nil {
+		logger.Warn("failed to get namespace", zap.Error(err))
+	}
 	if err != nil || len(kbFiles) == 0 {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("file not found: %w", errorsx.ErrNotFound),
 			"File not found. Please check the file ID and try again.",
 		)
 	}
-	kbFile := kbFiles[0]
 
 	// Build update map based on field mask
 	updates := make(map[string]any)
@@ -1624,42 +1869,43 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 				newDisplayName := req.GetFile().GetDisplayName()
 				if newDisplayName != "" && newDisplayName != kbFile.DisplayName {
 					displayNameChanged = true
-					updates[repository.KnowledgeBaseFileColumn.DisplayName] = newDisplayName
-					// Generate new ID from new display name
-					newFileID := utils.GenerateResourceID(newDisplayName, kbFile.UID)
-					updates[repository.KnowledgeBaseFileColumn.ID] = newFileID
-					// Add old ID to aliases for backward compatibility
+					updates[repository.FileColumn.DisplayName] = newDisplayName
+					// Generate new slug from new display name
+					// NOTE: ID is immutable (file-{hash}), only slug changes
+					newSlug := utils.GenerateSlug(newDisplayName)
+					updates[repository.FileColumn.Slug] = newSlug
+					// Add old slug to aliases for backward compatibility
 					oldAliases := kbFile.Aliases
-					if kbFile.ID != "" {
+					if kbFile.Slug != "" {
 						found := false
 						for _, alias := range oldAliases {
-							if alias == kbFile.ID {
+							if alias == kbFile.Slug {
 								found = true
 								break
 							}
 						}
 						if !found {
-							updates[repository.KnowledgeBaseFileColumn.Aliases] = append(oldAliases, kbFile.ID)
+							updates[repository.FileColumn.Aliases] = append(oldAliases, kbFile.Slug)
 						}
 					}
 				}
 			case "external_metadata":
 				// Update external metadata
-				updates[repository.KnowledgeBaseFileColumn.ExternalMetadata] = req.File.ExternalMetadata
+				updates[repository.FileColumn.ExternalMetadata] = req.File.ExternalMetadata
 			case "tags":
 				// Validate user-provided tags don't use reserved prefixes
 				if err := validateUserTags(req.File.Tags); err != nil {
 					return nil, err
 				}
 				// Update tags
-				updates[repository.KnowledgeBaseFileColumn.Tags] = req.File.Tags
+				updates[repository.FileColumn.Tags] = req.File.Tags
 			default:
 				logger.Warn("unsupported field path in update mask", zap.String("path", path))
 			}
 		}
 	} else {
 		// If no update mask, update external metadata by default
-		updates[repository.KnowledgeBaseFileColumn.ExternalMetadata] = req.File.ExternalMetadata
+		updates[repository.FileColumn.ExternalMetadata] = req.File.ExternalMetadata
 	}
 
 	if len(updates) == 0 {
@@ -1672,7 +1918,7 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 	_ = displayNameChanged // Used for logging below
 
 	// Perform the update
-	updatedFile, err := ph.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), updates)
+	updatedFile, err := ph.service.Repository().UpdateFile(ctx, kbFile.UID.String(), updates)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("updating file: %w", err),
@@ -1688,7 +1934,7 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 	}
 
 	// If tags were updated, sync them to Milvus embeddings
-	if _, tagsUpdated := updates[repository.KnowledgeBaseFileColumn.Tags]; tagsUpdated {
+	if _, tagsUpdated := updates[repository.FileColumn.Tags]; tagsUpdated {
 		// Get the active collection UID for this KB
 		collectionID := constant.KBCollectionName(kb.ActiveCollectionUID)
 
@@ -1718,6 +1964,16 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 // This will regenerate all converted files, chunks, embeddings with the current KB configuration.
 func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.ReprocessFileRequest) (*artifactpb.ReprocessFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
+
+	// Parse resource name to get file_id
+	_, fileID, err := parseFileFromName(req.GetName())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing file name: %w", err),
+			"Invalid file name format. Expected: namespaces/{namespace}/files/{file}",
+		)
+	}
+
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -1725,24 +1981,42 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 			"Authentication required. Please log in and try again.",
 		)
 	}
+	_ = authUID // suppress unused warning
 
-	// Get namespace
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	// Get file by hash-based ID
+	files, err := ph.service.Repository().GetFilesByFileIDs(ctx, []string{fileID})
 	if err != nil {
-		logger.Error("failed to get namespace", zap.Error(err))
+		logger.Error("failed to get file", zap.Error(err))
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get namespace: %w", err),
-			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+			fmt.Errorf("failed to get file: %w", err),
+			"Unable to find the specified file. It may have been deleted.",
+		)
+	}
+	if len(files) == 0 {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: file not found", errorsx.ErrNotFound),
+			"Unable to find the specified file. It may have been deleted.",
+		)
+	}
+	kbFile := files[0]
+
+	// Get KB UIDs from junction table
+	kbUIDs, err := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, kbFile.UID)
+	if err != nil || len(kbUIDs) == 0 {
+		logger.Error("failed to get KB associations for file", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("file not associated with any knowledge base: %w", errorsx.ErrNotFound),
+			"File is not associated with any knowledge base.",
 		)
 	}
 
-	// Get knowledge base
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.KnowledgeBaseId)
+	// Get knowledge base for ACL check
+	kb, err := ph.service.Repository().GetKnowledgeBaseByUID(ctx, kbUIDs[0])
 	if err != nil {
 		logger.Error("failed to get knowledge base", zap.Error(err))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to get knowledge base: %w", err),
-			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
+			"Unable to access the knowledge base. Please try again.",
 		)
 	}
 
@@ -1762,29 +2036,15 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 		)
 	}
 
-	// Get file by hash-based ID
-	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
-	if err != nil {
-		logger.Error("failed to get file", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get file: %w", err),
-			"Unable to find the specified file. It may have been deleted.",
-		)
-	}
-	if len(files) == 0 {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: file not found", errorsx.ErrNotFound),
-			"Unable to find the specified file. It may have been deleted.",
-		)
-	}
+	// Get the first file for processing
 	file := files[0]
 
-	// Verify file belongs to this KB
-	if file.KBUID != kb.UID {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: file does not belong to this knowledge base", errorsx.ErrInvalidArgument),
-			"The file does not belong to the specified knowledge base.",
-		)
+	// Parse namespace ID from the file name for namespace lookup
+	namespaceID, _, _ := parseFileFromName(req.GetName())
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
+	if err != nil {
+		logger.Warn("failed to get namespace", zap.Error(err))
+		// Continue anyway as this is needed for owner/creator lookup
 	}
 
 	// Log if file is already processing - we allow force reprocessing to handle stuck files
@@ -1815,7 +2075,7 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 	ownerUID := types.UserUIDType(ns.NsUID)
 	requesterUID := types.RequesterUIDType(uuid.FromStringOrNil(authUID))
 
-	updatedFiles, err := ph.service.Repository().ProcessKnowledgeBaseFiles(ctx, []string{file.UID.String()}, requesterUID)
+	updatedFiles, err := ph.service.Repository().ProcessFiles(ctx, []string{file.UID.String()}, requesterUID)
 	if err != nil {
 		logger.Error("Failed to update file status to PROCESSING",
 			zap.Error(err),
@@ -2003,12 +2263,8 @@ func getPositionUnit(fileType artifactpb.File_Type) artifactpb.File_Position_Uni
 
 // Check if objectUID is provided, and all other required fields if not
 func checkUploadKnowledgeBaseFileRequest(req *artifactpb.CreateFileRequest) (hasObject bool, _ error) {
-	if req.GetNamespaceId() == "" {
-		return false, fmt.Errorf("%w: owner UID is required", errorsx.ErrInvalidArgument)
-	}
-
-	if req.GetKnowledgeBaseId() == "" {
-		return false, fmt.Errorf("%w: knowledge base UID is required", errorsx.ErrInvalidArgument)
+	if req.GetParent() == "" {
+		return false, fmt.Errorf("%w: parent is required", errorsx.ErrInvalidArgument)
 	}
 
 	if req.GetFile().GetObjectUid() == "" {
@@ -2027,14 +2283,13 @@ func checkUploadKnowledgeBaseFileRequest(req *artifactpb.CreateFileRequest) (has
 	return true, nil
 }
 
-// MoveFileToKnowledgeBase moves a file from one knowledge base to another within the same namespace.
-// It copies the file content and metadata to the target knowledge base and deletes
-// the file from the source knowledge base.
+// uploadBase64FileToMinIO uploads a base64-encoded file to MinIO and creates/updates the object record.
+// It returns the object UID for storage path reference.
 func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID string, nsUID, creatorUID types.CreatorUIDType, filename string, content string, fileType artifactpb.File_Type) (types.ObjectUIDType, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	response, err := ph.service.GetUploadURL(ctx, &artifactpb.GetObjectUploadURLRequest{
-		NamespaceId: nsID,
-		ObjectName:  filename,
+		Parent:      fmt.Sprintf("namespaces/%s", nsID),
+		DisplayName: filename,
 	}, nsUID, filename, creatorUID)
 	if err != nil {
 		logger.Error("failed to get upload URL", zap.Error(err))
@@ -2043,7 +2298,19 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 			"Unable to prepare file upload. Please try again.",
 		)
 	}
-	objectUID := uuid.FromStringOrNil(response.Object.Uid)
+
+	// Get the object by its hash-based ID (e.g., "obj-xxx") to retrieve the actual UID
+	objectID := types.ObjectIDType(response.Object.Id)
+	obj, err := ph.service.Repository().GetObjectByID(ctx, nsUID, objectID)
+	if err != nil {
+		logger.Error("failed to get object by id", zap.Error(err), zap.String("objectID", string(objectID)))
+		return uuid.Nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get object by id: %w", err),
+			"Unable to retrieve uploaded file information. Please try again.",
+		)
+	}
+	objectUID := obj.UID
+
 	destination := object.GetBlobObjectPath(nsUID, objectUID)
 	err = ph.service.Repository().GetMinIOStorage().UploadBase64File(ctx, object.BlobBucketName, destination, content, filetype.FileTypeToMimeType(fileType))
 	if err != nil {
@@ -2061,18 +2328,10 @@ func (ph *PublicHandler) uploadBase64FileToMinIO(ctx context.Context, nsID strin
 	}
 	objectSize := int64(len(decodedContent))
 
-	object, err := ph.service.Repository().GetObjectByUID(ctx, objectUID)
-	if err != nil {
-		logger.Error("failed to get object by uid", zap.Error(err))
-		return uuid.Nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get object by uid: %w", err),
-			"Unable to retrieve uploaded file information. Please try again.",
-		)
-	}
-	object.Size = objectSize
-	object.IsUploaded = true
+	obj.Size = objectSize
+	obj.IsUploaded = true
 
-	_, err = ph.service.Repository().UpdateObject(ctx, *object)
+	_, err = ph.service.Repository().UpdateObject(ctx, *obj)
 	if err != nil {
 		logger.Error("failed to update object", zap.Error(err))
 		return uuid.Nil, errorsx.AddMessage(

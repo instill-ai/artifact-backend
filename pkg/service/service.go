@@ -12,9 +12,9 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/worker"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
-	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
+	mgmtpb "github.com/instill-ai/protogen-go/mgmt/v1beta"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/v1beta"
 )
 
 // FileContent is an alias to worker.FileContent for backwards compatibility
@@ -26,13 +26,15 @@ type Service interface {
 	SearchChunks(context.Context, types.OwnerUIDType, *artifactpb.SearchChunksRequest, [][]float32) ([]SimChunk, error)
 	GetNamespaceByNsID(context.Context, string) (*resource.Namespace, error)
 	FetchUserByUID(context.Context, string) (*mgmtpb.User, error)
+	FetchUserByID(context.Context, string) (*mgmtpb.User, error)
 	FetchOwnerByNamespace(context.Context, *resource.Namespace) (*mgmtpb.Owner, error)
-	GetChunksByFile(context.Context, *repository.KnowledgeBaseFileModel) (types.SourceTableType, types.SourceUIDType, []repository.TextChunkModel, []string, error)
+	GetChunksByFile(context.Context, *repository.FileModel) (types.SourceTableType, types.SourceUIDType, []repository.ChunkModel, []string, error)
 	GetConvertedFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
 	GetTextChunkFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
 	// Repository tag methods removed - tag.proto was removed from protobuf definitions
 	GetUploadURL(context.Context, *artifactpb.GetObjectUploadURLRequest, types.NamespaceUIDType, string, types.CreatorUIDType) (*artifactpb.GetObjectUploadURLResponse, error)
-	GetDownloadURL(context.Context, *artifactpb.GetObjectDownloadURLRequest, types.NamespaceUIDType, string) (*artifactpb.GetObjectDownloadURLResponse, error)
+	GetDownloadURL(context.Context, string, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
+	GetDownloadURLByObjectUID(context.Context, types.ObjectUIDType, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
 	CheckCatalogUserPermission(context.Context, string, string, string) (*resource.Namespace, *repository.KnowledgeBaseModel, error)
 	GetNamespaceAndCheckPermission(context.Context, string) (*resource.Namespace, error)
 

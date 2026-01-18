@@ -88,12 +88,6 @@ func getPrompt(key string) string {
 	return ""
 }
 
-// GetChatSystemInstruction returns the chat system instruction from embedded template
-func GetChatSystemInstruction() string {
-	loadPrompts()
-	return getPrompt("chat_system_instruction")
-}
-
 // GetSystemInstruction returns the RAG system instruction from embedded template
 func GetSystemInstruction() string {
 	loadPrompts()

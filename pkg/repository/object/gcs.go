@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/url"
 	"path"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -447,27 +446,6 @@ func (g *gcsStorage) GetGCSURI(objectPath string) string {
 	return fmt.Sprintf("gs://%s/%s", g.bucket, objectPath)
 }
 
-// ParseGCSURI parses a gs://bucket/path URI into bucket and object path components
-func ParseGCSURI(gsURI string) (bucket string, objectPath string, err error) {
-	if !strings.HasPrefix(gsURI, "gs://") {
-		return "", "", fmt.Errorf("URI must start with gs://")
-	}
-
-	// Remove gs:// prefix
-	remaining := gsURI[5:]
-
-	// Find first slash to separate bucket from path
-	slashIndex := strings.Index(remaining, "/")
-	if slashIndex == -1 {
-		// No path, just bucket
-		return remaining, "", nil
-	}
-
-	bucket = remaining[:slashIndex]
-	objectPath = remaining[slashIndex+1:]
-
-	return bucket, objectPath, nil
-}
 
 // GetBucket returns the default GCS bucket name
 func (g *gcsStorage) GetBucket() string {

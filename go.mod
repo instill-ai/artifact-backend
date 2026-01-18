@@ -1,14 +1,11 @@
 module github.com/instill-ai/artifact-backend
 
-go 1.24.6
-
-toolchain go1.24.10
+go 1.25.6
 
 require (
 	cloud.google.com/go/storage v1.50.0
 	github.com/frankban/quicktest v1.14.6
 	github.com/go-playground/validator v9.31.0+incompatible
-	github.com/go-resty/resty/v2 v2.16.5
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gogo/status v1.1.1
 	github.com/gojuno/minimock/v3 v3.4.5
@@ -16,9 +13,8 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	github.com/iancoleman/strcase v0.3.0
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260113033808-6ec139ce4174
-	github.com/instill-ai/usage-client v0.4.1-0.20251120123627-e91a3e75f28a
-	github.com/instill-ai/x v0.10.1-alpha.0.20260107051543-a2f91c8735f5
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260118041154-8f06ba4d527d
+	github.com/instill-ai/x v0.10.1-alpha.0.20260118004501-5221537d0a1d
 	github.com/knadh/koanf v1.5.0
 	github.com/mennanov/fieldmask-utils v1.1.2
 	github.com/milvus-io/milvus/client/v2 v2.6.1
@@ -60,7 +56,6 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.50.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
-	github.com/catalinc/hashcash v0.0.0-20220723060415-5e3ec3e24f67 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

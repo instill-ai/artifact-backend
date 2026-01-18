@@ -21,8 +21,8 @@ import (
 	"github.com/instill-ai/x/checkfield"
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
+	mgmtpb "github.com/instill-ai/protogen-go/mgmt/v1beta"
 	constantx "github.com/instill-ai/x/constant"
 	logx "github.com/instill-ai/x/log"
 )
@@ -57,9 +57,10 @@ func NewPrivateHandler(s artifact.Service, log *zap.Logger) *PrivateHandler {
 func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *artifactpb.CreateKnowledgeBaseAdminRequest) (*artifactpb.CreateKnowledgeBaseAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Validate required fields
-	if req.GetNamespaceId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace_id is required")
+	// Parse namespace ID from parent (format: namespaces/{namespace})
+	namespaceID, err := parseNamespaceFromParent(req.GetParent())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid parent format: %v", err)
 	}
 
 	kb := req.GetKnowledgeBase()
@@ -74,11 +75,11 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 	}
 
 	logger.Info("CreateKnowledgeBaseAdmin called",
-		zap.String("namespace_id", req.GetNamespaceId()),
+		zap.String("namespace_id", namespaceID),
 		zap.String("id", kbID))
 
 	// Get namespace
-	ns, err := h.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error("failed to get namespace", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
@@ -125,7 +126,7 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 	dbData, err := h.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
-			KBID:              kbID,
+			ID:                kbID,
 			DisplayName:       displayName,
 			Description:       kb.GetDescription(),
 			Tags:              kb.GetTags(),
@@ -148,18 +149,16 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 
 	logger.Info("Created system knowledge base",
 		zap.String("uid", dbData.UID.String()),
-		zap.String("id", dbData.KBID))
+		zap.String("id", dbData.ID))
 
 	return &artifactpb.CreateKnowledgeBaseAdminResponse{
 		KnowledgeBase: &artifactpb.KnowledgeBase{
-			Name:        fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), dbData.KBID),
-			Uid:         dbData.UID.String(),
-			Id:          dbData.KBID,
+			Name:        fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, dbData.ID),
+			Id:          dbData.ID,
 			DisplayName: displayName,
 			Description: dbData.Description,
 			Tags:        dbData.Tags,
 			OwnerName:   ns.Name(),
-			OwnerUid:    ns.NsUID.String(),
 			CreateTime:  timestamppb.New(*dbData.CreateTime),
 			UpdateTime:  timestamppb.New(*dbData.UpdateTime),
 		},
@@ -172,27 +171,26 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 // - Does NOT require ACL checks (admin-only access)
 func (h *PrivateHandler) UpdateKnowledgeBaseAdmin(ctx context.Context, req *artifactpb.UpdateKnowledgeBaseAdminRequest) (*artifactpb.UpdateKnowledgeBaseAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger.Info("UpdateKnowledgeBaseAdmin called",
-		zap.String("namespace_id", req.GetNamespaceId()),
-		zap.String("knowledge_base_id", req.GetKnowledgeBaseId()))
 
-	// Validate required fields
-	if req.GetNamespaceId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace_id is required")
+	// Parse namespace and KB ID from knowledge_base.name (AIP-134)
+	namespaceID, knowledgeBaseID, err := parseKnowledgeBaseFromName(req.GetKnowledgeBase().GetName())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid knowledge_base.name format: %v", err)
 	}
-	if req.GetKnowledgeBaseId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "knowledge_base_id is required")
-	}
+
+	logger.Info("UpdateKnowledgeBaseAdmin called",
+		zap.String("namespace_id", namespaceID),
+		zap.String("knowledge_base_id", knowledgeBaseID))
 
 	// Get namespace
-	ns, err := h.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error("failed to get namespace", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
 	}
 
 	// Get existing knowledge base
-	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetKnowledgeBaseId())
+	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, knowledgeBaseID)
 	if err != nil {
 		logger.Error("failed to get knowledge base", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
@@ -200,8 +198,8 @@ func (h *PrivateHandler) UpdateKnowledgeBaseAdmin(ctx context.Context, req *arti
 
 	// Build update model - admin can set any tags including reserved ones
 	updateModel := repository.KnowledgeBaseModel{}
-	if req.UpdateMask != nil {
-		for _, path := range req.UpdateMask.Paths {
+	if req.GetUpdateMask() != nil {
+		for _, path := range req.GetUpdateMask().GetPaths() {
 			switch path {
 			case "description":
 				updateModel.Description = req.GetKnowledgeBase().GetDescription()
@@ -215,7 +213,7 @@ func (h *PrivateHandler) UpdateKnowledgeBaseAdmin(ctx context.Context, req *arti
 	// Update knowledge base
 	updatedKB, err := h.service.Repository().UpdateKnowledgeBase(
 		ctx,
-		req.GetKnowledgeBaseId(),
+		knowledgeBaseID,
 		ns.NsUID.String(),
 		updateModel,
 	)
@@ -229,7 +227,7 @@ func (h *PrivateHandler) UpdateKnowledgeBaseAdmin(ctx context.Context, req *arti
 
 	logger.Info("UpdateKnowledgeBaseAdmin completed",
 		zap.String("uid", kb.UID.String()),
-		zap.String("id", kb.KBID))
+		zap.String("id", kb.ID))
 
 	return &artifactpb.UpdateKnowledgeBaseAdminResponse{
 		KnowledgeBase: convertKBToCatalogPB(updatedKB, ns, owner, nil),
@@ -242,54 +240,56 @@ func (h *PrivateHandler) UpdateKnowledgeBaseAdmin(ctx context.Context, req *arti
 // - Does NOT require ACL checks (admin-only access)
 func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.UpdateFileAdminRequest) (*artifactpb.UpdateFileAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger.Info("UpdateFileAdmin called",
-		zap.String("namespace_id", req.GetNamespaceId()),
-		zap.String("knowledge_base_id", req.GetKnowledgeBaseId()),
-		zap.String("file_id", req.GetFileId()))
 
-	// Validate required fields
-	if req.GetNamespaceId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace_id is required")
+	// Parse namespace and file ID from file.name (AIP-134)
+	namespaceID, fileID, err := parseFileFromName(req.GetFile().GetName())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid file.name format: %v", err)
 	}
-	if req.GetKnowledgeBaseId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "knowledge_base_id is required")
-	}
-	if req.GetFileId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "file_id is required")
-	}
+
+	logger.Info("UpdateFileAdmin called",
+		zap.String("namespace_id", namespaceID),
+		zap.String("file_id", fileID))
 
 	// Get namespace
-	ns, err := h.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error("failed to get namespace", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
 	}
 
-	// Get knowledge base
-	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetKnowledgeBaseId())
-	if err != nil {
-		logger.Error("failed to get knowledge base", zap.Error(err))
-		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
-	}
-
 	// Get file by hash-based ID
-	kbFiles, err := h.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.GetFileId()})
+	kbFiles, err := h.service.Repository().GetFilesByFileIDs(ctx, []string{fileID})
 	if err != nil || len(kbFiles) == 0 {
 		logger.Error("failed to get file", zap.Error(err))
 		return nil, status.Errorf(codes.NotFound, "file not found")
 	}
 	kbFile := kbFiles[0]
 
+	// Get KB UIDs from junction table
+	kbUIDs, err := h.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, kbFile.UID)
+	if err != nil || len(kbUIDs) == 0 {
+		logger.Error("failed to get KB associations for file", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "file not associated with any knowledge base")
+	}
+
+	// Get knowledge base from file (use first associated KB)
+	kb, err := h.service.Repository().GetKnowledgeBaseByUID(ctx, kbUIDs[0])
+	if err != nil {
+		logger.Error("failed to get knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
+	}
+
 	// Build update map based on field mask - admin can set any tags including reserved ones
 	updates := make(map[string]any)
-	if req.UpdateMask != nil {
-		for _, path := range req.UpdateMask.Paths {
+	if req.GetUpdateMask() != nil {
+		for _, path := range req.GetUpdateMask().GetPaths() {
 			switch path {
 			case "tags":
 				// Admin endpoint: NO validation of reserved tags
-				updates[repository.KnowledgeBaseFileColumn.Tags] = req.GetFile().GetTags()
+				updates[repository.FileColumn.Tags] = req.GetFile().GetTags()
 			case "external_metadata":
-				updates[repository.KnowledgeBaseFileColumn.ExternalMetadata] = req.GetFile().GetExternalMetadata()
+				updates[repository.FileColumn.ExternalMetadata] = req.GetFile().GetExternalMetadata()
 			}
 		}
 	}
@@ -300,14 +300,14 @@ func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.Up
 	}
 
 	// Update file
-	updatedFile, err := h.service.Repository().UpdateKnowledgeBaseFile(ctx, kbFile.UID.String(), updates)
+	updatedFile, err := h.service.Repository().UpdateFile(ctx, kbFile.UID.String(), updates)
 	if err != nil {
 		logger.Error("failed to update file", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to update file: %v", err)
 	}
 
 	// If tags were updated, sync them to Milvus embeddings
-	if _, tagsUpdated := updates[repository.KnowledgeBaseFileColumn.Tags]; tagsUpdated {
+	if _, tagsUpdated := updates[repository.FileColumn.Tags]; tagsUpdated {
 		// Get the active collection UID for this KB
 		collectionID := constant.KBCollectionName(kb.ActiveCollectionUID)
 
@@ -340,7 +340,7 @@ func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.Up
 
 // GetObjectAdmin retrieves the information of an object (admin only).
 func (h *PrivateHandler) GetObjectAdmin(ctx context.Context, req *artifactpb.GetObjectAdminRequest) (*artifactpb.GetObjectAdminResponse, error) {
-	objectUID, err := uuid.FromString(req.GetUid())
+	objectUID, err := uuid.FromString(req.GetObjectUid())
 	if err != nil {
 		h.logger.Error("GetObjectAdmin", zap.Error(err))
 		return nil, err
@@ -363,7 +363,7 @@ func (h *PrivateHandler) GetObjectAdmin(ctx context.Context, req *artifactpb.Get
 
 // UpdateObjectAdmin updates the information of an object (admin only).
 func (h *PrivateHandler) UpdateObjectAdmin(ctx context.Context, req *artifactpb.UpdateObjectAdminRequest) (*artifactpb.UpdateObjectAdminResponse, error) {
-	objectUID, err := uuid.FromString(req.GetUid())
+	objectUID, err := uuid.FromString(req.GetObjectUid())
 	if err != nil {
 		h.logger.Error("UpdateObjectAdmin", zap.Error(err))
 		return nil, fmt.Errorf("invalid object UID: %w", err)
@@ -371,17 +371,17 @@ func (h *PrivateHandler) UpdateObjectAdmin(ctx context.Context, req *artifactpb.
 
 	updateMap := make(map[string]any)
 
-	if req.Size != nil {
-		updateMap[repository.ObjectColumn.Size] = *req.Size
+	if req.GetSize() != 0 {
+		updateMap[repository.ObjectColumn.Size] = req.GetSize()
 	}
-	if req.Type != nil {
-		updateMap[repository.ObjectColumn.ContentType] = *req.Type
+	if req.GetContentType() != "" {
+		updateMap[repository.ObjectColumn.ContentType] = req.GetContentType()
 	}
-	if req.IsUploaded != nil {
-		updateMap[repository.ObjectColumn.IsUploaded] = *req.IsUploaded
+	if req.GetIsUploaded() {
+		updateMap[repository.ObjectColumn.IsUploaded] = req.GetIsUploaded()
 	}
-	if req.LastModifiedTime != nil {
-		updateMap[repository.ObjectColumn.LastModifiedTime] = req.LastModifiedTime.AsTime()
+	if req.GetLastModifiedTime() != nil {
+		updateMap[repository.ObjectColumn.LastModifiedTime] = req.GetLastModifiedTime().AsTime()
 	}
 
 	updatedObject, err := h.service.Repository().UpdateObjectByUpdateMap(ctx, objectUID, updateMap)
@@ -406,21 +406,26 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 
 	// For the admin endpoint, we only receive file_id, so we need to look up the namespace and knowledge base
 	// from the file's KB to construct the full request for the public handler
-	files, err := h.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.GetFileId()})
+	files, err := h.service.Repository().GetFilesByFileIDs(ctx, []string{req.GetFileId()})
 	if err != nil || len(files) == 0 {
 		h.logger.Error("DeleteFileAdmin: failed to get file", zap.Error(err))
 		return nil, fmt.Errorf("file not found: %w", err)
 	}
 
 	file := files[0]
-	kb, err := h.service.Repository().GetKnowledgeBaseByUID(ctx, file.KBUID)
+
+	// Get KB UIDs from junction table
+	kbUIDs, err := h.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, file.UID)
+	if err != nil || len(kbUIDs) == 0 {
+		h.logger.Error("DeleteFileAdmin: failed to get KB associations for file", zap.Error(err))
+		return nil, fmt.Errorf("file not associated with any knowledge base: %w", err)
+	}
+
+	kb, err := h.service.Repository().GetKnowledgeBaseByUID(ctx, kbUIDs[0])
 	if err != nil {
 		h.logger.Error("DeleteFileAdmin: failed to get KB", zap.Error(err))
 		return nil, fmt.Errorf("knowledge base not found: %w", err)
 	}
-
-	// Create namespace ID from owner UID for the public API
-	namespaceID := fmt.Sprintf("users/%s", kb.NamespaceUID)
 
 	// For admin endpoints, inject owner UID into gRPC metadata for authentication
 	// Get existing metadata and append to it
@@ -448,10 +453,9 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 	// - Soft-deletion of file
 	// - Dual deletion to staging/rollback KB if applicable
 	// - Cleanup workflow triggering
+	// Use file.ID for the name pattern (namespace is extracted from the ID in DeleteFile)
 	publicReq := &artifactpb.DeleteFileRequest{
-		NamespaceId:     namespaceID,
-		KnowledgeBaseId: kb.KBID,
-		FileId:          req.FileId,
+		Name: fmt.Sprintf("namespaces/%s/files/%s", file.NamespaceUID.String(), file.ID),
 	}
 
 	resp, err := publicHandler.DeleteFile(ctx, publicReq)
@@ -461,7 +465,7 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 	}
 
 	h.logger.Info("DeleteFileAdmin: file deleted successfully",
-		zap.String("file_id", req.FileId))
+		zap.String("file_id", req.GetFileId()))
 
 	return &artifactpb.DeleteFileAdminResponse{
 		FileId: resp.FileId,
@@ -470,17 +474,17 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 
 // RollbackAdmin rolls back a knowledge base to its previous version (admin only)
 func (h *PrivateHandler) RollbackAdmin(ctx context.Context, req *artifactpb.RollbackAdminRequest) (*artifactpb.RollbackAdminResponse, error) {
-	// Parse resource name: users/{user}/knowledge-bases/{knowledge_base}
+	// Parse resource name: users/{user}/knowledge-bases/{knowledge_base} or namespaces/{namespace}/knowledge-bases/{knowledge_base}
 	parts := strings.Split(req.Name, "/")
-	if len(parts) != 4 || parts[0] != "users" || parts[2] != "knowledge-bases" {
+	if len(parts) != 4 || (parts[0] != "users" && parts[0] != "namespaces") || parts[2] != "knowledge-bases" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid resource name format: %s", req.Name)
 	}
 
 	namespaceID := parts[1]
 	knowledgeBaseID := parts[3]
 
-	// Parse owner UID
-	ownerUID, err := parseOwnerUID(namespaceID)
+	// Resolve owner UID (supports both UUID and namespace ID)
+	ownerUID, err := h.resolveOwnerUID(ctx, namespaceID)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid user ID: %v", err)
 	}
@@ -496,17 +500,17 @@ func (h *PrivateHandler) RollbackAdmin(ctx context.Context, req *artifactpb.Roll
 
 // PurgeRollbackAdmin manually purges the rollback knowledge base immediately (admin only)
 func (h *PrivateHandler) PurgeRollbackAdmin(ctx context.Context, req *artifactpb.PurgeRollbackAdminRequest) (*artifactpb.PurgeRollbackAdminResponse, error) {
-	// Parse resource name
+	// Parse resource name: users/{user}/knowledge-bases/{knowledge_base} or namespaces/{namespace}/knowledge-bases/{knowledge_base}
 	parts := strings.Split(req.Name, "/")
-	if len(parts) != 4 || parts[0] != "users" || parts[2] != "knowledge-bases" {
+	if len(parts) != 4 || (parts[0] != "users" && parts[0] != "namespaces") || parts[2] != "knowledge-bases" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid resource name format: %s", req.Name)
 	}
 
 	userID := parts[1]
 	knowledgeBaseID := parts[3]
 
-	// Parse owner UID
-	ownerUID, err := parseOwnerUID(userID)
+	// Resolve owner UID (supports both UUID and namespace ID)
+	ownerUID, err := h.resolveOwnerUID(ctx, userID)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid user ID: %v", err)
 	}
@@ -522,17 +526,17 @@ func (h *PrivateHandler) PurgeRollbackAdmin(ctx context.Context, req *artifactpb
 
 // SetRollbackRetentionAdmin sets the rollback retention period for a knowledge base with flexible time units (admin only)
 func (h *PrivateHandler) SetRollbackRetentionAdmin(ctx context.Context, req *artifactpb.SetRollbackRetentionAdminRequest) (*artifactpb.SetRollbackRetentionAdminResponse, error) {
-	// Parse resource name
+	// Parse resource name: users/{user}/knowledge-bases/{knowledge_base} or namespaces/{namespace}/knowledge-bases/{knowledge_base}
 	parts := strings.Split(req.Name, "/")
-	if len(parts) != 4 || parts[0] != "users" || parts[2] != "knowledge-bases" {
+	if len(parts) != 4 || (parts[0] != "users" && parts[0] != "namespaces") || parts[2] != "knowledge-bases" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid resource name format: %s", req.Name)
 	}
 
 	userID := parts[1]
 	knowledgeBaseID := parts[3]
 
-	// Parse owner UID
-	ownerUID, err := parseOwnerUID(userID)
+	// Resolve owner UID (supports both UUID and namespace ID)
+	ownerUID, err := h.resolveOwnerUID(ctx, userID)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid user ID: %v", err)
 	}
@@ -597,16 +601,17 @@ func (h *PrivateHandler) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context, 
 // GetSystemAdmin retrieves a system configuration (admin only)
 func (h *PrivateHandler) GetSystemAdmin(ctx context.Context, req *artifactpb.GetSystemAdminRequest) (*artifactpb.GetSystemAdminResponse, error) {
 	// Call service
-	resp, err := h.service.GetSystemAdmin(ctx, req.Id)
+	resp, err := h.service.GetSystemAdmin(ctx, req.GetSystemId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get system: %v", err)
 	}
 
-	h.logger.Info("GetSystemAdmin", zap.String("id", req.Id))
+	h.logger.Info("GetSystemAdmin", zap.String("id", req.GetSystemId()))
 	return resp, nil
 }
 
 // CreateSystemAdmin creates a new system configuration (admin only)
+// The ID is auto-generated as "sys-{hash}" following AIP resource ID convention
 func (h *PrivateHandler) CreateSystemAdmin(ctx context.Context, req *artifactpb.CreateSystemAdminRequest) (*artifactpb.CreateSystemAdminResponse, error) {
 	// Call service
 	resp, err := h.service.CreateSystemAdmin(ctx, req)
@@ -614,7 +619,10 @@ func (h *PrivateHandler) CreateSystemAdmin(ctx context.Context, req *artifactpb.
 		return nil, status.Errorf(codes.Internal, "failed to create system: %v", err)
 	}
 
-	h.logger.Info("CreateSystemAdmin", zap.String("id", req.System.Id))
+	h.logger.Info("CreateSystemAdmin",
+		zap.String("id", resp.System.Id),
+		zap.String("display_name", resp.System.DisplayName),
+		zap.String("slug", resp.System.Slug))
 	return resp, nil
 }
 
@@ -705,12 +713,12 @@ func (h *PrivateHandler) ListSystemsAdmin(ctx context.Context, req *artifactpb.L
 // DeleteSystemAdmin deletes a system configuration (admin only)
 func (h *PrivateHandler) DeleteSystemAdmin(ctx context.Context, req *artifactpb.DeleteSystemAdminRequest) (*artifactpb.DeleteSystemAdminResponse, error) {
 	// Call service
-	resp, err := h.service.DeleteSystemAdmin(ctx, req.Id)
+	resp, err := h.service.DeleteSystemAdmin(ctx, req.GetSystemId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete system: %v", err)
 	}
 
-	h.logger.Info("DeleteSystemAdmin", zap.String("id", req.Id), zap.Bool("success", resp.Success))
+	h.logger.Info("DeleteSystemAdmin", zap.String("id", req.GetSystemId()), zap.Bool("success", resp.Success))
 	return resp, nil
 }
 
@@ -722,7 +730,7 @@ func (h *PrivateHandler) RenameSystemAdmin(ctx context.Context, req *artifactpb.
 		return nil, status.Errorf(codes.Internal, "failed to rename system: %v", err)
 	}
 
-	h.logger.Info("RenameSystemAdmin", zap.String("old_id", req.SystemId), zap.String("new_id", req.NewSystemId))
+	h.logger.Info("RenameSystemAdmin", zap.String("old_id", req.GetSystemId()), zap.String("new_display_name", req.GetNewDisplayName()))
 	return resp, nil
 }
 
@@ -734,7 +742,7 @@ func (h *PrivateHandler) SetDefaultSystemAdmin(ctx context.Context, req *artifac
 		return nil, status.Errorf(codes.Internal, "failed to set default system: %v", err)
 	}
 
-	h.logger.Info("SetDefaultSystemAdmin", zap.String("id", req.Id), zap.Bool("is_default", resp.System.IsDefault))
+	h.logger.Info("SetDefaultSystemAdmin", zap.String("id", req.GetSystemId()), zap.Bool("is_default", resp.System.IsDefault))
 	return resp, nil
 }
 
@@ -750,12 +758,20 @@ func (h *PrivateHandler) GetDefaultSystemAdmin(ctx context.Context, req *artifac
 	return resp, nil
 }
 
-// Helper functions
-
-func parseOwnerUID(userID string) (types.OwnerUIDType, error) {
-	uid, err := uuid.FromString(userID)
-	if err != nil {
-		return types.OwnerUIDType{}, err
+// resolveOwnerUID resolves a namespace ID to an owner UID.
+// It first tries to parse as UUID (for backward compatibility), then looks up via service.
+func (h *PrivateHandler) resolveOwnerUID(ctx context.Context, namespaceID string) (types.OwnerUIDType, error) {
+	// First try to parse as UUID (backward compatibility)
+	if uid, err := uuid.FromString(namespaceID); err == nil {
+		return types.OwnerUIDType(uid), nil
 	}
-	return types.OwnerUIDType(uid), nil
+
+	// If not a UUID, look up the namespace via service
+	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
+	if err != nil {
+		return types.OwnerUIDType{}, fmt.Errorf("failed to look up namespace %q: %w", namespaceID, err)
+	}
+
+	// Use the namespace's UID directly (NsUID is the owner UID)
+	return types.OwnerUIDType(ns.NsUID), nil
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	errorsx "github.com/instill-ai/x/errors"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 // UpdateKnowledgeBaseWorkflowParam defines parameters for updating a single KB

@@ -12,12 +12,12 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 // SimChunk represents a similarity chunk with its UID and score.
 type SimChunk struct {
-	ChunkUID types.TextChunkUIDType
+	ChunkUID types.ChunkUIDType
 	Score    float32
 }
 
@@ -74,7 +74,7 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 	// This ensures hallucinated UUIDs are caught and reported
 	var fileUIDs []types.FileUIDType
 	if len(allFileIDs) > 0 {
-		files, err := s.repository.GetKnowledgeBaseFilesByFileIDs(ctx, allFileIDs)
+		files, err := s.repository.GetFilesByFileIDs(ctx, allFileIDs)
 		if err != nil {
 			return nil, fmt.Errorf("resolving file IDs: %w", err)
 		}
@@ -118,7 +118,7 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 	}
 
 	if !hasFileUID {
-		files, err := s.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, fileUIDs)
+		files, err := s.repository.GetFilesByFileUIDs(ctx, fileUIDs)
 		if err != nil {
 			return nil, fmt.Errorf("fetching files: %w", err)
 		}
@@ -138,7 +138,7 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 	var results []SimChunk
 	if len(simEmbeddings) > 0 {
 		for _, simEmb := range simEmbeddings[0] {
-			if simEmb.SourceTable != repository.TextChunkTableName {
+			if simEmb.SourceTable != repository.ChunkTableName {
 				continue
 			}
 			simChunkUID, err := uuid.FromString(simEmb.SourceUID)
@@ -146,7 +146,7 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 				return nil, fmt.Errorf("invalid chunk uid %s", simEmb.SourceUID)
 			}
 			results = append(results, SimChunk{
-				ChunkUID: types.TextChunkUIDType(simChunkUID),
+				ChunkUID: types.ChunkUIDType(simChunkUID),
 				Score:    simEmb.Score,
 			})
 		}

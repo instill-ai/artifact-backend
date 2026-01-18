@@ -15,8 +15,9 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
@@ -269,8 +270,9 @@ func (w *Worker) CreateStagingKnowledgeBaseActivity(ctx context.Context, param *
 	var newSystemUID *types.SystemUIDType
 	var newSystemConfig *repository.SystemConfigJSON
 	if param.SystemID != "" {
-		// Get the system record by ID to retrieve both UID and config
-		system, err := w.repository.GetSystem(ctx, param.SystemID)
+		// Get the system record by ID or slug to retrieve both UID and config
+		// Accepts both hash-based IDs (sys-xxx) and slugs (openai, gemini) for backward compatibility
+		system, err := w.repository.GetSystemByIDOrSlug(ctx, param.SystemID)
 		if err != nil {
 			err = errorsx.AddMessage(err, fmt.Sprintf("Unable to get system from system ID %q. Please try again.", param.SystemID))
 			return nil, activityError(err, createStagingKnowledgeBaseActivityError)
@@ -327,7 +329,7 @@ func (w *Worker) CreateStagingKnowledgeBaseActivity(ctx context.Context, param *
 
 	w.log.Info("CreateStagingKnowledgeBaseActivity: Staging KB created",
 		zap.String("stagingKBUID", stagingKB.UID.String()),
-		zap.String("stagingKBID", stagingKB.KBID))
+		zap.String("stagingID", stagingKB.ID))
 
 	return &CreateStagingKnowledgeBaseActivityResult{
 		StagingKB: *stagingKB,
@@ -374,7 +376,7 @@ func (w *Worker) SynchronizeKBActivity(ctx context.Context, param *SynchronizeKB
 
 	// Use optimistic locking: only transition if still in UPDATING status
 	// This prevents race with concurrent updates/rollbacks
-	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, originalKB.KBID, originalKB.NamespaceUID, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, originalKB.ID, originalKB.NamespaceUID, map[string]interface{}{
 		"update_status": artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING.String(),
 	})
 	if err != nil {
@@ -706,10 +708,10 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 	ownerUID := productionKB.NamespaceUID
 
 	// Get ALL files from production KB with proper pagination
-	productionFiles := []repository.KnowledgeBaseFileModel{}
+	productionFiles := []repository.FileModel{}
 	pageToken := ""
 	for {
-		productionFileList, err := w.repository.ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
+		productionFileList, err := w.repository.ListFiles(ctx, repository.KnowledgeBaseFileListParams{
 			OwnerUID:  ownerUID,
 			KBUID:     productionKBUID.String(),
 			PageSize:  100, // Max page size (capped by repository)
@@ -727,10 +729,10 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 	}
 
 	// Get ALL files from staging KB with proper pagination
-	stagingFiles := []repository.KnowledgeBaseFileModel{}
+	stagingFiles := []repository.FileModel{}
 	pageToken = ""
 	for {
-		stagingFileList, err := w.repository.ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
+		stagingFileList, err := w.repository.ListFiles(ctx, repository.KnowledgeBaseFileListParams{
 			OwnerUID:  ownerUID,
 			KBUID:     stagingKBUID.String(),
 			PageSize:  100, // Max page size (capped by repository)
@@ -748,19 +750,19 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 	}
 
 	// Build map of staging files by name - use slice to detect duplicates
-	stagingFilesByName := make(map[string][]repository.KnowledgeBaseFileModel)
+	stagingFilesByName := make(map[string][]repository.FileModel)
 	for _, stagingFile := range stagingFiles {
 		stagingFilesByName[stagingFile.DisplayName] = append(stagingFilesByName[stagingFile.DisplayName], stagingFile)
 	}
 
 	// Build map of production files by name
-	productionFileMap := make(map[string]*repository.KnowledgeBaseFileModel)
+	productionFileMap := make(map[string]*repository.FileModel)
 	for i := range productionFiles {
 		productionFileMap[productionFiles[i].DisplayName] = &productionFiles[i]
 	}
 
 	// Find files in production but missing in staging
-	var missingInStaging []repository.KnowledgeBaseFileModel
+	var missingInStaging []repository.FileModel
 	for _, prodFile := range productionFiles {
 		if _, exists := stagingFilesByName[prodFile.DisplayName]; !exists {
 			missingInStaging = append(missingInStaging, prodFile)
@@ -768,7 +770,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 	}
 
 	// Find files in staging but missing in production (shouldn't happen, but check for consistency)
-	var missingInProduction []repository.KnowledgeBaseFileModel
+	var missingInProduction []repository.FileModel
 	for _, stagingFileList := range stagingFilesByName {
 		// Use first file in list for name comparison
 		if len(stagingFileList) > 0 {
@@ -780,7 +782,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 
 	// CRITICAL: Detect duplicate files in staging (race condition from dual processing)
 	// Keep the oldest file and soft-delete the newer duplicates
-	var duplicatesInStaging []repository.KnowledgeBaseFileModel
+	var duplicatesInStaging []repository.FileModel
 	for filename, fileList := range stagingFilesByName {
 		if len(fileList) > 1 {
 			w.log.Warn("Detected duplicate files in staging KB during reconciliation",
@@ -821,14 +823,14 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		// Creating staging records for missing blobs would cause ProcessFileWorkflow to fail.
 		// Instead, we skip these files during reconciliation to maintain system stability.
 		// The production KB will retain the orphaned record, but at least the update can proceed.
-		bucket := object.BucketFromDestination(prodFile.Destination)
-		_, err := w.repository.GetMinIOStorage().GetFileMetadata(ctx, bucket, prodFile.Destination)
+		bucket := object.BucketFromDestination(prodFile.StoragePath)
+		_, err := w.repository.GetMinIOStorage().GetFileMetadata(ctx, bucket, prodFile.StoragePath)
 		if err != nil {
 			skippedDueToMissingBlobs++
 			w.log.Error("reconcileKBFiles: Original blob file not found in MinIO - skipping file during reconciliation",
 				zap.String("prodFileUID", prodFile.UID.String()),
 				zap.String("filename", prodFile.DisplayName),
-				zap.String("destination", prodFile.Destination),
+				zap.String("storagePath", prodFile.StoragePath),
 				zap.String("bucket", bucket),
 				zap.Error(err),
 				zap.String("impact", "File will not be available in updated KB"),
@@ -837,13 +839,12 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		}
 
 		// Create duplicate file record for staging KB
-		stagingFile := repository.KnowledgeBaseFileModel{
-			DisplayName:                  prodFile.DisplayName,
+		stagingFile := repository.FileModel{
+			DisplayName:               prodFile.DisplayName,
 			FileType:                  prodFile.FileType,
 			NamespaceUID:              prodFile.NamespaceUID,
 			CreatorUID:                prodFile.CreatorUID,
-			KBUID:                     stagingKBUID,
-			Destination:               prodFile.Destination, // Same source file in MinIO
+			StoragePath:               prodFile.StoragePath, // Same source file in MinIO
 			Size:                      prodFile.Size,
 			ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
 			ExternalMetadataUnmarshal: prodFile.ExternalMetadataUnmarshal,
@@ -851,10 +852,10 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		}
 
 		// Create file record with retry
-		var createdFile *repository.KnowledgeBaseFileModel
+		var createdFile *repository.FileModel
 		maxRetries := 3
 		for attempt := 1; attempt <= maxRetries; attempt++ {
-			createdFile, err = w.repository.CreateKnowledgeBaseFile(ctx, stagingFile, nil)
+			createdFile, err = w.repository.CreateFile(ctx, stagingFile, stagingKBUID, nil)
 			if err == nil {
 				break
 			}
@@ -923,7 +924,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 			zap.String("fileUID", dupFile.UID.String()),
 			zap.String("stagingKBUID", stagingKBUID.String()))
 
-		err := w.repository.DeleteKnowledgeBaseFile(ctx, dupFile.UID.String())
+		err := w.repository.DeleteFile(ctx, dupFile.UID.String())
 		if err != nil {
 			w.log.Error("Failed to soft-delete duplicate file during reconciliation",
 				zap.Error(err),
@@ -1262,7 +1263,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			zap.String("stagingKBUID", stagingKB.UID.String()),
 			zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
 
-		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.NamespaceUID, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.ID, stagingKB.NamespaceUID, map[string]interface{}{
 			"active_collection_uid": uuid.Nil, // Clear to NULL to avoid unique constraint violation
 		})
 		if err != nil {
@@ -1278,7 +1279,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		}
 
 		// Update production KB to point to staging's collection (no conflict now!)
-		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.KBID, originalKB.NamespaceUID, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.ID, originalKB.NamespaceUID, map[string]interface{}{
 			"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection
 			"system_uid":               stagingKB.SystemUID,           // Update system UID (may reference different system with new dimensionality)
 			"staging":                  false,
@@ -1293,21 +1294,21 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		// Clean up any existing rollback KB (within transaction)
 		ownerUID, err := uuid.FromString(originalKB.NamespaceUID)
 		if err == nil {
-			existingRollback, err := w.repository.GetRollbackKBForProduction(ctx, types.OwnerUIDType(ownerUID), originalKB.KBID)
+			existingRollback, err := w.repository.GetRollbackKBForProduction(ctx, types.OwnerUIDType(ownerUID), originalKB.ID)
 			if err == nil && existingRollback != nil {
 				w.log.Info("SwapKnowledgeBasesActivity: Soft-deleting existing rollback KB since original collection doesn't exist",
 					zap.String("rollbackKBUID", existingRollback.UID.String()))
-				_ = w.repository.DeleteKnowledgeBaseTx(ctx, tx, existingRollback.NamespaceUID, existingRollback.KBID)
+				_ = w.repository.DeleteKnowledgeBaseTx(ctx, tx, existingRollback.NamespaceUID, existingRollback.ID)
 			}
 		}
 
 		// Delete staging KB (within transaction)
 		w.log.Info("SwapKnowledgeBasesActivity: Soft-deleting staging KB",
 			zap.String("stagingKBUID", stagingKB.UID.String()),
-			zap.String("stagingKBID", stagingKB.KBID))
+			zap.String("stagingID", stagingKB.ID))
 
 		// Clear update fields before soft delete
-		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.NamespaceUID, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.ID, stagingKB.NamespaceUID, map[string]interface{}{
 			"update_status":      "",  // Clear update status so it doesn't block future updates
 			"update_workflow_id": nil, // Clear workflow ID so API deletion works
 		})
@@ -1319,7 +1320,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 			return nil, activityErrorWithMessage("Failed to clear staging KB update fields", swapKnowledgeBasesActivityError, err)
 		}
 
-		err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.NamespaceUID, stagingKB.KBID)
+		err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.NamespaceUID, stagingKB.ID)
 		if err != nil {
 			tx.Rollback()
 			w.log.Error("SwapKnowledgeBasesActivity: Failed to soft-delete staging KB",
@@ -1354,7 +1355,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	}
 
 	// Check if rollback KB exists from previous update using parent_kb_uid lookup
-	existingRollback, err := w.repository.GetRollbackKBForProduction(ctx, types.OwnerUIDType(ownerUID), originalKB.KBID)
+	existingRollback, err := w.repository.GetRollbackKBForProduction(ctx, types.OwnerUIDType(ownerUID), originalKB.ID)
 	var rollbackKBUID types.KBUIDType
 
 	if err == nil && existingRollback != nil {
@@ -1368,7 +1369,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 
 		rollbackKB := &repository.KnowledgeBaseModel{
 			UID:                    rollbackKBUID,
-			KBID:                   rollbackKBUID.String(), // Use UID as KBID (system-generated ID for rollback KB)
+			ID:                     rollbackKBUID.String(), // Use UID as ID (system-generated ID for rollback KB)
 			NamespaceUID:           originalKB.NamespaceUID,
 			CreatorUID:             originalKB.CreatorUID,
 			Tags:                   append(originalKB.Tags, "rollback"),
@@ -1416,7 +1417,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		zap.String("stagingKBUID", stagingKB.UID.String()),
 		zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
 
-	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.NamespaceUID, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.ID, stagingKB.NamespaceUID, map[string]interface{}{
 		"active_collection_uid": uuid.Nil, // Clear to NULL to avoid unique constraint violation
 	})
 	if err != nil {
@@ -1425,23 +1426,24 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		return nil, activityError(err, swapKnowledgeBasesActivityError)
 	}
 
-	// Step 2a: Move original KB's resources → temp (within transaction)
-	tempUID := uuid.Must(uuid.NewV4())
-	if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, param.OriginalKBUID, types.KBUIDType(tempUID)); err != nil {
+	// Step 2a: Copy original KB's file associations → rollback KB
+	// We use COPY + DELETE instead of UPDATE to avoid FK constraint violations
+	// (can't UPDATE to temp UID that doesn't exist in knowledge_base table)
+	if err := w.repository.CopyKnowledgeBaseResourcesTx(ctx, tx, param.OriginalKBUID, rollbackKBUID); err != nil {
 		tx.Rollback()
-		return nil, activityErrorWithMessage("Failed to move original resources to temp", swapKnowledgeBasesActivityError, err)
+		return nil, activityErrorWithMessage("Failed to copy original resources to rollback", swapKnowledgeBasesActivityError, err)
 	}
 
-	// Step 2b: Move staging KB's resources → original KB (staging resources become production)
+	// Step 2b: Delete original KB's file associations (now preserved in rollback)
+	if err := w.repository.DeleteKnowledgeBaseResourcesTx(ctx, tx, param.OriginalKBUID); err != nil {
+		tx.Rollback()
+		return nil, activityErrorWithMessage("Failed to delete original file associations", swapKnowledgeBasesActivityError, err)
+	}
+
+	// Step 2c: Move staging KB's resources → original KB (staging resources become production)
 	if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, param.StagingKBUID, param.OriginalKBUID); err != nil {
 		tx.Rollback()
 		return nil, activityErrorWithMessage("Failed to move staging resources to production", swapKnowledgeBasesActivityError, err)
-	}
-
-	// Step 2c: Move temp resources → rollback KB (old resources saved for rollback)
-	if err := w.repository.UpdateKnowledgeBaseResourcesTx(ctx, tx, types.KBUIDType(tempUID), rollbackKBUID); err != nil {
-		tx.Rollback()
-		return nil, activityErrorWithMessage("Failed to move old resources to rollback", swapKnowledgeBasesActivityError, err)
 	}
 
 	// Step 3: Swap collection pointers and metadata (within transaction)
@@ -1450,7 +1452,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		zap.String("originalCollectionUID", originalKB.ActiveCollectionUID.String()),
 		zap.String("stagingCollectionUID", stagingKB.ActiveCollectionUID.String()))
 
-	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.KBID, originalKB.NamespaceUID, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, originalKB.ID, originalKB.NamespaceUID, map[string]interface{}{
 		"active_collection_uid":    stagingKB.ActiveCollectionUID, // Point to new collection (no conflict now!)
 		"system_uid":               stagingKB.SystemUID,           // Update system UID (may reference different system with new dimensionality)
 		"staging":                  false,
@@ -1469,7 +1471,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 		err = errorsx.AddMessage(err, "Unable to retrieve rollback KB for update. Please try again.")
 		return nil, activityError(err, swapKnowledgeBasesActivityError)
 	}
-	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, rollbackKB.KBID, originalKB.NamespaceUID, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, rollbackKB.ID, originalKB.NamespaceUID, map[string]interface{}{
 		"active_collection_uid": originalKB.ActiveCollectionUID, // Keep original collection pointer
 		"system_uid":            originalKB.SystemUID,           // Keep original system UID
 	})
@@ -1482,10 +1484,10 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	// Step 4: Soft-delete staging KB (within transaction)
 	w.log.Info("SwapKnowledgeBasesActivity: Soft-deleting staging KB",
 		zap.String("stagingKBUID", stagingKB.UID.String()),
-		zap.String("stagingKBID", stagingKB.KBID))
+		zap.String("stagingID", stagingKB.ID))
 
 	// Clear update fields before soft delete
-	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.KBID, stagingKB.NamespaceUID, map[string]interface{}{
+	err = w.repository.UpdateKnowledgeBaseWithMapTx(ctx, tx, stagingKB.ID, stagingKB.NamespaceUID, map[string]interface{}{
 		"update_status":      "",  // Clear update status so it doesn't block future updates
 		"update_workflow_id": nil, // Clear workflow ID so API deletion works
 	})
@@ -1498,7 +1500,7 @@ func (w *Worker) SwapKnowledgeBasesActivity(ctx context.Context, param *SwapKnow
 	}
 
 	// Now perform soft delete
-	err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.NamespaceUID, stagingKB.KBID)
+	err = w.repository.DeleteKnowledgeBaseTx(ctx, tx, stagingKB.NamespaceUID, stagingKB.ID)
 	if err != nil {
 		tx.Rollback()
 		w.log.Error("SwapKnowledgeBasesActivity: Failed to soft-delete staging KB",
@@ -1573,7 +1575,7 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 			zap.String("kbUID", param.KBUID.String()),
 			zap.String("previousUpdateStatus", kb.UpdateStatus))
 
-		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.KBID, kb.NamespaceUID, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.ID, kb.NamespaceUID, map[string]interface{}{
 			"update_status":      "",
 			"update_workflow_id": "",
 		})
@@ -1587,7 +1589,7 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 	if !kb.DeleteTime.Valid {
 		w.log.Info("CleanupOldKnowledgeBaseActivity: Soft-deleting KB",
 			zap.String("kbUID", param.KBUID.String()))
-		_, err = w.repository.DeleteKnowledgeBase(ctx, kb.NamespaceUID, kb.KBID)
+		_, err = w.repository.DeleteKnowledgeBase(ctx, kb.NamespaceUID, kb.ID)
 		if err != nil {
 			// If already deleted, that's okay - continue with collection drop
 			// With row-level locking, DeleteKnowledgeBase will return error if KB is already deleted
@@ -1672,7 +1674,7 @@ func (w *Worker) CleanupOldKnowledgeBaseActivity(ctx context.Context, param *Cle
 		zap.String("kbUID", param.KBUID.String()))
 
 	// Hard-delete all files (including those in PROCESSING status)
-	err = w.repository.DeleteAllKnowledgeBaseFiles(ctx, param.KBUID.String())
+	err = w.repository.DeleteAllFiles(ctx, param.KBUID.String())
 	if err != nil {
 		w.log.Warn("Failed to delete files, continuing cleanup",
 			zap.String("kbUID", param.KBUID.String()),
@@ -1826,7 +1828,7 @@ func (w *Worker) ListFilesForReprocessingActivity(ctx context.Context, param *Li
 	}
 
 	// List all files in the KB
-	fileList, err := w.repository.ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
+	fileList, err := w.repository.ListFiles(ctx, repository.KnowledgeBaseFileListParams{
 		OwnerUID: kb.NamespaceUID,
 		KBUID:    param.KBUID.String(),
 	})
@@ -1858,8 +1860,8 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 		zap.String("fileUID", param.OriginalFileUID.String()),
 		zap.String("stagingKBUID", param.StagingKBUID.String()))
 
-	// Get original file using GetKnowledgeBaseFilesByFileUIDs
-	originalFiles, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.OriginalFileUID})
+	// Get original file using GetFilesByFileUIDs
+	originalFiles, err := w.repository.GetFilesByFileUIDs(ctx, []types.FileUIDType{param.OriginalFileUID})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to get original file. Please try again.")
 		return nil, activityError(err, cloneFileToStagingKBActivityError)
@@ -1900,13 +1902,13 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	// of potential data loss requiring investigation.
 	//
 	// Use GetFileMetadata (StatObject) instead of GetFile to avoid reading entire file.
-	bucket := object.BucketFromDestination(originalFile.Destination)
-	_, err = w.repository.GetMinIOStorage().GetFileMetadata(ctx, bucket, originalFile.Destination)
+	bucket := object.BucketFromDestination(originalFile.StoragePath)
+	_, err = w.repository.GetMinIOStorage().GetFileMetadata(ctx, bucket, originalFile.StoragePath)
 	if err != nil {
 		w.log.Error("CloneFileToStagingKBActivity: Original blob file not found in MinIO - skipping file",
 			zap.String("fileUID", param.OriginalFileUID.String()),
 			zap.String("filename", originalFile.DisplayName),
-			zap.String("destination", originalFile.Destination),
+			zap.String("storagePath", originalFile.StoragePath),
 			zap.String("bucket", bucket),
 			zap.Error(err),
 			zap.String("impact", "File will not be available in updated KB"),
@@ -1939,14 +1941,28 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	// - Dual-processing only activates AFTER status changes
 	// - Therefore, files in snapshot are never dual-processed
 	// - Clean separation prevents race conditions
-	newFile := repository.KnowledgeBaseFileModel{
-		DisplayName:                  originalFile.DisplayName,
+	//
+	// CRITICAL: Pre-generate UID and prefixed hash-based ID to ensure uniqueness
+	// Without this, BeforeCreate generates ID using zero-valued UID,
+	// causing all cloned files to get the same ID (data corruption bug).
+	newFileUID, err := uuid.NewV4()
+	if err != nil {
+		err = errorsx.AddMessage(err, "Unable to generate file UID. Please try again.")
+		return nil, activityError(err, cloneFileToStagingKBActivityError)
+	}
+	newFileID := utils.GeneratePrefixedResourceID(utils.PrefixFile, newFileUID)
+	newSlug := utils.GenerateSlug(originalFile.DisplayName)
+
+	newFile := repository.FileModel{
+		UID:                       types.FileUIDType(newFileUID),
+		ID:                        newFileID,
+		DisplayName:               originalFile.DisplayName,
+		Slug:                      newSlug,
 		FileType:                  originalFile.FileType,
 		NamespaceUID:              types.NamespaceUIDType(ownerUID),
-		KBUID:                     param.StagingKBUID,
 		CreatorUID:                originalFile.CreatorUID,
 		ProcessStatus:             "FILE_PROCESS_STATUS_NOTSTARTED",
-		Destination:               originalFile.Destination, // Reuse same source file
+		StoragePath:               originalFile.StoragePath, // Reuse same source file
 		Size:                      originalFile.Size,
 		Tags:                      originalFile.Tags,
 		ExternalMetadataUnmarshal: originalFile.ExternalMetadataUnmarshal,
@@ -1955,7 +1971,7 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	}
 
 	// Create the file in database
-	createdFile, err := w.repository.CreateKnowledgeBaseFile(ctx, newFile, nil)
+	createdFile, err := w.repository.CreateFile(ctx, newFile, param.StagingKBUID, nil)
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to create cloned file. Please try again.")
 		return nil, activityError(err, cloneFileToStagingKBActivityError)

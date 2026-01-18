@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/gofrs/uuid"
@@ -17,8 +16,8 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
+	mgmtpb "github.com/instill-ai/protogen-go/mgmt/v1beta"
 	constantx "github.com/instill-ai/x/constant"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
@@ -31,6 +30,16 @@ const ErrorListKnowledgeBasesMsg = "failed to get knowledge bases: %w "
 const ErrorUpdateKnowledgeBaseMsg = "failed to update knowledge base: %w"
 const ErrorDeleteKnowledgeBaseMsg = "failed to delete knowledge base: %w"
 
+// parseKnowledgeBaseFromName parses a knowledge base resource name of format
+// "namespaces/{namespace}/knowledge-bases/{knowledge_base}" and returns namespace_id and knowledge_base_id
+func parseKnowledgeBaseFromName(name string) (namespaceID, knowledgeBaseID string, err error) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "knowledge-bases" {
+		return "", "", fmt.Errorf("invalid knowledge base name format, expected namespaces/{namespace}/knowledge-bases/{kb}")
+	}
+	return parts[1], parts[3], nil
+}
+
 // CreateKnowledgeBase creates a knowledge base
 func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactpb.CreateKnowledgeBaseRequest) (*artifactpb.CreateKnowledgeBaseResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
@@ -40,13 +49,19 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
+	// Parse namespace ID from parent (format: namespaces/{namespace})
+	namespaceID, err := parseNamespaceFromParent(req.GetParent())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", errorsx.ErrInvalidArgument, err.Error())
+	}
+
 	// ACL  check user's permission to create knowledge base in the user or org context(namespace)
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error(
 			"failed to get namespace",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	}
@@ -55,7 +70,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		logger.Error(
 			"failed to check namespace permission",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, fmt.Errorf(ErrorCreateKnowledgeBaseMsg, err)
 	}
@@ -78,18 +93,10 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf("generating KB UID: %w", err)
 	}
 
-	// Generate hash-based ID from display_name and UID
-	// Format: {slug}-{sha256(uid)[:8]}
-	// This ensures globally unique IDs while maintaining human-readable URLs
-	kbID := utils.GenerateResourceID(kb.GetDisplayName(), kbUID)
-
-	// Validate the generated ID has a valid slug portion
-	nameOk := isValidHashBasedID(kbID)
-	if !nameOk {
-		msg := "the knowledge base display_name should contain at least one letter or number. " +
-			"Generated id: %v. err: %w"
-		return nil, fmt.Errorf(msg, kbID, errorsx.ErrInvalidArgument)
-	}
+	// Generate prefixed hash-based ID from UID
+	// Format: kb-{base62(sha256(uid)[:10])}
+	// This ensures globally unique IDs with type prefix for clarity
+	kbID := utils.GeneratePrefixedResourceID(utils.PrefixKnowledgeBase, kbUID)
 
 	creatorUUID, err := uuid.FromString(authUID)
 	if err != nil {
@@ -103,8 +110,8 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	// chunking method, and other RAG-related settings
 	var system *repository.SystemModel
 	if kb.GetSystemId() != "" {
-		// Use the specified system
-		system, err = ph.service.Repository().GetSystem(ctx, kb.GetSystemId())
+		// Use the specified system - accepts both ID (sys-xxx) and slug (openai, gemini)
+		system, err = ph.service.Repository().GetSystemByIDOrSlug(ctx, kb.GetSystemId())
 		if err != nil {
 			return nil, fmt.Errorf("getting system by ID %q: %w", kb.GetSystemId(), err)
 		}
@@ -152,14 +159,17 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		kbType = artifactpb.KnowledgeBaseType_KNOWLEDGE_BASE_TYPE_PERSISTENT
 	}
 
-	// create knowledge base
+	// Generate slug from display name for URL-friendly access
+	kbSlug := utils.GenerateSlug(kb.GetDisplayName())
 
+	// create knowledge base
 	dbData, err := ph.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
 			UID:               kbUID,
-			KBID:              kbID,
+			ID:                kbID,
 			DisplayName:       kb.GetDisplayName(),
+			Slug:              kbSlug,
 			Description:       kb.GetDescription(),
 			Tags:              kb.GetTags(),
 			NamespaceUID:      ns.NsUID.String(),
@@ -182,27 +192,26 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	// Use display_name from DB, fallback to id if not set
 	displayName := dbData.DisplayName
 	if displayName == "" {
-		displayName = dbData.KBID
+		displayName = dbData.ID
 	}
 
 	knowledgeBase := &artifactpb.KnowledgeBase{
-		Name:                fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), dbData.KBID),
-		Uid:                 dbData.UID.String(),
-		Id:                  dbData.KBID,
-		DisplayName:         displayName,
-		Description:         dbData.Description,
-		Tags:                dbData.Tags,
-		OwnerName:           ns.Name(),
-		OwnerUid:            ns.NsUID.String(),
-		Owner:               owner,
-		CreatorUid:          &authUID,
-		Creator:             creator,
-		CreateTime:          timestamppb.New(*dbData.CreateTime),
-		UpdateTime:          timestamppb.New(*dbData.UpdateTime),
-		DownstreamApps:      []string{},
-		TotalFiles:          0,
-		TotalTokens:         0,
-		UsedStorage:         0,
+		Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, dbData.ID),
+		Id:                 dbData.ID,
+		Slug:               dbData.Slug,
+		DisplayName:        displayName,
+		Description:        dbData.Description,
+		Tags:               dbData.Tags,
+		OwnerName:          ns.Name(),
+		Owner:              owner,
+		CreatorUid:         &authUID,
+		Creator:            creator,
+		CreateTime:         timestamppb.New(*dbData.CreateTime),
+		UpdateTime:         timestamppb.New(*dbData.UpdateTime),
+		DownstreamApps:     []string{},
+		TotalFiles:         0,
+		TotalTokens:        0,
+		UsedStorage:        0,
 		ActiveCollectionId: activeCollectionUID,
 		EmbeddingConfig: &artifactpb.KnowledgeBase_EmbeddingConfig{
 			ModelFamily:    systemConfig.RAG.Embedding.ModelFamily,
@@ -219,18 +228,23 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 	// get user id from context
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
-
 		return nil, fmt.Errorf(ErrorListKnowledgeBasesMsg, err)
+	}
+
+	// Parse namespace ID from parent (format: namespaces/{namespace})
+	namespaceID, err := parseNamespaceFromParent(req.GetParent())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", errorsx.ErrInvalidArgument, err.Error())
 	}
 
 	// ACL - check user(authUid)'s permission to list knowledge bases in
 	// the user or org context(namespace)
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to get namespace: %w", err),
@@ -242,7 +256,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 		logger.Error(
 			"failed to check namespace permission",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to check namespace permission: %w", err),
@@ -298,27 +312,26 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 		// Use display_name from DB, fallback to id if not set
 		kbDisplayName := kb.DisplayName
 		if kbDisplayName == "" {
-			kbDisplayName = kb.KBID
+			kbDisplayName = kb.ID
 		}
 
 		kbs[i] = &artifactpb.KnowledgeBase{
-			Uid:                 kb.UID.String(),
-			Name:                fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), kb.KBID),
-			Id:                  kb.KBID,
-			DisplayName:         kbDisplayName,
-			Description:         kb.Description,
-			Tags:                kb.Tags,
-			CreateTime:          timestamppb.New(*kb.CreateTime),
-			UpdateTime:          timestamppb.New(*kb.UpdateTime),
-			OwnerName:           ns.Name(),
-			OwnerUid:            ns.NsUID.String(),
-			Owner:               owner,
-			CreatorUid:          creatorUIDStr,
-			Creator:             creator,
-			DownstreamApps:      []string{},
-			TotalFiles:          uint32(fileCounts[kb.UID]),
-			TotalTokens:         uint32(tokenCounts[kb.UID]),
-			UsedStorage:         uint64(kb.Usage),
+			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID),
+			Id:                 kb.ID,
+			Slug:               kb.Slug,
+			DisplayName:        kbDisplayName,
+			Description:        kb.Description,
+			Tags:               kb.Tags,
+			CreateTime:         timestamppb.New(*kb.CreateTime),
+			UpdateTime:         timestamppb.New(*kb.UpdateTime),
+			OwnerName:          ns.Name(),
+			Owner:              owner,
+			CreatorUid:         creatorUIDStr,
+			Creator:            creator,
+			DownstreamApps:     []string{},
+			TotalFiles:         uint32(fileCounts[kb.UID]),
+			TotalTokens:        uint32(tokenCounts[kb.UID]),
+			UsedStorage:        uint64(kb.Usage),
 			ActiveCollectionId: activeCollectionUID,
 			EmbeddingConfig: &artifactpb.KnowledgeBase_EmbeddingConfig{
 				ModelFamily:    kb.SystemConfig.RAG.Embedding.ModelFamily,
@@ -340,29 +353,31 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		logger.Error("failed to get user id from header", zap.Error(err))
 		return nil, err
 	}
-	// check name if it is empty
-	if req.KnowledgeBaseId == "" {
-		logger.Error("KBID is empty", zap.Error(errorsx.ErrInvalidArgument))
+
+	// Parse namespace and KB ID from knowledge_base.name (AIP-134)
+	namespaceID, knowledgeBaseID, err := parseKnowledgeBaseFromName(req.GetKnowledgeBase().GetName())
+	if err != nil {
+		logger.Error("invalid knowledge base name", zap.Error(err))
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: KBID is empty", errorsx.ErrInvalidArgument),
-			"Knowledge Base ID is required. Please provide a knowledge base ID.",
+			fmt.Errorf("%w: %s", errorsx.ErrInvalidArgument, err.Error()),
+			"Invalid knowledge base name format. Expected: namespaces/{namespace}/knowledge-bases/{kb}.",
 		)
 	}
 
 	// Validate update_mask is provided
-	if req.UpdateMask == nil || len(req.UpdateMask.Paths) == 0 {
+	if req.GetUpdateMask() == nil || len(req.GetUpdateMask().GetPaths()) == 0 {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("%w: update_mask is required", errorsx.ErrInvalidArgument),
 			"Update mask is required. Please specify which fields to update.",
 		)
 	}
 
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to get namespace: %w", err),
@@ -370,7 +385,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		)
 	}
 	// ACL - check user's permission to update knowledge base
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.KnowledgeBaseId)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, knowledgeBaseID)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
@@ -394,30 +409,30 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	// Build update map based on field mask
 	updates := make(map[string]any)
 	displayNameChanged := false
-	var newKBID string
-	for _, path := range req.UpdateMask.Paths {
+	for _, path := range req.GetUpdateMask().GetPaths() {
 		switch path {
 		case "display_name":
 			newDisplayName := req.GetKnowledgeBase().GetDisplayName()
 			if newDisplayName != "" && newDisplayName != kb.DisplayName {
 				displayNameChanged = true
 				updates["display_name"] = newDisplayName
-				// Generate new ID from new display name
-				newKBID = utils.GenerateResourceID(newDisplayName, kb.UID)
-				updates["id"] = newKBID
-				// Add old ID to aliases for backward compatibility
+				// Generate new slug from new display name
+				// NOTE: ID is immutable (kb-{hash}), only slug changes
+				newSlug := utils.GenerateSlug(newDisplayName)
+				updates["slug"] = newSlug
+				// Add old slug to aliases for backward compatibility
 				oldAliases := kb.Aliases
-				if kb.KBID != "" {
-					// Check if old ID already in aliases
+				if kb.Slug != "" {
+					// Check if old slug already in aliases
 					found := false
 					for _, alias := range oldAliases {
-						if alias == kb.KBID {
+						if alias == kb.Slug {
 							found = true
 							break
 						}
 					}
 					if !found {
-						oldAliases = append(oldAliases, kb.KBID)
+						oldAliases = append(oldAliases, kb.Slug)
 					}
 				}
 				updates["aliases"] = repository.AliasesArray(oldAliases)
@@ -444,7 +459,7 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	// update knowledge base using map to allow setting zero values
 	err = ph.service.Repository().UpdateKnowledgeBaseWithMap(
 		ctx,
-		req.GetKnowledgeBaseId(),
+		knowledgeBaseID,
 		ns.NsUID.String(),
 		updates,
 	)
@@ -452,20 +467,16 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, fmt.Errorf("updating knowledge base: %w", err)
 	}
 
-	// Re-fetch the updated KB
-	if displayNameChanged {
-		kb, err = ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, newKBID)
-	} else {
-		kb, err = ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetKnowledgeBaseId())
-	}
+	// Re-fetch the updated KB (ID is immutable, so we use the same knowledgeBaseID)
+	kb, err = ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, knowledgeBaseID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching updated knowledge base: %w", err)
 	}
 
 	if displayNameChanged {
-		logger.Info("Knowledge base displayName updated, ID regenerated",
-			zap.String("old_id", req.GetKnowledgeBaseId()),
-			zap.String("new_id", kb.KBID),
+		logger.Info("Knowledge base displayName updated, slug regenerated",
+			zap.String("id", kb.ID),
+			zap.String("new_slug", kb.Slug),
 			zap.Strings("aliases", kb.Aliases))
 	}
 
@@ -498,9 +509,9 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 
 	// populate response
 	knowledgeBase := &artifactpb.KnowledgeBase{
-		Name:           fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), kb.KBID),
-		Uid:            kb.UID.String(),
-		Id:             kb.KBID,
+		Name:           fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID),
+		Id:             kb.ID,
+		Slug:           kb.Slug,
 		DisplayName:    kb.DisplayName,
 		Description:    kb.Description,
 		Tags:           kb.Tags,
@@ -508,7 +519,6 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		CreateTime:     timestamppb.New(*kb.CreateTime),
 		UpdateTime:     timestamppb.New(*kb.UpdateTime),
 		OwnerName:      ns.Name(),
-		OwnerUid:       ns.NsUID.String(),
 		Owner:          owner,
 		CreatorUid:     creatorUIDStr,
 		Creator:        creator,
@@ -530,16 +540,21 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
-
 		return nil, err
 	}
 
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	// Parse namespace and KB ID from name (AIP-135)
+	namespaceID, knowledgeBaseID, err := parseKnowledgeBaseFromName(req.GetName())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", errorsx.ErrInvalidArgument, err.Error())
+	}
+
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to get namespace: %w", err),
@@ -547,7 +562,7 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 		)
 	}
 	// ACL - check user's permission to write knowledge base
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.KnowledgeBaseId)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, knowledgeBaseID)
 	if err != nil {
 		logger.Error("failed to get knowledge base", zap.Error(err))
 		return nil, errorsx.AddMessage(
@@ -591,7 +606,7 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 		// Verify the workflow is actually running (not completed/failed)
 		// If we can't check the workflow status, block deletion to be safe
 		logger.Warn("Knowledge base has an active workflow ID, blocking deletion for safety",
-			zap.String("knowledgeBaseID", req.KnowledgeBaseId),
+			zap.String("knowledgeBaseID", knowledgeBaseID),
 			zap.String("knowledgeBaseUID", kb.UID.String()),
 			zap.String("workflowID", kb.UpdateWorkflowID))
 
@@ -621,7 +636,7 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 		if inProgressCount > 0 {
 			// Production KB: Block deletion to protect user data
 			logger.Warn("Production knowledge base has in-progress file operations, blocking deletion",
-				zap.String("knowledgeBaseID", req.KnowledgeBaseId),
+				zap.String("knowledgeBaseID", knowledgeBaseID),
 				zap.String("knowledgeBaseUID", kb.UID.String()),
 				zap.Int64("inProgressCount", inProgressCount))
 
@@ -632,7 +647,7 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 		}
 	}
 
-	deletedKb, err := ph.service.Repository().DeleteKnowledgeBase(ctx, ns.NsUID.String(), req.KnowledgeBaseId)
+	deletedKb, err := ph.service.Repository().DeleteKnowledgeBase(ctx, ns.NsUID.String(), knowledgeBaseID)
 	if err != nil {
 		logger.Error("failed to delete knowledge base", zap.Error(err))
 		return nil, err
@@ -659,9 +674,8 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 
 	return &artifactpb.DeleteKnowledgeBaseResponse{
 		KnowledgeBase: &artifactpb.KnowledgeBase{
-			Name:           fmt.Sprintf("namespaces/%s/knowledge-bases/%s", req.GetNamespaceId(), deletedKb.KBID),
-			Uid:            deletedKb.UID.String(),
-			Id:             deletedKb.KBID,
+			Name:           fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, deletedKb.ID),
+			Id:             deletedKb.ID,
 			Description:    deletedKb.Description,
 			Tags:           deletedKb.Tags,
 			CreateTime:     timestamppb.New(*deletedKb.CreateTime),
@@ -681,14 +695,20 @@ func (ph *PublicHandler) DeleteKnowledgeBase(ctx context.Context, req *artifactp
 
 // GetKnowledgeBase returns the details of a specific knowledge base
 func (ph *PublicHandler) GetKnowledgeBase(ctx context.Context, req *artifactpb.GetKnowledgeBaseRequest) (*artifactpb.GetKnowledgeBaseResponse, error) {
+	// Parse namespace and KB ID from name (AIP-131)
+	namespaceID, knowledgeBaseID, err := parseKnowledgeBaseFromName(req.GetName())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", errorsx.ErrInvalidArgument, err.Error())
+	}
+
 	// Get namespace
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		return nil, fmt.Errorf("getting namespace: %w", err)
 	}
 
 	// Get knowledge base from repository (supports lookup by ID or alias)
-	kb, err := ph.service.Repository().GetKnowledgeBaseByIDOrAlias(ctx, ns.NsUID, req.GetKnowledgeBaseId())
+	kb, err := ph.service.Repository().GetKnowledgeBaseByIDOrAlias(ctx, ns.NsUID, knowledgeBaseID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching knowledge base: %w", err)
 	}
@@ -726,17 +746,4 @@ func getUserUIDFromContext(ctx context.Context) (string, error) {
 		fmt.Errorf("user id not found in context: %w", errorsx.ErrUnauthenticated),
 		"Authentication failed. Please log in and try again.",
 	)
-}
-
-// isValidHashBasedID validates the hash-based ID format
-// Format: {slug}-{8-char-hex-hash}
-// Examples: "my-knowledge-base-abc12345", "test-kb-12345678"
-// The slug must start with a letter and contain only lowercase letters, numbers, and hyphens.
-// The hash suffix is always 8 hexadecimal characters.
-func isValidHashBasedID(id string) bool {
-	// Hash-based ID format: {slug}-{8-char-hash}
-	// Pattern: starts with letter, contains alphanumeric/hyphens, ends with 8 hex chars
-	pattern := `^[a-z][-a-z0-9]*-[a-f0-9]{8}$`
-	re := regexp.MustCompile(pattern)
-	return re.MatchString(id)
 }

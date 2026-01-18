@@ -14,8 +14,9 @@ import (
 	"gorm.io/gorm/clause"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
@@ -36,21 +37,6 @@ func IsUpdateComplete(status string) bool {
 		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String() ||
 		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String() ||
 		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String()
-}
-
-// IsDualProcessingNeeded returns true if files uploaded to this KB require dual processing
-// Dual processing is needed during active updates (all phases) and during retention period
-func IsDualProcessingNeeded(status string) bool {
-	// During update phases: dual process with staging KB
-	if IsUpdateInProgress(status) {
-		return true
-	}
-	// During retention period: dual process with rollback KB
-	if status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String() ||
-		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String() {
-		return true
-	}
-	return false
 }
 
 // KnowledgeBase interface defines the methods for the knowledge base repository
@@ -86,10 +72,10 @@ type KnowledgeBase interface {
 	IsKBUpdating(ctx context.Context, kbUID types.KBUIDType) (bool, error)
 	// GetStagingKBForProduction finds the staging KB associated with a production knowledge base
 	// Returns nil if no staging KB exists (no update in progress)
-	GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error)
+	GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionID string) (*KnowledgeBaseModel, error)
 	// GetRollbackKBForProduction finds the rollback KB for a production knowledge base during retention period
 	// Returns nil if no rollback KB exists (no retention period active)
-	GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error)
+	GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionID string) (*KnowledgeBaseModel, error)
 	// GetDualProcessingTarget determines if dual processing is needed and returns the target KB
 	// Returns a DualProcessingTarget with IsNeeded=false if no dual processing is needed
 	GetDualProcessingTarget(ctx context.Context, productionKB *KnowledgeBaseModel) (*DualProcessingTarget, error)
@@ -118,8 +104,20 @@ type KnowledgeBase interface {
 	// This is critical for atomic swap to ensure resources follow their knowledge bases
 	UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID, toKBUID types.KBUIDType) error
 
+	// SwapKnowledgeBaseResources atomically swaps resources between two KBs
+	// Uses CASE expression to avoid temp UID and FK constraint issues
+	SwapKnowledgeBaseResources(ctx context.Context, kbUID1, kbUID2 types.KBUIDType) error
+
 	// UpdateKnowledgeBaseResourcesTx updates kb_uid references within a transaction
 	UpdateKnowledgeBaseResourcesTx(ctx context.Context, tx *gorm.DB, fromKBUID, toKBUID types.KBUIDType) error
+
+	// CopyKnowledgeBaseResourcesTx copies file associations from one KB to another within a transaction
+	// Used during KB swap to preserve original file associations before deletion
+	CopyKnowledgeBaseResourcesTx(ctx context.Context, tx *gorm.DB, fromKBUID, toKBUID types.KBUIDType) error
+
+	// DeleteKnowledgeBaseResourcesTx deletes file associations for a KB within a transaction
+	// Used during KB swap after copying associations to rollback KB
+	DeleteKnowledgeBaseResourcesTx(ctx context.Context, tx *gorm.DB, kbUID types.KBUIDType) error
 
 	// GetDB returns the underlying database connection for transaction management
 	GetDB() *gorm.DB
@@ -132,23 +130,29 @@ type KnowledgeBaseWithConfig struct {
 }
 
 // KnowledgeBaseModel defines the structure of a knowledge base
+// Field ordering follows AIP standard: name (derived), id, display_name, slug, aliases, description
 type KnowledgeBaseModel struct {
-	UID          types.KBUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
-	KBID         string          `gorm:"column:id;size:255;not null" json:"kb_id"`
-	DisplayName  string          `gorm:"column:display_name;size:255" json:"display_name"`
-	Description  string          `gorm:"column:description;size:1023" json:"description"`
-	// Aliases stores previous IDs for backward compatibility with old URLs
-	Aliases      AliasesArray    `gorm:"column:aliases;type:text[]" json:"aliases"`
-	Tags         TagsArray       `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
-	NamespaceUID string          `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
-	CreateTime   *time.Time      `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime   *time.Time      `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
-	DeleteTime   gorm.DeletedAt  `gorm:"column:delete_time;index" json:"delete_time"`
+	UID types.KBUIDType `gorm:"column:uid;type:uuid;default:uuid_generate_v4();primaryKey" json:"uid"`
+	// Field 2: Immutable canonical ID with prefix (e.g., "kb-8f3A2k9E7c1")
+	ID string `gorm:"column:id;size:255;not null" json:"id"`
+	// Field 3: Human-readable display name for UI
+	DisplayName string `gorm:"column:display_name;size:255" json:"display_name"`
+	// Field 4: URL-friendly slug without prefix
+	Slug string `gorm:"column:slug;size:255" json:"slug"`
+	// Field 5: Previous slugs for backward compatibility with old URLs
+	Aliases AliasesArray `gorm:"column:aliases;type:text[]" json:"aliases"`
+	// Field 6: Optional description
+	Description  string     `gorm:"column:description;size:1023" json:"description"`
+	Tags         TagsArray  `gorm:"column:tags;type:VARCHAR(255)[]" json:"tags"`
+	NamespaceUID string     `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
+	CreateTime   *time.Time `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime   *time.Time `gorm:"column:update_time;not null;autoUpdateTime" json:"update_time"` // Use autoUpdateTime
+	DeleteTime   gorm.DeletedAt `gorm:"column:delete_time;index" json:"delete_time"`
 	// creator - nullable for system-created knowledge bases (e.g., instill-agent)
 	// Use pointer to allow NULL in database
 	CreatorUID *types.CreatorUIDType `gorm:"column:creator_uid;type:uuid" json:"creator_uid"`
 	Usage      int64                 `gorm:"column:usage;not null;default:0" json:"usage"`
-	// this type is defined in artifact/artifact/v1alpha/knowledge_base.proto
+	// this type is defined in artifact/v1alpha/knowledge_base.proto
 	KnowledgeBaseType string `gorm:"column:knowledge_base_type;size:255" json:"knowledge_base_type"`
 
 	// SystemUID is a foreign key reference to the system table
@@ -228,10 +232,33 @@ func (KnowledgeBaseModel) TableName() string {
 	return "knowledge_base"
 }
 
+// BeforeCreate is a GORM hook that generates UID, ID and Slug if not provided (AIP standard)
+func (kb *KnowledgeBaseModel) BeforeCreate(tx *gorm.DB) error {
+	// Generate UID if not provided (required before generating ID)
+	if uuid.UUID(kb.UID) == uuid.Nil {
+		kb.UID = types.KBUIDType(uuid.Must(uuid.NewV4()))
+		tx.Statement.SetColumn("UID", kb.UID)
+	}
+	// Generate prefixed canonical ID if not provided
+	if kb.ID == "" {
+		kb.ID = utils.GeneratePrefixedResourceID(utils.PrefixKnowledgeBase, uuid.UUID(kb.UID))
+		tx.Statement.SetColumn("ID", kb.ID)
+	}
+	// Generate slug from display name if not provided
+	if kb.Slug == "" && kb.DisplayName != "" {
+		kb.Slug = utils.GenerateSlug(kb.DisplayName)
+		tx.Statement.SetColumn("Slug", kb.Slug)
+	}
+	return nil
+}
+
 // KnowledgeBaseColumns is the columns for the knowledge base table
 type KnowledgeBaseColumns struct {
 	UID                    string
-	KBID                   string
+	ID                     string
+	DisplayName            string
+	Slug                   string
+	Aliases                string
 	Description            string
 	Tags                   string
 	NamespaceUID           string
@@ -253,7 +280,10 @@ type KnowledgeBaseColumns struct {
 // KnowledgeBaseColumn is the columns for the knowledge base table
 var KnowledgeBaseColumn = KnowledgeBaseColumns{
 	UID:                    "uid",
-	KBID:                   "id",
+	ID:                     "id",
+	DisplayName:            "display_name",
+	Slug:                   "slug",
+	Aliases:                "aliases",
 	Description:            "description",
 	Tags:                   "tags",
 	NamespaceUID:           "namespace_uid",
@@ -349,18 +379,18 @@ func (r *repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseMo
 	// Start a database transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// check if the name is unique in the owner's knowledge bases
-		KBIDExists, err := r.checkIfKBIDUnique(ctx, kb.NamespaceUID, kb.KBID)
+		IDExists, err := r.checkIfIDUnique(ctx, kb.NamespaceUID, kb.ID)
 		if err != nil {
 			return err
 		}
-		if KBIDExists {
-			return fmt.Errorf("knowledge base name %q already exists: %w", kb.KBID, errorsx.ErrAlreadyExists)
+		if IDExists {
+			return fmt.Errorf("knowledge base name %q already exists: %w", kb.ID, errorsx.ErrAlreadyExists)
 		}
 
 		// Create a new KnowledgeBaseModel record
 		if err := tx.Create(&kb).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("knowledge base ID not found: %v, err:%w", kb.KBID, gorm.ErrRecordNotFound)
+				return fmt.Errorf("knowledge base ID not found: %v, err:%w", kb.ID, gorm.ErrRecordNotFound)
 			}
 			return err
 		}
@@ -460,12 +490,12 @@ func (r *repository) ListKnowledgeBasesByTypeWithConfig(ctx context.Context, own
 }
 
 // UpdateKnowledgeBase updates a KnowledgeBaseModel record in the database.
-// For the atomic swap, use this method with all necessary fields (Name, KBID, Staging, etc.)
+// For the atomic swap, use this method with all necessary fields (Name, ID, Staging, etc.)
 func (r *repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, kb KnowledgeBaseModel) (*KnowledgeBaseModel, error) {
-	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.DeleteTime)
+	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.ID, KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.DeleteTime)
 
 	// Update all non-zero fields of the record using struct (GORM ignores zero values)
-	// This allows atomic swap to update Name, KBID, Staging, UpdateStatus, etc.
+	// This allows atomic swap to update Name, ID, Staging, UpdateStatus, etc.
 	updatedKB := new(KnowledgeBaseModel)
 	err := r.db.WithContext(ctx).
 		Clauses(clause.Returning{}).
@@ -485,7 +515,7 @@ func (r *repository) UpdateKnowledgeBase(ctx context.Context, id, owner string, 
 
 // UpdateKnowledgeBaseWithMap updates a knowledge base using a map, allowing zero values like false
 func (r *repository) UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner string, updates map[string]any) error {
-	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.DeleteTime)
+	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.ID, KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.DeleteTime)
 
 	// Convert tags if present to TagsArray type for proper PostgreSQL array handling
 	if tags, ok := updates["tags"]; ok {
@@ -511,7 +541,7 @@ func (r *repository) UpdateKnowledgeBaseWithMap(ctx context.Context, id, owner s
 
 // UpdateKnowledgeBaseWithMapTx updates a knowledge base using a map within a transaction
 func (r *repository) UpdateKnowledgeBaseWithMapTx(ctx context.Context, tx *gorm.DB, id, owner string, updates map[string]any) error {
-	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.DeleteTime)
+	where := fmt.Sprintf("%s = ? AND %s = ? AND %s is NULL", KnowledgeBaseColumn.ID, KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.DeleteTime)
 
 	// Convert tags if present to TagsArray type for proper PostgreSQL array handling
 	if tags, ok := updates["tags"]; ok {
@@ -540,7 +570,7 @@ func (r *repository) DeleteKnowledgeBaseTx(ctx context.Context, tx *gorm.DB, own
 	var existingKB KnowledgeBaseModel
 
 	// Lock the KB row with SELECT ... FOR UPDATE
-	conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+	conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.ID, KnowledgeBaseColumn.DeleteTime)
 	if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).First(&existingKB, conds, owner, kbID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("knowledge base ID not found: %v. err: %w", kbID, gorm.ErrRecordNotFound)
@@ -551,7 +581,7 @@ func (r *repository) DeleteKnowledgeBaseTx(ctx context.Context, tx *gorm.DB, own
 	// Perform soft delete using GORM's Delete() method
 	if err := tx.WithContext(ctx).Delete(&existingKB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.KBID, gorm.ErrRecordNotFound)
+			return fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.ID, gorm.ErrRecordNotFound)
 		}
 		return err
 	}
@@ -563,15 +593,21 @@ func (r *repository) DeleteKnowledgeBaseTx(ctx context.Context, tx *gorm.DB, own
 // This is CRITICAL for atomic swap: when KBs are swapped, all resources must follow their KBs.
 // Without this, queries will fail because resources point to old KB UIDs.
 func (r *repository) UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID, toKBUID types.KBUIDType) error {
-	tables := []string{
-		"file",
-		"chunk",
-		"embedding",
-		"converted_file",
-	}
-
 	// Use a transaction to ensure all updates succeed or none do
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Update file_knowledge_base junction table (file table no longer has kb_uid column)
+		result := tx.Exec("UPDATE file_knowledge_base SET kb_uid = ? WHERE kb_uid = ?", toKBUID, fromKBUID)
+		if result.Error != nil {
+			return fmt.Errorf("updating kb_uid in file_knowledge_base: %w", result.Error)
+		}
+
+		// Update tables that still have direct kb_uid column
+		tables := []string{
+			"chunk",
+			"embedding",
+			"converted_file",
+		}
+
 		for _, table := range tables {
 			query := fmt.Sprintf("UPDATE %s SET kb_uid = ? WHERE kb_uid = ?", table)
 			result := tx.Exec(query, toKBUID, fromKBUID)
@@ -583,10 +619,60 @@ func (r *repository) UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID
 	})
 }
 
+// SwapKnowledgeBaseResources atomically swaps resources between two KBs using CASE expression.
+// This avoids the temp UID approach which fails due to FK constraints.
+func (r *repository) SwapKnowledgeBaseResources(ctx context.Context, kbUID1, kbUID2 types.KBUIDType) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Swap file_knowledge_base junction table using CASE expression
+		result := tx.Exec(`
+			UPDATE file_knowledge_base
+			SET kb_uid = CASE
+				WHEN kb_uid = ? THEN ?
+				WHEN kb_uid = ? THEN ?
+				ELSE kb_uid
+			END
+			WHERE kb_uid IN (?, ?)
+		`, kbUID1, kbUID2, kbUID2, kbUID1, kbUID1, kbUID2)
+		if result.Error != nil {
+			return fmt.Errorf("swapping kb_uid in file_knowledge_base: %w", result.Error)
+		}
+
+		// Swap tables that have direct kb_uid column
+		tables := []string{
+			"chunk",
+			"embedding",
+			"converted_file",
+		}
+
+		for _, table := range tables {
+			query := fmt.Sprintf(`
+				UPDATE %s
+				SET kb_uid = CASE
+					WHEN kb_uid = ? THEN ?
+					WHEN kb_uid = ? THEN ?
+					ELSE kb_uid
+				END
+				WHERE kb_uid IN (?, ?)
+			`, table)
+			result := tx.Exec(query, kbUID1, kbUID2, kbUID2, kbUID1, kbUID1, kbUID2)
+			if result.Error != nil {
+				return fmt.Errorf("swapping kb_uid in %s: %w", table, result.Error)
+			}
+		}
+		return nil
+	})
+}
+
 // UpdateKnowledgeBaseResourcesTx updates kb_uid in all resource tables within an existing transaction
 func (r *repository) UpdateKnowledgeBaseResourcesTx(ctx context.Context, tx *gorm.DB, fromKBUID, toKBUID types.KBUIDType) error {
+	// Update file_knowledge_base junction table (file table no longer has kb_uid column)
+	result := tx.WithContext(ctx).Exec("UPDATE file_knowledge_base SET kb_uid = ? WHERE kb_uid = ?", toKBUID, fromKBUID)
+	if result.Error != nil {
+		return fmt.Errorf("updating kb_uid in file_knowledge_base: %w", result.Error)
+	}
+
+	// Update tables that still have direct kb_uid column
 	tables := []string{
-		"file",
 		"chunk",
 		"embedding",
 		"converted_file",
@@ -598,6 +684,59 @@ func (r *repository) UpdateKnowledgeBaseResourcesTx(ctx context.Context, tx *gor
 		if result.Error != nil {
 			return fmt.Errorf("updating kb_uid in %s: %w", table, result.Error)
 		}
+	}
+	return nil
+}
+
+// CopyKnowledgeBaseResourcesTx moves all resources from one KB to another within an existing transaction.
+// This is used during KB swap to preserve original resources in rollback KB.
+//
+// For file_knowledge_base junction table: Uses COPY + DELETE approach because the foreign key
+// constraint prevents UPDATE to a non-existent KB UID (the temp UUID trick doesn't work).
+//
+// For chunk, embedding, converted_file tables: Uses UPDATE because they reference the knowledge_base
+// table which already has the rollback KB created.
+func (r *repository) CopyKnowledgeBaseResourcesTx(ctx context.Context, tx *gorm.DB, fromKBUID, toKBUID types.KBUIDType) error {
+	// 1. Copy file_knowledge_base associations (INSERT ... SELECT)
+	// Use ON CONFLICT DO NOTHING to handle cases where association already exists
+	result := tx.WithContext(ctx).Exec(`
+		INSERT INTO file_knowledge_base (file_uid, kb_uid, created_at)
+		SELECT file_uid, ?, NOW()
+		FROM file_knowledge_base
+		WHERE kb_uid = ?
+		ON CONFLICT (file_uid, kb_uid) DO NOTHING
+	`, toKBUID, fromKBUID)
+	if result.Error != nil {
+		return fmt.Errorf("copying file_knowledge_base associations: %w", result.Error)
+	}
+
+	// 2. UPDATE chunk, embedding, converted_file tables
+	// These tables have direct kb_uid column and reference knowledge_base table which has rollback KB
+	tables := []string{
+		"chunk",
+		"embedding",
+		"converted_file",
+	}
+
+	for _, table := range tables {
+		query := fmt.Sprintf("UPDATE %s SET kb_uid = ? WHERE kb_uid = ?", table)
+		result := tx.WithContext(ctx).Exec(query, toKBUID, fromKBUID)
+		if result.Error != nil {
+			return fmt.Errorf("updating kb_uid in %s: %w", table, result.Error)
+		}
+	}
+
+	return nil
+}
+
+// DeleteKnowledgeBaseResourcesTx deletes file associations for a KB within an existing transaction.
+// This is used during KB swap after copying associations to rollback KB.
+// Note: Only deletes file_knowledge_base since chunk/embedding/converted_file are moved via UPDATE.
+func (r *repository) DeleteKnowledgeBaseResourcesTx(ctx context.Context, tx *gorm.DB, kbUID types.KBUIDType) error {
+	// Delete file_knowledge_base associations
+	result := tx.WithContext(ctx).Exec("DELETE FROM file_knowledge_base WHERE kb_uid = ?", kbUID)
+	if result.Error != nil {
+		return fmt.Errorf("deleting file_knowledge_base associations: %w", result.Error)
 	}
 	return nil
 }
@@ -622,7 +761,7 @@ func (r *repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, k
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Lock the KB row with SELECT ... FOR UPDATE
 		// This prevents concurrent file operations from proceeding until we commit/rollback
-		conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+		conds := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.ID, KnowledgeBaseColumn.DeleteTime)
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&existingKB, conds, ownerUID, kbID).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				return fmt.Errorf("knowledge base ID not found: %v. err: %w", kbID, gorm.ErrRecordNotFound)
@@ -634,7 +773,7 @@ func (r *repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, k
 		// This will CASCADE soft-delete all related files due to FK constraints
 		if err := tx.Delete(&existingKB).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.KBID, gorm.ErrRecordNotFound)
+				return fmt.Errorf("knowledge base ID not found: %v. err: %w", existingKB.ID, gorm.ErrRecordNotFound)
 			}
 			return err
 		}
@@ -649,9 +788,9 @@ func (r *repository) DeleteKnowledgeBase(ctx context.Context, ownerUID string, k
 	return &existingKB, nil
 }
 
-func (r *repository) checkIfKBIDUnique(ctx context.Context, owner string, kbID string) (bool, error) {
+func (r *repository) checkIfIDUnique(ctx context.Context, owner string, kbID string) (bool, error) {
 	var existingKB KnowledgeBaseModel
-	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.KBID)
+	whereString := fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.ID)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return false, err
@@ -665,7 +804,7 @@ func (r *repository) checkIfKBIDUnique(ctx context.Context, owner string, kbID s
 // get the knowledge base by (owner, kb_id)
 func (r *repository) GetKnowledgeBaseByOwnerAndKbID(ctx context.Context, owner types.OwnerUIDType, kbID string) (*KnowledgeBaseModel, error) {
 	var existingKB KnowledgeBaseModel
-	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v is NULL", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.ID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, owner, kbID).First(&existingKB).Error; err != nil {
 		return nil, err
 	}
@@ -689,7 +828,7 @@ func (r *repository) GetKnowledgeBaseByIDOrAlias(ctx context.Context, owner type
 // GetKnowledgeBaseByID gets a knowledge base by ID (without owner filtering)
 func (r *repository) GetKnowledgeBaseByID(ctx context.Context, kbID string) (*KnowledgeBaseModel, error) {
 	var kb KnowledgeBaseModel
-	whereString := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseColumn.KBID, KnowledgeBaseColumn.DeleteTime)
+	whereString := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseColumn.ID, KnowledgeBaseColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, kbID).First(&kb).Error; err != nil {
 		return nil, err
 	}
@@ -898,18 +1037,18 @@ func (r *repository) IsKBUpdating(ctx context.Context, kbUID types.KBUIDType) (b
 
 // GetStagingKBForProduction finds the staging KB for a production knowledge base during an update
 // Returns nil if no staging KB exists (no update in progress)
-// Uses parent_kb_uid and tags for reliable lookup without KBID manipulation
-func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error) {
+// Uses parent_kb_uid and tags for reliable lookup without ID manipulation
+func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionID string) (*KnowledgeBaseModel, error) {
 	// First, get the production KB's UID
 	var productionKB KnowledgeBaseModel
 	err := r.db.WithContext(ctx).
 		Select("uid").
 		Where(fmt.Sprintf("%v = ? AND %v = ? AND %v = ? AND %v IS NULL",
 			KnowledgeBaseColumn.NamespaceUID,
-			KnowledgeBaseColumn.KBID,
+			KnowledgeBaseColumn.ID,
 			KnowledgeBaseColumn.Staging,
 			KnowledgeBaseColumn.DeleteTime),
-			ownerUID, productionKBID, false).
+			ownerUID, productionID, false).
 		First(&productionKB).
 		Error
 
@@ -918,7 +1057,7 @@ func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID typ
 			// Production KB not found
 			return nil, nil
 		}
-		return nil, fmt.Errorf("finding production KB %s: %w", productionKBID, err)
+		return nil, fmt.Errorf("finding production KB %s: %w", productionID, err)
 	}
 
 	// Query for staging KB using parent_kb_uid and tags
@@ -938,7 +1077,7 @@ func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID typ
 			// No staging KB found - not an error, just means no update in progress
 			return nil, nil
 		}
-		return nil, fmt.Errorf("finding staging KB for %s: %w", productionKBID, err)
+		return nil, fmt.Errorf("finding staging KB for %s: %w", productionID, err)
 	}
 
 	return &stagingKB, nil
@@ -946,18 +1085,18 @@ func (r *repository) GetStagingKBForProduction(ctx context.Context, ownerUID typ
 
 // GetRollbackKBForProduction finds the rollback KB for a production knowledge base during retention period
 // Returns nil if no rollback KB exists (no retention period active)
-// Uses parent_kb_uid and tags for reliable lookup without KBID manipulation
-func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionKBID string) (*KnowledgeBaseModel, error) {
+// Uses parent_kb_uid and tags for reliable lookup without ID manipulation
+func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID types.OwnerUIDType, productionID string) (*KnowledgeBaseModel, error) {
 	// First, get the production KB's UID
 	var productionKB KnowledgeBaseModel
 	err := r.db.WithContext(ctx).
 		Select("uid").
 		Where(fmt.Sprintf("%v = ? AND %v = ? AND %v = ? AND %v IS NULL",
 			KnowledgeBaseColumn.NamespaceUID,
-			KnowledgeBaseColumn.KBID,
+			KnowledgeBaseColumn.ID,
 			KnowledgeBaseColumn.Staging,
 			KnowledgeBaseColumn.DeleteTime),
-			ownerUID, productionKBID, false).
+			ownerUID, productionID, false).
 		First(&productionKB).
 		Error
 
@@ -966,7 +1105,7 @@ func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID ty
 			// Production KB not found
 			return nil, nil
 		}
-		return nil, fmt.Errorf("finding production KB %s: %w", productionKBID, err)
+		return nil, fmt.Errorf("finding production KB %s: %w", productionID, err)
 	}
 
 	// Query for rollback KB using parent_kb_uid and tags
@@ -986,7 +1125,7 @@ func (r *repository) GetRollbackKBForProduction(ctx context.Context, ownerUID ty
 			// No rollback KB found - not an error, just means no retention period active
 			return nil, nil
 		}
-		return nil, fmt.Errorf("finding rollback KB for %s: %w", productionKBID, err)
+		return nil, fmt.Errorf("finding rollback KB for %s: %w", productionID, err)
 	}
 
 	return &rollbackKB, nil
@@ -1025,7 +1164,7 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 		ownerUID := types.OwnerUIDType(uuid.FromStringOrNil(productionKB.NamespaceUID))
 
 		// First, try to find staging KB (exists before swap)
-		stagingKB, err := r.GetStagingKBForProduction(ctx, ownerUID, productionKB.KBID)
+		stagingKB, err := r.GetStagingKBForProduction(ctx, ownerUID, productionKB.ID)
 		if err != nil {
 			return nil, fmt.Errorf("checking for staging KB: %w", err)
 		}
@@ -1050,7 +1189,7 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 
 		// If staging KB doesn't exist during update (swap already happened), check for rollback KB
 		// This happens when we're in "swapping" status but SwapKnowledgeBasesActivity has already run
-		rollbackKB, err := r.GetRollbackKBForProduction(ctx, ownerUID, productionKB.KBID)
+		rollbackKB, err := r.GetRollbackKBForProduction(ctx, ownerUID, productionKB.ID)
 		if err != nil {
 			return nil, fmt.Errorf("checking for rollback KB during post-swap: %w", err)
 		}
@@ -1070,7 +1209,7 @@ func (r *repository) GetDualProcessingTarget(ctx context.Context, productionKB *
 	if status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String() ||
 		status == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String() {
 		ownerUID := types.OwnerUIDType(uuid.FromStringOrNil(productionKB.NamespaceUID))
-		rollbackKB, err := r.GetRollbackKBForProduction(ctx, ownerUID, productionKB.KBID)
+		rollbackKB, err := r.GetRollbackKBForProduction(ctx, ownerUID, productionKB.ID)
 		if err != nil {
 			return nil, fmt.Errorf("checking for rollback KB: %w", err)
 		}
@@ -1102,13 +1241,13 @@ func (r *repository) CreateStagingKnowledgeBase(ctx context.Context, original *K
 		systemUID = *newSystemUID
 	}
 
-	// Generate UUID-based KBID for staging KB (following principle: KBID is user-facing and shouldn't be manipulated)
+	// Generate UUID-based ID for staging KB (following principle: ID is user-facing and shouldn't be manipulated)
 	stagingKBUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
 
 	stagingKB := KnowledgeBaseModel{
 		// New UID is generated automatically by GORM
-		// Use UUID-based KBID instead of suffix pattern for consistency with rollback KBs
-		KBID:              stagingKBUID.String(),
+		// Use UUID-based ID instead of suffix pattern for consistency with rollback KBs
+		ID:              stagingKBUID.String(),
 		Description:       original.Description,
 		Tags:              append(original.Tags, "staging"),
 		NamespaceUID:      original.NamespaceUID,
@@ -1157,7 +1296,7 @@ func (r *repository) ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters
 
 	// Filter by specific knowledge base IDs if provided
 	if len(knowledgeBaseIDs) > 0 {
-		query = query.Where(fmt.Sprintf("%v IN ?", KnowledgeBaseColumn.KBID), knowledgeBaseIDs)
+		query = query.Where(fmt.Sprintf("%v IN ?", KnowledgeBaseColumn.ID), knowledgeBaseIDs)
 	}
 
 	if err := query.Find(&kbs).Error; err != nil {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"gorm.io/datatypes"
@@ -34,15 +34,15 @@ type ConvertedFile interface {
 // ConvertedFileModel is the model for the converted file
 type ConvertedFileModel struct {
 	UID   types.ConvertedFileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	KBUID types.KBUIDType            `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
+	KnowledgeBaseUID types.KnowledgeBaseUIDType `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	// FileUID is the original file UID in knowledge base file table
 	FileUID types.FileUIDType `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
 	// ContentType stores the MIME type (always "text/markdown" for converted markdown files)
 	ContentType string `gorm:"column:content_type;size:100;not null" json:"content_type"`
 	// ConvertedType specifies the purpose of this converted file (content or summary)
 	ConvertedType string `gorm:"column:converted_type;size:50;not null;default:content" json:"converted_type"`
-	// destination path in minio
-	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
+	// StoragePath is the path in MinIO bucket
+	StoragePath string `gorm:"column:storage_path;size:255;not null" json:"storage_path"`
 
 	PositionDataJSON datatypes.JSON      `gorm:"column:position_data;type:jsonb" json:"position_data_json"`
 	PositionData     *types.PositionData `gorm:"-" json:"position_data"`
@@ -63,7 +63,7 @@ type ConvertedFileColumns struct {
 	FileUID       string
 	ContentType   string
 	ConvertedType string
-	Destination   string
+	StoragePath   string
 	CreateTime    string
 	UpdateTime    string
 }
@@ -75,7 +75,7 @@ var ConvertedFileColumn = ConvertedFileColumns{
 	FileUID:       "file_uid",
 	ContentType:   "content_type",
 	ConvertedType: "converted_type",
-	Destination:   "destination",
+	StoragePath:   "storage_path",
 	CreateTime:    "create_time",
 	UpdateTime:    "update_time",
 }
@@ -88,11 +88,11 @@ func (r *repository) CreateConvertedFileWithDestination(ctx context.Context, cf 
 	if cf.FileUID.IsNil() {
 		return nil, fmt.Errorf("file_uid is required")
 	}
-	if cf.KBUID.IsNil() {
-		return nil, fmt.Errorf("kb_uid is required")
+	if cf.KnowledgeBaseUID.IsNil() {
+		return nil, fmt.Errorf("knowledge_base_uid is required")
 	}
-	if cf.Destination == "" {
-		return nil, fmt.Errorf("destination is required and cannot be empty")
+	if cf.StoragePath == "" {
+		return nil, fmt.Errorf("storage_path is required and cannot be empty")
 	}
 	if cf.ContentType == "" {
 		return nil, fmt.Errorf("content_type is required and cannot be empty")
@@ -248,7 +248,7 @@ func (r *repository) GetConvertedFileCountByKBUID(ctx context.Context, kbUID typ
 	var count int64
 	err := r.db.WithContext(ctx).
 		Table(ConvertedFileTableName+" AS cf").
-		Joins("INNER JOIN "+KnowledgeBaseFileTableName+" AS f ON cf.file_uid = f.uid").
+		Joins("INNER JOIN "+FileTableName+" AS f ON cf.file_uid = f.uid").
 		Where("cf.kb_uid = ?", kbUID).
 		Where("f.delete_time IS NULL"). // CRITICAL: Exclude converted files for deleted files
 		Count(&count).

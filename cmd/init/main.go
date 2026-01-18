@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -11,13 +12,38 @@ import (
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/ai"
+	"github.com/instill-ai/artifact-backend/pkg/ai/gemini"
+	"github.com/instill-ai/artifact-backend/pkg/ai/openai"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
+	"github.com/instill-ai/artifact-backend/pkg/repository"
 
-	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	database "github.com/instill-ai/artifact-backend/pkg/db"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/v1beta"
 	clientx "github.com/instill-ai/x/client"
 	clientgrpcx "github.com/instill-ai/x/client/grpc"
 	logx "github.com/instill-ai/x/log"
 )
+
+// DefaultSystemPresets defines the default system configurations to seed
+var DefaultSystemPresets = []repository.PresetSystem{
+	{
+		DisplayName:    "OpenAI",
+		Slug:           "openai",
+		ModelFamily:    ai.ModelFamilyOpenAI,
+		Dimensionality: openai.DefaultEmbeddingDimension,
+		Description:    "OpenAI embedding configuration (text-embedding-3-small, 1536 dimensions)",
+		IsDefault:      false,
+	},
+	{
+		DisplayName:    "Gemini",
+		Slug:           "gemini",
+		ModelFamily:    ai.ModelFamilyGemini,
+		Dimensionality: gemini.DefaultEmbeddingDimension,
+		Description:    "Gemini embedding configuration (text-embedding-004, 3072 dimensions)",
+		IsDefault:      true, // Gemini is the default
+	},
+}
 
 func main() {
 	ctx := context.Background()
@@ -40,6 +66,19 @@ func main() {
 		grpczap.ReplaceGrpcLoggerV2WithVerbosity(logger, 3) // verbosity 3 will avoid [transport] from emitting
 	}
 
+	// Initialize database connection for system seeding
+	db := database.GetSharedConnection()
+	defer database.Close(db)
+
+	// Seed default systems
+	logger.Info("Seeding default system configurations...")
+	repo := repository.NewDBOnlyRepository(db)
+	if err := repo.SeedDefaultSystems(ctx, DefaultSystemPresets); err != nil {
+		logger.Fatal(fmt.Sprintf("failed to seed default systems: %v", err))
+	}
+	logger.Info("Default system configurations seeded successfully")
+
+	// Initialize pipeline client for preset pipelines
 	pipelinePublicServiceClient, pipelinePublicClose, err := clientgrpcx.NewClient[pipelinepb.PipelinePublicServiceClient](
 		clientgrpcx.WithServiceConfig(clientx.ServiceConfig{
 			Host:       config.Config.PipelineBackend.Host,
@@ -66,7 +105,7 @@ func main() {
 	}
 
 	for _, pr := range pipeline.PresetPipelinesList {
-		logger := logger.With(zap.String("id", pr.ID), zap.String("version", pr.Version))
+		logger := logger.With(zap.String("slug", pr.Slug()), zap.String("displayName", pr.DisplayName), zap.String("version", pr.Version))
 		if err := upserter.Upsert(ctx, pr); err != nil {
 			logger.Error("Failed to add pipeline", zap.Error(err))
 			continue

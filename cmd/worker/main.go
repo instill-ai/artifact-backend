@@ -37,8 +37,8 @@ import (
 
 	database "github.com/instill-ai/artifact-backend/pkg/db"
 	artifactworker "github.com/instill-ai/artifact-backend/pkg/worker"
-	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
-	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	mgmtpb "github.com/instill-ai/protogen-go/mgmt/v1beta"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/v1beta"
 	clientgrpcx "github.com/instill-ai/x/client/grpc"
 	logx "github.com/instill-ai/x/log"
 	miniox "github.com/instill-ai/x/minio"
@@ -207,16 +207,17 @@ func main() {
 
 	// ===== CleanupKnowledgeBaseWorkflow Activities =====
 	// Activities for cleaning up entire knowledge base resources
-	w.RegisterActivity(cw.GetInProgressFileCountActivity)       // Check for in-progress files before cleanup
-	w.RegisterActivity(cw.DeleteKBFilesFromMinIOActivity)       // Delete all KB files from MinIO
-	w.RegisterActivity(cw.DropVectorDBCollectionActivity)       // Drop Milvus collection for KB
-	w.RegisterActivity(cw.DeleteKBFileRecordsActivity)          // Delete all file records from database
-	w.RegisterActivity(cw.DeleteKBConvertedFileRecordsActivity) // Delete all converted file records
-	w.RegisterActivity(cw.DeleteKBTextChunkRecordsActivity)     // Delete all chunk records
-	w.RegisterActivity(cw.DeleteKBEmbeddingRecordsActivity)     // Delete all embedding records
-	w.RegisterActivity(cw.SoftDeleteKBRecordActivity)           // Soft-delete the KB record itself
-	w.RegisterActivity(cw.PurgeKBACLActivity)                   // Remove all ACL permissions for KB
-	w.RegisterActivity(cw.ClearProductionKBRetentionActivity)   // Clear retention field on production KB after rollback cleanup
+	w.RegisterActivity(cw.GetInProgressFileCountActivity)        // Check for in-progress files before cleanup
+	w.RegisterActivity(cw.DeleteKBFilesFromMinIOActivity)        // Delete all KB files from MinIO
+	w.RegisterActivity(cw.DropVectorDBCollectionActivity)        // Drop Milvus collection for KB
+	w.RegisterActivity(cw.DeleteKBFileRecordsActivity)           // Delete all file records from database
+	w.RegisterActivity(cw.DeleteKBConvertedFileRecordsActivity)  // Delete all converted file records
+	w.RegisterActivity(cw.DeleteKBTextChunkRecordsActivity)      // Delete all chunk records
+	w.RegisterActivity(cw.DeleteKBEmbeddingRecordsActivity)      // Delete all embedding records
+	w.RegisterActivity(cw.SoftDeleteKBRecordActivity)            // Soft-delete the KB record itself
+	w.RegisterActivity(cw.PurgeKBACLActivity)                    // Remove all ACL permissions for KB
+	w.RegisterActivity(cw.ClearProductionKBRetentionActivity)    // Clear retention field on production KB after rollback cleanup
+	w.RegisterActivity(cw.CheckRollbackRetentionExpiredActivity) // Check if rollback KB retention period has expired
 
 	// ===== RAG update activities =====
 	// Activities for knowledge base update workflow (6-phase)
@@ -264,7 +265,7 @@ func main() {
 	// Chunking Phase - Combined content and summary chunking (sequential after parallel AI operations)
 	w.RegisterActivity(cw.DeleteOldTextChunksActivity) // Delete old text chunk records before creating new ones
 	w.RegisterActivity(cw.ChunkContentActivity)        // Split markdown content into semantic chunks
-	w.RegisterActivity(cw.SaveTextChunksActivity)      // Persist chunks to database and MinIO storage
+	w.RegisterActivity(cw.SaveChunksActivity)          // Persist chunks to database and MinIO storage
 
 	// Embedding Phase - Vector embedding generation and storage
 	w.RegisterActivity(cw.EmbedAndSaveChunksActivity)      // Combined: query chunks, generate embeddings, save to DB/Milvus

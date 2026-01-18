@@ -31,7 +31,16 @@ type CleanupKnowledgeBaseWorkflowParam struct {
 	CleanupAfterSeconds    int64            // If > 0, wait this many seconds before cleanup (for retention-based cleanup)
 	ProtectedCollectionUID *types.KBUIDType // Collection UID that must not be dropped (e.g., after swap)
 	MinioBucket            string           // Minio bucket name for object storage
+	// PollIterationCount tracks how many poll cycles have been completed
+	// Used to determine when to ContinueAsNew to avoid history size limits
+	PollIterationCount int
 }
+
+// MaxPollIterationsBeforeContinueAsNew is the maximum number of poll iterations before
+// using ContinueAsNew to reset workflow history. With 5-second polling intervals,
+// 500 iterations = ~42 minutes before reset. This prevents unbounded history growth
+// while still supporting long retention periods.
+const MaxPollIterationsBeforeContinueAsNew = 500
 
 type cleanupFileWorkflow struct {
 	temporalClient client.Client
@@ -218,8 +227,9 @@ func (w *Worker) CleanupFileWorkflow(ctx workflow.Context, param CleanupFileWork
 // - All embedding records in Postgres
 // - ACL permissions for the knowledge base
 //
-// If CleanupAfterSeconds > 0, the workflow will wait that many seconds before performing cleanup.
-// This is used for retention-based cleanup where old KBs should be deleted after a retention period.
+// If CleanupAfterSeconds > 0, the workflow will poll the database periodically to check
+// if the retention period has expired. This allows dynamic retention changes via
+// SetRollbackRetentionAdmin API to take effect immediately.
 //
 // Use this when deleting an entire knowledge base (not individual files).
 func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param CleanupKnowledgeBaseWorkflowParam) error {
@@ -230,19 +240,91 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 
 	kbUID := param.KBUID
 
-	// If a delay is specified, wait before cleanup (for retention-based cleanup)
+	// If a delay is specified, poll the database for retention expiry
+	// This allows SetRollbackRetentionAdmin to dynamically change the retention period
 	if param.CleanupAfterSeconds > 0 {
-		logger.Info("Waiting before cleanup (retention period)",
-			"delaySeconds", param.CleanupAfterSeconds)
+		logger.Info("Polling for retention expiry (allows dynamic retention changes)",
+			"initialDelaySeconds", param.CleanupAfterSeconds,
+			"pollIterationCount", param.PollIterationCount)
 
-		waitDuration := time.Duration(param.CleanupAfterSeconds) * time.Second
-		err := workflow.Sleep(ctx, waitDuration)
-		if err != nil {
-			logger.Error("Sleep interrupted", "error", err)
-			return err
+		// Use short activity timeout for polling
+		pollActivityOptions := workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    10 * time.Second,
+				MaximumAttempts:    3,
+			},
 		}
+		pollCtx := workflow.WithActivityOptions(ctx, pollActivityOptions)
 
-		logger.Info("Retention period expired, proceeding with cleanup", "kbUID", kbUID.String())
+		// Poll every 5 seconds until retention expires
+		// Max poll iterations = initialDelaySeconds / 5 + extra buffer for safety
+		pollInterval := 5 * time.Second
+		maxPollIterations := int(param.CleanupAfterSeconds/5) + 100 // Extra buffer
+		pollIterationCount := param.PollIterationCount
+
+		for i := pollIterationCount; i < maxPollIterations; i++ {
+			var result CheckRollbackRetentionExpiredActivityResult
+			err := workflow.ExecuteActivity(pollCtx, w.CheckRollbackRetentionExpiredActivity,
+				&CheckRollbackRetentionExpiredActivityParam{RollbackKBUID: kbUID}).Get(pollCtx, &result)
+
+			if err != nil {
+				logger.Error("Failed to check retention expiry, will retry",
+					"error", err, "attempt", i+1)
+				// Sleep and retry
+				if sleepErr := workflow.Sleep(ctx, pollInterval); sleepErr != nil {
+					return sleepErr
+				}
+				continue
+			}
+
+			// Check if cleanup should proceed
+			if result.Expired {
+				if result.KBDeleted {
+					logger.Info("Rollback KB already deleted, terminating workflow",
+						"kbUID", kbUID.String())
+					return nil // No cleanup needed
+				}
+				if result.ProductionKBDeleted {
+					logger.Info("Production KB deleted, proceeding with rollback cleanup",
+						"kbUID", kbUID.String())
+				} else {
+					logger.Info("Retention period expired, proceeding with cleanup",
+						"kbUID", kbUID.String())
+				}
+				break // Exit polling loop and proceed with cleanup
+			}
+
+			// Retention not expired yet, sleep and poll again
+			if i%12 == 0 { // Log every minute (12 * 5s = 60s)
+				logger.Info("Retention period not expired, continuing to poll",
+					"kbUID", kbUID.String(), "pollIteration", i+1)
+			}
+
+			pollIterationCount = i + 1
+
+			// ContinueAsNew to reset workflow history and avoid hitting event count limits
+			// This is a Temporal best practice for long-running workflows
+			if pollIterationCount >= MaxPollIterationsBeforeContinueAsNew && pollIterationCount < maxPollIterations {
+				logger.Info("CleanupKnowledgeBaseWorkflow: Reached max poll iterations, using ContinueAsNew to reset history",
+					"pollIterations", pollIterationCount,
+					"kbUID", kbUID.String())
+				return workflow.NewContinueAsNewError(ctx, w.CleanupKnowledgeBaseWorkflow, CleanupKnowledgeBaseWorkflowParam{
+					KBUID:                  param.KBUID,
+					CleanupAfterSeconds:    param.CleanupAfterSeconds,
+					ProtectedCollectionUID: param.ProtectedCollectionUID,
+					MinioBucket:            param.MinioBucket,
+					PollIterationCount:     pollIterationCount, // Continue from where we left off
+				})
+			}
+
+			if err := workflow.Sleep(ctx, pollInterval); err != nil {
+				logger.Error("Sleep interrupted during retention polling", "error", err)
+				return err
+			}
+		}
 	}
 
 	activityOptions := workflow.ActivityOptions{
@@ -476,16 +558,34 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 	return nil
 }
 
+// GCSCleanupContinuousWorkflowParam defines parameters for the GCS cleanup workflow
+type GCSCleanupContinuousWorkflowParam struct {
+	// IterationCount tracks how many cleanup cycles have been completed
+	// Used to determine when to ContinueAsNew to avoid history size limits
+	IterationCount int
+}
+
+// MaxIterationsBeforeContinueAsNew is the maximum number of iterations before
+// using ContinueAsNew to reset workflow history. This prevents the workflow
+// from accumulating too many events (Temporal warns at ~10K events).
+// With 2-minute intervals, 100 iterations = ~3.3 hours before reset.
+const MaxIterationsBeforeContinueAsNew = 100
+
 // GCSCleanupContinuousWorkflow runs the GCS cleanup in a continuous loop with timer
 // This is an alternative to using Temporal's cron schedules
 // It runs every 2 minutes indefinitely until cancelled
 //
+// IMPORTANT: This workflow uses ContinueAsNew after MaxIterationsBeforeContinueAsNew
+// cycles to prevent workflow history from growing unbounded. This is a Temporal
+// best practice for long-running workflows.
+//
 // Workflow name: GCSCleanupContinuousWorkflow
 // Singleton: Yes - Only one instance runs at a time using WorkflowID "artifact-backend-gcs-cleanup-continuous-singleton"
 // Usage: Start once and it will run forever on a 2-minute interval
-func (w *Worker) GCSCleanupContinuousWorkflow(ctx workflow.Context) error {
+func (w *Worker) GCSCleanupContinuousWorkflow(ctx workflow.Context, param GCSCleanupContinuousWorkflowParam) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("GCSCleanupContinuousWorkflow: Starting continuous GCS cleanup workflow")
+	logger.Info("GCSCleanupContinuousWorkflow: Starting continuous GCS cleanup workflow",
+		"iterationCount", param.IterationCount)
 
 	// Activity options
 	activityOptions := workflow.ActivityOptions{
@@ -502,22 +602,36 @@ func (w *Worker) GCSCleanupContinuousWorkflow(ctx workflow.Context) error {
 
 	// Run cleanup every 2 minutes
 	cleanupInterval := 2 * time.Minute
+	iterationCount := param.IterationCount
 
 	for {
-		logger.Info("GCSCleanupContinuousWorkflow: Starting cleanup cycle")
+		logger.Info("GCSCleanupContinuousWorkflow: Starting cleanup cycle",
+			"iteration", iterationCount)
 
 		// Execute cleanup activity
-		param := &CleanupExpiredGCSFilesActivityParam{
+		activityParam := &CleanupExpiredGCSFilesActivityParam{
 			MaxFilesToClean: 1000,
 		}
 
-		err := workflow.ExecuteActivity(ctx, w.CleanupExpiredGCSFilesActivity, param).Get(ctx, nil)
+		err := workflow.ExecuteActivity(ctx, w.CleanupExpiredGCSFilesActivity, activityParam).Get(ctx, nil)
 		if err != nil {
 			logger.Warn("GCSCleanupContinuousWorkflow: Cleanup cycle failed, will retry in next cycle",
 				"error", err.Error())
 			// Don't fail - just log and continue to next cycle
 		} else {
 			logger.Info("GCSCleanupContinuousWorkflow: Cleanup cycle completed successfully")
+		}
+
+		iterationCount++
+
+		// ContinueAsNew to reset workflow history and avoid hitting event count limits
+		// This is a Temporal best practice for long-running workflows
+		if iterationCount >= MaxIterationsBeforeContinueAsNew {
+			logger.Info("GCSCleanupContinuousWorkflow: Reached max iterations, using ContinueAsNew to reset history",
+				"iterations", iterationCount)
+			return workflow.NewContinueAsNewError(ctx, w.GCSCleanupContinuousWorkflow, GCSCleanupContinuousWorkflowParam{
+				IterationCount: 0, // Reset counter
+			})
 		}
 
 		// Wait for next cycle

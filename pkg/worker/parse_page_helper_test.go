@@ -366,21 +366,13 @@ Third page 第三页
 Mixed content: Hello 世界 🌍
 End of document`
 
-	markdownWithTags, pages, positionData := parseMarkdownPages(input)
+	_, pages, positionData := parseMarkdownPages(input)
 
 	c.Assert(len(pages), qt.Equals, 3)
 	c.Assert(positionData, qt.IsNotNil)
 	c.Assert(len(positionData.PageDelimiters), qt.Equals, 3)
 
-	// Verify each page extracts correctly using the [Page: X] tags
-	for i := 1; i <= 3; i++ {
-		extracted, err := ExtractPageContent(markdownWithTags, i)
-		c.Assert(err, qt.IsNil)
-		c.Assert(extracted, qt.Equals, pages[i-1],
-			qt.Commentf("Page %d mismatch with Unicode content", i))
-
-		t.Logf("Page %d Unicode test passed: %d runes", i, len([]rune(extracted)))
-	}
+	// NOTE: ExtractPageContent tests were removed as the function was removed during dead code cleanup.
 }
 
 func TestPageDelimiterMeaning(t *testing.T) {
@@ -407,14 +399,7 @@ World`
 	c.Assert(positionData, qt.IsNotNil)
 	c.Assert(len(positionData.PageDelimiters), qt.Equals, 2)
 
-	// Extract pages using regex on tags (robust method)
-	page1, err := ExtractPageContent(markdownWithTags, 1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(page1, qt.Equals, "Hello")
-
-	page2, err := ExtractPageContent(markdownWithTags, 2)
-	c.Assert(err, qt.IsNil)
-	c.Assert(page2, qt.Equals, "World")
+	// NOTE: ExtractPageContent tests were removed as the function was removed during dead code cleanup.
 }
 
 func TestRealAIOutputDelimiterAccuracy(t *testing.T) {
@@ -444,68 +429,15 @@ func TestRealAIOutputDelimiterAccuracy(t *testing.T) {
 	t.Logf("Page 2 length (runes): %d", len([]rune(pages[1])))
 	t.Logf("Position data delimiters: %v", positionData.PageDelimiters)
 
-	// Extract pages using regex on [Page: X] tags (robust, no offset bugs!)
-	page1Content, err := ExtractPageContent(markdownWithTags, 1)
-	c.Assert(err, qt.IsNil)
-	page2Content, err := ExtractPageContent(markdownWithTags, 2)
-	c.Assert(err, qt.IsNil)
-
-	t.Logf("Page 1 extracted length (runes): %d", len([]rune(page1Content)))
-	t.Logf("Page 2 extracted length (runes): %d", len([]rune(page2Content)))
-
-	// Page 1 should start correctly (no offset bugs possible!)
-	c.Assert(strings.HasPrefix(page1Content, "[Location: Top-Left]"), qt.IsTrue,
+	// NOTE: ExtractPageContent tests were removed as the function was removed during dead code cleanup.
+	// Basic assertions on parsed data still pass
+	c.Assert(strings.HasPrefix(pages[0], "[Location: Top-Left]"), qt.IsTrue,
 		qt.Commentf("Page 1 should start with '[Location: Top-Left]'"))
-
-	// Verify page 1 content matches exactly
-	c.Assert(page1Content, qt.Equals, pages[0],
-		qt.Commentf("Page 1 extracted should match pages[0] exactly"))
-
-	// Page 2 should also start correctly
-	c.Assert(strings.HasPrefix(page2Content, "[Location: Top-Left]"), qt.IsTrue,
+	c.Assert(strings.HasPrefix(pages[1], "[Location: Top-Left]"), qt.IsTrue,
 		qt.Commentf("Page 2 should start with '[Location: Top-Left]'"))
-
-	// Verify page 2 content matches pages[1]
-	c.Assert(page2Content, qt.Equals, pages[1],
-		qt.Commentf("Page 2 extracted should match pages[1] exactly"))
 }
 
-func TestExtractPageContent(t *testing.T) {
-	c := qt.New(t)
-
-	// Create test markdown with 3 pages
-	input := `[Page: 1]
-First page content
-
-[Page: 2]
-Second page content
-
-[Page: 3]
-Third page content`
-
-	markdownWithTags, pages, positionData := parseMarkdownPages(input)
-
-	c.Assert(len(pages), qt.Equals, 3)
-	c.Assert(positionData, qt.IsNotNil)
-	c.Assert(len(positionData.PageDelimiters), qt.Equals, 3)
-
-	// Test extracting each page using regex on [Page: X] tags
-	for i := 1; i <= 3; i++ {
-		content, err := ExtractPageContent(markdownWithTags, i)
-		c.Assert(err, qt.IsNil)
-		c.Assert(content, qt.Equals, pages[i-1],
-			qt.Commentf("Extracted page %d should match original page content", i))
-
-		t.Logf("Page %d extracted successfully: %q", i, content)
-	}
-
-	// Test invalid page numbers
-	_, err := ExtractPageContent(markdownWithTags, 0)
-	c.Assert(err, qt.IsNotNil, qt.Commentf("Should error on page 0"))
-
-	_, err = ExtractPageContent(markdownWithTags, 4)
-	c.Assert(err, qt.IsNotNil, qt.Commentf("Should error on page 4 (only 3 pages)"))
-}
+// NOTE: TestExtractPageContent was removed as the ExtractPageContent function was removed during dead code cleanup.
 
 func TestParseMarkdownPages_LargeMultiPageDocument(t *testing.T) {
 	c := qt.New(t)
@@ -577,16 +509,11 @@ End of document.`
 	c.Assert(positionData, qt.IsNotNil)
 	c.Assert(len(positionData.PageDelimiters), qt.Equals, 13)
 
-	// Verify each page can be extracted correctly (especially later pages)
+	// NOTE: ExtractPageContent loop was removed as the function was removed during dead code cleanup.
+	// Verify pages were parsed correctly
 	for pageNum := 1; pageNum <= 13; pageNum++ {
-		extracted, err := ExtractPageContent(markdownWithTags, pageNum)
-		c.Assert(err, qt.IsNil, qt.Commentf("Page %d extraction failed", pageNum))
-		c.Assert(len(extracted), qt.Not(qt.Equals), 0,
+		c.Assert(len(pages[pageNum-1]) > 0, qt.IsTrue,
 			qt.Commentf("Page %d should have content", pageNum))
-
-		// Verify content matches
-		c.Assert(extracted, qt.Equals, pages[pageNum-1],
-			qt.Commentf("Page %d content mismatch", pageNum))
 	}
 
 	// Verify delimiters point to correct positions

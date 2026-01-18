@@ -5,7 +5,7 @@ import (
 
 	"github.com/gofrs/uuid"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 // FileType represents the type of file being processed
@@ -53,26 +53,26 @@ type PositionData struct {
 	PageDelimiters []uint32 `json:"PageDelimiters"`
 }
 
-// TextChunkReference contains the position information of the text chunk within the
+// ChunkReference contains the position information of the text chunk within the
 // original file.
-type TextChunkReference struct {
+type ChunkReference struct {
 	// PageRange contains the start and end pages of the text chunk when the page
 	// belongs to a document. Positions in this case are 1-indexed in order
 	// to align with the document visualization standards (e.g. page 4 of 4).
 	PageRange [2]uint32 `json:"PageRange,omitempty"`
 }
 
-// TextChunk represents a chunk of text extracted from a file.
+// Chunk represents a chunk of text extracted from a file.
 // It contains position information (Start/End) within the converted markdown,
 // token count for embedding purposes, and an optional reference to source pages.
-type TextChunk struct {
+type Chunk struct {
 	// Start and End contain the start and end positions of the chunk within
 	// the converted file.
 	Start     int
 	End       int
 	Text      string
 	Tokens    int
-	Reference *TextChunkReference
+	Reference *ChunkReference
 	Type      artifactpb.Chunk_Type
 }
 
@@ -89,19 +89,24 @@ type (
 	// OwnerUIDType is the Owner unique identifier
 	OwnerUIDType = uuid.UUID
 
-	// KBUIDType is the Knowledge Base unique identifier
-	KBUIDType = uuid.UUID
+	// KnowledgeBaseUIDType is the Knowledge Base unique identifier
+	KnowledgeBaseUIDType = uuid.UUID
+	// KBUIDType is deprecated, use KnowledgeBaseUIDType instead
+	// Kept for backward compatibility during migration
+	KBUIDType = KnowledgeBaseUIDType
 	// CollectionUIDType is the Collection unique identifier
 	CollectionUIDType = uuid.UUID
 	// FileUIDType is the File unique identifier
 	FileUIDType = uuid.UUID
-	// TextChunkUIDType is the Text chunk unique identifier
-	TextChunkUIDType = uuid.UUID
+	// ChunkUIDType is the Text chunk unique identifier
+	ChunkUIDType = uuid.UUID
 	// ConvertedFileUIDType is the Converted file unique identifier
 	ConvertedFileUIDType = uuid.UUID
 
-	// ObjectUIDType is the Object unique identifier
+	// ObjectUIDType is the Object unique identifier (internal UUID)
 	ObjectUIDType = uuid.UUID
+	// ObjectIDType is the Object canonical ID (hash-based, e.g., "obj-3k7m9p2w5t1")
+	ObjectIDType string
 	// ObjectURLUIDType is the Object URL unique identifier
 	ObjectURLUIDType = uuid.UUID
 

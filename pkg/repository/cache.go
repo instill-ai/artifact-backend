@@ -242,18 +242,6 @@ func CacheKey(kbUID types.KBUIDType, fileUIDs []types.FileUIDType) string {
 	return fmt.Sprintf("artifact:cache:kb:%s:files:%s", kbUID.String(), hashStr)
 }
 
-// CacheKeyPattern returns a pattern for matching all cache keys for a KB
-// Useful for debugging or bulk operations
-func CacheKeyPattern(kbUID types.KBUIDType) string {
-	return fmt.Sprintf("artifact:cache:kb:%s:files:*", kbUID.String())
-}
-
-// AllCacheKeysPattern returns a pattern for matching all cache keys
-// Useful for global cache statistics or cleanup operations
-func AllCacheKeysPattern() string {
-	return "artifact:cache:*"
-}
-
 // ============================================================================
 // GCS File Cache Methods (for TTL-based cleanup and existence checking)
 // ============================================================================

@@ -11,16 +11,16 @@ func TestRepositoryTagName_ExtractRepositoryAndID(t *testing.T) {
 	c := qt.New(t)
 
 	validPairs := []struct {
+		name RepositoryTagName
 		repo string
 		id   string
 	}{
-		{repo: "connan-wombat/mockasin", id: "latest"},
-		{repo: "shake/home", id: "1.0.0"},
+		{name: RepositoryTagName("repositories/connan-wombat/mockasin/tags/latest"), repo: "connan-wombat/mockasin", id: "latest"},
+		{name: RepositoryTagName("repositories/shake/home/tags/1.0.0"), repo: "shake/home", id: "1.0.0"},
 	}
 	for _, pair := range validPairs {
 		c.Run(fmt.Sprintf("ok - %s:%s", pair.repo, pair.id), func(c *qt.C) {
-			name := NewRepositoryTagName(pair.repo, pair.id)
-			repo, id, err := name.ExtractRepositoryAndID()
+			repo, id, err := pair.name.ExtractRepositoryAndID()
 			c.Check(err, qt.IsNil)
 			c.Check(repo, qt.Equals, pair.repo)
 			c.Check(id, qt.Equals, pair.id)
@@ -41,11 +41,4 @@ func TestRepositoryTagName_ExtractRepositoryAndID(t *testing.T) {
 			c.Check(err, qt.IsNotNil)
 		})
 	}
-}
-
-func TestNewRepositoryTagName(t *testing.T) {
-	c := qt.New(t)
-	got := NewRepositoryTagName("connan-wombat/mockasin", "latest")
-	want := RepositoryTagName("repositories/connan-wombat/mockasin/tags/latest")
-	c.Check(got, qt.Equals, want)
 }

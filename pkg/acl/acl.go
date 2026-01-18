@@ -429,3 +429,31 @@ func (c *ACLClient) CheckRequesterPermission(ctx context.Context) error {
 
 	return nil
 }
+
+// CheckShareLinkPermission checks if a share link token has the specified permission
+// for a given resource. This is used to authorize anonymous access via share links.
+// This is infrastructure for EE features.
+func (c *ACLClient) CheckShareLinkPermission(ctx context.Context, shareToken string, objectType string, objectUID uuid.UUID, relation string) (bool, error) {
+	// Create a CheckRequest to verify the share link's permission for the specified object and role
+	// The user is identified as share_link:{token}
+	data, err := c.getClient(ctx, ReadMode).Check(ctx, &openfga.CheckRequest{
+		StoreId:              c.storeID,
+		AuthorizationModelId: c.authorizationModelID,
+		TupleKey: &openfga.CheckRequestTupleKey{
+			User:     fmt.Sprintf("share_link:%s", shareToken),
+			Relation: relation,
+			Object:   fmt.Sprintf("%s:%s", objectType, objectUID.String()),
+		},
+	})
+	if err != nil {
+		// Handle specific error codes
+		if statusErr, ok := status.FromError(err); ok {
+			if statusErr.Code() == codes.Code(openfga.ErrorCode_type_not_found) {
+				return false, nil
+			}
+		}
+		return false, err
+	}
+
+	return data.Allowed, nil
+}

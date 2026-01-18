@@ -9,7 +9,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
@@ -34,7 +34,7 @@ func (w *Worker) GetFileStatusActivity(ctx context.Context, param *GetFileStatus
 	fileUID := param.FileUID
 	w.log.Info("Getting file status", zap.String("fileUID", fileUID.String()))
 
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
+	files, err := w.repository.GetFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to retrieve file status. Please try again.")
 		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, activityError(err, getFileStatusActivityError)
@@ -68,7 +68,7 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 		zap.String("status", param.Status.String()),
 		zap.String("message", param.Message))
 
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
+	files, err := w.repository.GetFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
 	if err != nil {
 		w.log.Error("Failed to get file for status update", zap.Error(err))
 		err = errorsx.AddMessage(err, "Unable to update file status. Please try again.")
@@ -79,17 +79,17 @@ func (w *Worker) UpdateFileStatusActivity(ctx context.Context, param *UpdateFile
 	}
 
 	updateMap := map[string]any{
-		repository.KnowledgeBaseFileColumn.ProcessStatus: param.Status.String(),
+		repository.FileColumn.ProcessStatus: param.Status.String(),
 	}
 
 	if param.Message != "" {
-		err := w.repository.UpdateKnowledgeFileMetadata(ctx, param.FileUID, repository.ExtraMetaData{StatusMessage: param.Message})
+		err := w.repository.UpdateFileMetadata(ctx, param.FileUID, repository.ExtraMetaData{StatusMessage: param.Message})
 		if err != nil {
 			w.log.Warn("Failed to update file extra metadata with message (file may be deleted)", zap.Error(err))
 		}
 	}
 
-	_, err = w.repository.UpdateKnowledgeBaseFile(ctx, param.FileUID.String(), updateMap)
+	_, err = w.repository.UpdateFile(ctx, param.FileUID.String(), updateMap)
 	if err != nil {
 		w.log.Warn("Failed to update file status (file may be deleted)",
 			zap.String("fileUID", param.FileUID.String()),

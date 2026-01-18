@@ -196,26 +196,34 @@ export function TEST_DB_SCHEMA(data) {
         // Create knowledge base
         const kbName = data.dbIDPrefix + "db-" + randomString(8);
         const cRes = http.request("POST", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({
-            knowledgeBase: {
-                displayName: kbName,
-                description: "DB schema test knowledge base",
-                tags: ["test", "db", "schema"],
-                type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
-            }
+            displayName: kbName,
+            description: "DB schema test knowledge base",
+            tags: ["test", "db", "schema"],
+            type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
         }), data.header);
 
         logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases');
         const kb = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).knowledgeBase || {};
+        // Note: uid field removed in AIP refactoring - use id for identification
         const knowledgeBaseId = kb.id;
-        const knowledgeBaseUid = kb.uid;
 
         check(cRes, {
             [`DB Tests: Knowledge base created successfully (${knowledgeBaseId})`]: (r) => r.status === 200,
-            [`DB Tests: Knowledge base has valid UID`]: () => knowledgeBaseUid && knowledgeBaseUid.length > 0,
+            [`DB Tests: Knowledge base has valid ID`]: () => knowledgeBaseId && knowledgeBaseId.length > 0,
         });
 
-        if (!knowledgeBaseId || !knowledgeBaseUid) {
+        if (!knowledgeBaseId) {
             console.log("DB Tests: Failed to create knowledge base, aborting test");
+            return;
+        }
+
+        // Get internal KB UUID for database queries (uid not exposed in API after AIP refactoring)
+        const knowledgeBaseUid = helper.getKnowledgeBaseUidFromId(knowledgeBaseId);
+        console.log(`DB Tests: Knowledge base UID: ${knowledgeBaseUid}`);
+
+        if (!knowledgeBaseUid) {
+            console.log("DB Tests: Failed to get KB internal UID, aborting test");
+            http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
@@ -235,7 +243,7 @@ export function TEST_DB_SCHEMA(data) {
 
             // Use retry logic to handle transient upload failures during parallel execution
             const uRes = helper.uploadFileWithRetry(
-                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
                 fReq,
                 data.header,
                 3 // max retries
@@ -243,14 +251,17 @@ export function TEST_DB_SCHEMA(data) {
 
             if (uRes) {
                 const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
-                if (uRes.status === 200 && file.uid) {
+                if (uRes.status === 200 && file.id) {
+                    // Get internal file UID for database queries
+                    const fileUid = helper.getFileUidFromId(file.id);
                     uploaded.push({
-                        fileUid: file.uid,
+                        fileId: file.id,
+                        fileUid: fileUid,  // Internal UUID for DB queries
                         name: filename,
                         type: s.type,
                         originalName: s.originalName
                     });
-                    console.log(`DB Tests: Uploaded ${s.originalName} (${file.uid})`);
+                    console.log(`DB Tests: Uploaded ${s.originalName} (ID: ${file.id}, UID: ${fileUid})`);
                 } else {
                     console.log(`DB Tests: Upload succeeded but invalid response for ${s.originalName}`);
                 }
@@ -268,7 +279,7 @@ export function TEST_DB_SCHEMA(data) {
             return;
         }
 
-        const fileUids = uploaded.map(f => f.fileUid);
+        const fileIds = uploaded.map(f => f.fileId);
         // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
 
         // Wait for all files to complete processing using robust helper
@@ -276,7 +287,7 @@ export function TEST_DB_SCHEMA(data) {
         const result = helper.waitForMultipleFilesProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseId,
-            fileUids,
+            fileIds,
             data.header,
             600 // 10 minutes max
         );
@@ -711,7 +722,7 @@ export function TEST_DB_SCHEMA(data) {
             // 8.1: List Files API
             const listFilesRes = http.request(
                 "GET",
-                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
                 null,
                 data.header
             );
@@ -751,7 +762,7 @@ export function TEST_DB_SCHEMA(data) {
             const testFile = uploaded[0];
             const getFileRes = http.request(
                 "GET",
-                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${testFile.fileUid}`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${testFile.fileId}`,
                 null,
                 data.header
             );
@@ -790,7 +801,7 @@ export function TEST_DB_SCHEMA(data) {
                 if (fileOfType) {
                     const fileRes = http.request(
                         "GET",
-                        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileOfType.fileUid}`,
+                        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileOfType.fileId}`,
                         null,
                         data.header
                     );
