@@ -40,7 +40,7 @@ type EmbeddingModel struct {
 	Vector      Vector              `gorm:"column:vector;type:jsonb;not null" json:"vector"`
 	CreateTime  *time.Time          `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
 	UpdateTime  *time.Time          `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
-	KBUID       types.KBUIDType     `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
+	KnowledgeBaseUID types.KnowledgeBaseUIDType `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	FileUID     types.FileUIDType   `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
 	// ContentType stores the MIME type (e.g., "text/markdown", "application/pdf")
 	ContentType string `gorm:"column:content_type;size:255;not null" json:"content_type"`
@@ -264,7 +264,7 @@ func (r *repository) GetEmbeddingCountByKBUID(ctx context.Context, kbUID types.K
 	var count int64
 	err := r.db.WithContext(ctx).
 		Table(EmbeddingTableName+" AS e").
-		Joins("INNER JOIN "+KnowledgeBaseFileTableName+" AS f ON e.file_uid = f.uid").
+		Joins("INNER JOIN "+FileTableName+" AS f ON e.file_uid = f.uid").
 		Where("e.kb_uid = ?", kbUID).
 		Where("f.delete_time IS NULL"). // Exclude soft-deleted files
 		Count(&count).

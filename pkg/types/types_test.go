@@ -12,7 +12,7 @@ import (
 func TestTextChunkReference_JSONMarshalPascalCase(t *testing.T) {
 	c := qt.New(t)
 
-	ref := TextChunkReference{
+	ref := ChunkReference{
 		PageRange: [2]uint32{1, 5},
 	}
 
@@ -33,7 +33,7 @@ func TestTextChunkReference_JSONUnmarshalPascalCase(t *testing.T) {
 	c := qt.New(t)
 
 	jsonStr := `{"PageRange":[2,10]}`
-	var ref TextChunkReference
+	var ref ChunkReference
 
 	err := json.Unmarshal([]byte(jsonStr), &ref)
 	c.Assert(err, qt.IsNil)
@@ -47,7 +47,7 @@ func TestTextChunkReference_JSONUnmarshalSnakeCase_ShouldFail(t *testing.T) {
 
 	// Old format with snake_case should not unmarshal into PageRange field
 	jsonStr := `{"page_range":[2,10]}`
-	var ref TextChunkReference
+	var ref ChunkReference
 
 	err := json.Unmarshal([]byte(jsonStr), &ref)
 	c.Assert(err, qt.IsNil) // Unmarshal succeeds but field is not populated
@@ -111,7 +111,7 @@ func TestPositionData_JSONUnmarshalSnakeCase_ShouldFail(t *testing.T) {
 func TestTextChunkReference_EmptyValue(t *testing.T) {
 	c := qt.New(t)
 
-	ref := TextChunkReference{}
+	ref := ChunkReference{}
 
 	jsonBytes, err := json.Marshal(ref)
 	c.Assert(err, qt.IsNil)
@@ -126,7 +126,7 @@ func TestTextChunkReference_EmptyValue(t *testing.T) {
 func TestTextChunkReference_RoundTrip(t *testing.T) {
 	c := qt.New(t)
 
-	original := TextChunkReference{
+	original := ChunkReference{
 		PageRange: [2]uint32{3, 7},
 	}
 
@@ -135,7 +135,7 @@ func TestTextChunkReference_RoundTrip(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Unmarshal back
-	var decoded TextChunkReference
+	var decoded ChunkReference
 	err = json.Unmarshal(jsonBytes, &decoded)
 	c.Assert(err, qt.IsNil)
 

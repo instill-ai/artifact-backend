@@ -16,7 +16,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 func TestGetRepository(t *testing.T) {
@@ -203,7 +203,7 @@ func TestExecuteKnowledgeBaseUpdate_NoEligibleKBs(t *testing.T) {
 		When(minimock.AnyContext, knowledgeBaseID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:          types.KBUIDType(uuid.Must(uuid.NewV4())),
-			KBID:         knowledgeBaseID,
+			ID:         knowledgeBaseID,
 			Staging:      false,
 			UpdateStatus: artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
 		}, nil)
@@ -258,7 +258,7 @@ func TestAbortKnowledgeBaseUpdate_NoInProgressKBs(t *testing.T) {
 		When(minimock.AnyContext, knowledgeBaseID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:          types.KBUIDType(uuid.Must(uuid.NewV4())),
-			KBID:         knowledgeBaseID,
+			ID:         knowledgeBaseID,
 			UpdateStatus: artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 		}, nil)
 

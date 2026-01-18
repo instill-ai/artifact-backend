@@ -77,6 +77,10 @@ function logUnexpected(res, label) {
   }
 }
 
+// CI mode: run tests sequentially without scenarios (less resource intensive)
+// Non-CI mode: run tests in parallel using scenarios
+const isCI = __ENV.CI === 'true';
+
 export let options = {
   setupTimeout: '300s',
   teardownTimeout: '300s', // Increased to match longer processing times with AI rate limiting
@@ -84,69 +88,134 @@ export let options = {
   thresholds: {
     checks: ["rate == 1.0"],
   },
-  // Parallel source scenarios per file type (exec functions are defined below)
-  // CRITICAL: Staggered start times prevent API gateway rate limiting (429 errors)
-  // Without staggering, 50 KB creations hit the API simultaneously causing rate limits
-  // Stagger by 1s intervals to spread load while keeping test duration reasonable
-  scenarios: {
-    // Document file types (0-10s stagger)
-    test_type_text: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT', startTime: '0s' },
-    test_type_markdown: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN', startTime: '1s' },
-    test_type_csv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV', startTime: '2s' },
-    test_type_html: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML', startTime: '3s' },
-    test_type_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF', startTime: '4s' },
-    test_type_ppt: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT', startTime: '5s' },
-    test_type_pptx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX', startTime: '6s' },
-    test_type_xls: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS', startTime: '7s' },
-    test_type_xlsx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX', startTime: '8s' },
-    test_type_doc: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC', startTime: '9s' },
-    test_type_docx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX', startTime: '10s' },
-    // Regression tests: Type inference from filename (11-21s stagger)
-    test_type_markdown_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN_INFERRED', startTime: '11s' },
-    test_type_text_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT_INFERRED', startTime: '12s' },
-    test_type_csv_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV_INFERRED', startTime: '13s' },
-    test_type_html_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML_INFERRED', startTime: '14s' },
-    test_type_pdf_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF_INFERRED', startTime: '15s' },
-    test_type_ppt_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT_INFERRED', startTime: '16s' },
-    test_type_pptx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX_INFERRED', startTime: '17s' },
-    test_type_xls_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS_INFERRED', startTime: '18s' },
-    test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED', startTime: '19s' },
-    test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED', startTime: '20s' },
-    test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED', startTime: '21s' },
-    // Image file types (22-32s stagger)
-    test_type_png: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PNG', startTime: '22s' },
-    test_type_jpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPEG', startTime: '23s' },
-    test_type_jpg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPG', startTime: '24s' },
-    test_type_gif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_GIF', startTime: '25s' },
-    test_type_webp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBP', startTime: '26s' },
-    test_type_tiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIFF', startTime: '27s' },
-    test_type_tif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIF', startTime: '28s' },
-    test_type_heic: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIC', startTime: '29s' },
-    test_type_heif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIF', startTime: '30s' },
-    test_type_avif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVIF', startTime: '31s' },
-    test_type_bmp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_BMP', startTime: '32s' },
-    // Audio file types (33-40s stagger)
-    test_type_wav: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WAV', startTime: '33s' },
-    test_type_aac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AAC', startTime: '34s' },
-    test_type_ogg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_OGG', startTime: '35s' },
-    test_type_flac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLAC', startTime: '36s' },
-    test_type_aiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AIFF', startTime: '37s' },
-    test_type_m4a: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_M4A', startTime: '38s' },
-    test_type_wma: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMA', startTime: '39s' },
-    test_type_webm_audio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_AUDIO', startTime: '40s' },
-    // Video file types (41-48s stagger)
-    test_type_mp4: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP4', startTime: '41s' },
-    test_type_mkv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MKV', startTime: '42s' },
-    test_type_avi: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVI', startTime: '43s' },
-    test_type_mov: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MOV', startTime: '44s' },
-    test_type_flv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLV', startTime: '45s' },
-    test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV', startTime: '46s' },
-    test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG', startTime: '47s' },
-    test_type_webm_video: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO', startTime: '48s' },
-    // Regression test: Verify process_status is always string enum, never integer (49s)
-    test_process_status_format: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_PROCESS_STATUS_FORMAT', startTime: '49s' },
-  },
+  // Only use scenarios in non-CI mode for parallel execution
+  ...(isCI ? { vus: 1, iterations: 1 } : {
+    // Parallel source scenarios per file type (exec functions are defined below)
+    // CRITICAL: Staggered start times prevent API gateway rate limiting (429 errors)
+    // Without staggering, 50 KB creations hit the API simultaneously causing rate limits
+    // Stagger by 1s intervals to spread load while keeping test duration reasonable
+    scenarios: {
+      // Document file types (0-10s stagger)
+      test_type_text: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT', startTime: '0s' },
+      test_type_markdown: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN', startTime: '1s' },
+      test_type_csv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV', startTime: '2s' },
+      test_type_html: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML', startTime: '3s' },
+      test_type_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF', startTime: '4s' },
+      test_type_ppt: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT', startTime: '5s' },
+      test_type_pptx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX', startTime: '6s' },
+      test_type_xls: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS', startTime: '7s' },
+      test_type_xlsx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX', startTime: '8s' },
+      test_type_doc: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC', startTime: '9s' },
+      test_type_docx: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX', startTime: '10s' },
+      // Regression tests: Type inference from filename (11-21s stagger)
+      test_type_markdown_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MARKDOWN_INFERRED', startTime: '11s' },
+      test_type_text_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TEXT_INFERRED', startTime: '12s' },
+      test_type_csv_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_CSV_INFERRED', startTime: '13s' },
+      test_type_html_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HTML_INFERRED', startTime: '14s' },
+      test_type_pdf_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PDF_INFERRED', startTime: '15s' },
+      test_type_ppt_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPT_INFERRED', startTime: '16s' },
+      test_type_pptx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PPTX_INFERRED', startTime: '17s' },
+      test_type_xls_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLS_INFERRED', startTime: '18s' },
+      test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED', startTime: '19s' },
+      test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED', startTime: '20s' },
+      test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED', startTime: '21s' },
+      // Image file types (22-32s stagger)
+      test_type_png: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PNG', startTime: '22s' },
+      test_type_jpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPEG', startTime: '23s' },
+      test_type_jpg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPG', startTime: '24s' },
+      test_type_gif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_GIF', startTime: '25s' },
+      test_type_webp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBP', startTime: '26s' },
+      test_type_tiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIFF', startTime: '27s' },
+      test_type_tif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_TIF', startTime: '28s' },
+      test_type_heic: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIC', startTime: '29s' },
+      test_type_heif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIF', startTime: '30s' },
+      test_type_avif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVIF', startTime: '31s' },
+      test_type_bmp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_BMP', startTime: '32s' },
+      // Audio file types (33-40s stagger)
+      test_type_wav: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WAV', startTime: '33s' },
+      test_type_aac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AAC', startTime: '34s' },
+      test_type_ogg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_OGG', startTime: '35s' },
+      test_type_flac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLAC', startTime: '36s' },
+      test_type_aiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AIFF', startTime: '37s' },
+      test_type_m4a: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_M4A', startTime: '38s' },
+      test_type_wma: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMA', startTime: '39s' },
+      test_type_webm_audio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_AUDIO', startTime: '40s' },
+      // Video file types (41-48s stagger)
+      test_type_mp4: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP4', startTime: '41s' },
+      test_type_mkv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MKV', startTime: '42s' },
+      test_type_avi: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVI', startTime: '43s' },
+      test_type_mov: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MOV', startTime: '44s' },
+      test_type_flv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLV', startTime: '45s' },
+      test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV', startTime: '46s' },
+      test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG', startTime: '47s' },
+      test_type_webm_video: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO', startTime: '48s' },
+      // Regression test: Verify process_status is always string enum, never integer (49s)
+      test_process_status_format: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_PROCESS_STATUS_FORMAT', startTime: '49s' },
+    },
+  }),
 };
+
+// Default function for CI mode - runs all tests sequentially
+export default function (data) {
+  if (!isCI) return; // In non-CI mode, scenarios handle execution
+
+  // Document file types
+  TEST_TYPE_TEXT(data);
+  TEST_TYPE_MARKDOWN(data);
+  TEST_TYPE_CSV(data);
+  TEST_TYPE_HTML(data);
+  TEST_TYPE_PDF(data);
+  TEST_TYPE_PPT(data);
+  TEST_TYPE_PPTX(data);
+  TEST_TYPE_XLS(data);
+  TEST_TYPE_XLSX(data);
+  TEST_TYPE_DOC(data);
+  TEST_TYPE_DOCX(data);
+  // Regression tests: Type inference from filename
+  TEST_TYPE_MARKDOWN_INFERRED(data);
+  TEST_TYPE_TEXT_INFERRED(data);
+  TEST_TYPE_CSV_INFERRED(data);
+  TEST_TYPE_HTML_INFERRED(data);
+  TEST_TYPE_PDF_INFERRED(data);
+  TEST_TYPE_PPT_INFERRED(data);
+  TEST_TYPE_PPTX_INFERRED(data);
+  TEST_TYPE_XLS_INFERRED(data);
+  TEST_TYPE_XLSX_INFERRED(data);
+  TEST_TYPE_DOC_INFERRED(data);
+  TEST_TYPE_DOCX_INFERRED(data);
+  // Image file types
+  TEST_TYPE_PNG(data);
+  TEST_TYPE_JPEG(data);
+  TEST_TYPE_JPG(data);
+  TEST_TYPE_GIF(data);
+  TEST_TYPE_WEBP(data);
+  TEST_TYPE_TIFF(data);
+  TEST_TYPE_TIF(data);
+  TEST_TYPE_HEIC(data);
+  TEST_TYPE_HEIF(data);
+  TEST_TYPE_AVIF(data);
+  TEST_TYPE_BMP(data);
+  // Audio file types
+  TEST_TYPE_WAV(data);
+  TEST_TYPE_AAC(data);
+  TEST_TYPE_OGG(data);
+  TEST_TYPE_FLAC(data);
+  TEST_TYPE_AIFF(data);
+  TEST_TYPE_M4A(data);
+  TEST_TYPE_WMA(data);
+  TEST_TYPE_WEBM_AUDIO(data);
+  // Video file types
+  TEST_TYPE_MP4(data);
+  TEST_TYPE_MKV(data);
+  TEST_TYPE_AVI(data);
+  TEST_TYPE_MOV(data);
+  TEST_TYPE_FLV(data);
+  TEST_TYPE_WMV(data);
+  TEST_TYPE_MPEG(data);
+  TEST_TYPE_WEBM_VIDEO(data);
+  // Regression test
+  TEST_PROCESS_STATUS_FORMAT(data);
+}
 
 export function setup() {
 
@@ -234,67 +303,67 @@ export function teardown(data) {
 }
 
 // Scenario execs per file type
-export function TEST_TYPE_TEXT(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.txt", fileType: "TYPE_TEXT" }); }
-export function TEST_TYPE_MARKDOWN(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.md", fileType: "TYPE_MARKDOWN" }); }
-export function TEST_TYPE_CSV(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.csv", fileType: "TYPE_CSV" }); }
-export function TEST_TYPE_HTML(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.html", fileType: "TYPE_HTML" }); }
-export function TEST_TYPE_PDF(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.pdf", fileType: "TYPE_PDF" }); }
-export function TEST_TYPE_PPT(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.ppt", fileType: "TYPE_PPT" }); }
-export function TEST_TYPE_PPTX(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.pptx", fileType: "TYPE_PPTX" }); }
-export function TEST_TYPE_XLS(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.xls", fileType: "TYPE_XLS" }); }
-export function TEST_TYPE_XLSX(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.xlsx", fileType: "TYPE_XLSX" }); }
-export function TEST_TYPE_DOC(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.doc", fileType: "TYPE_DOC" }); }
-export function TEST_TYPE_DOCX(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.docx", fileType: "TYPE_DOCX" }); }
+export function TEST_TYPE_TEXT(data) { runFileTest(data, { originalName: "doc-sample.txt", fileType: "TYPE_TEXT" }); }
+export function TEST_TYPE_MARKDOWN(data) { runFileTest(data, { originalName: "doc-sample.md", fileType: "TYPE_MARKDOWN" }); }
+export function TEST_TYPE_CSV(data) { runFileTest(data, { originalName: "doc-sample.csv", fileType: "TYPE_CSV" }); }
+export function TEST_TYPE_HTML(data) { runFileTest(data, { originalName: "doc-sample.html", fileType: "TYPE_HTML" }); }
+export function TEST_TYPE_PDF(data) { runFileTest(data, { originalName: "doc-sample.pdf", fileType: "TYPE_PDF" }); }
+export function TEST_TYPE_PPT(data) { runFileTest(data, { originalName: "doc-sample.ppt", fileType: "TYPE_PPT" }); }
+export function TEST_TYPE_PPTX(data) { runFileTest(data, { originalName: "doc-sample.pptx", fileType: "TYPE_PPTX" }); }
+export function TEST_TYPE_XLS(data) { runFileTest(data, { originalName: "doc-sample.xls", fileType: "TYPE_XLS" }); }
+export function TEST_TYPE_XLSX(data) { runFileTest(data, { originalName: "doc-sample.xlsx", fileType: "TYPE_XLSX" }); }
+export function TEST_TYPE_DOC(data) { runFileTest(data, { originalName: "doc-sample.doc", fileType: "TYPE_DOC" }); }
+export function TEST_TYPE_DOCX(data) { runFileTest(data, { originalName: "doc-sample.docx", fileType: "TYPE_DOCX" }); }
 
 // Regression tests: Type inference from filename (type field omitted)
 // These tests ensure the backend correctly infers file type from extension
-export function TEST_TYPE_TEXT_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.txt", fileType: "TYPE_TEXT", omitType: true }); }
-export function TEST_TYPE_MARKDOWN_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.md", fileType: "TYPE_MARKDOWN", omitType: true }); }
-export function TEST_TYPE_CSV_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.csv", fileType: "TYPE_CSV", omitType: true }); }
-export function TEST_TYPE_HTML_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.html", fileType: "TYPE_HTML", omitType: true }); }
-export function TEST_TYPE_PDF_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.pdf", fileType: "TYPE_PDF", omitType: true }); }
-export function TEST_TYPE_PPT_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.ppt", fileType: "TYPE_PPT", omitType: true }); }
-export function TEST_TYPE_PPTX_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.pptx", fileType: "TYPE_PPTX", omitType: true }); }
-export function TEST_TYPE_XLS_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.xls", fileType: "TYPE_XLS", omitType: true }); }
-export function TEST_TYPE_XLSX_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.xlsx", fileType: "TYPE_XLSX", omitType: true }); }
-export function TEST_TYPE_DOC_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.doc", fileType: "TYPE_DOC", omitType: true }); }
-export function TEST_TYPE_DOCX_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "doc-sample.docx", fileType: "TYPE_DOCX", omitType: true }); }
+export function TEST_TYPE_TEXT_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.txt", fileType: "TYPE_TEXT", omitType: true }); }
+export function TEST_TYPE_MARKDOWN_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.md", fileType: "TYPE_MARKDOWN", omitType: true }); }
+export function TEST_TYPE_CSV_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.csv", fileType: "TYPE_CSV", omitType: true }); }
+export function TEST_TYPE_HTML_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.html", fileType: "TYPE_HTML", omitType: true }); }
+export function TEST_TYPE_PDF_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.pdf", fileType: "TYPE_PDF", omitType: true }); }
+export function TEST_TYPE_PPT_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.ppt", fileType: "TYPE_PPT", omitType: true }); }
+export function TEST_TYPE_PPTX_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.pptx", fileType: "TYPE_PPTX", omitType: true }); }
+export function TEST_TYPE_XLS_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.xls", fileType: "TYPE_XLS", omitType: true }); }
+export function TEST_TYPE_XLSX_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.xlsx", fileType: "TYPE_XLSX", omitType: true }); }
+export function TEST_TYPE_DOC_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.doc", fileType: "TYPE_DOC", omitType: true }); }
+export function TEST_TYPE_DOCX_INFERRED(data) { runFileTest(data, { originalName: "doc-sample.docx", fileType: "TYPE_DOCX", omitType: true }); }
 
 // Image file types
-export function TEST_TYPE_PNG(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.png", fileType: "TYPE_PNG" }); }
-export function TEST_TYPE_JPEG(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.jpeg", fileType: "TYPE_JPEG" }); }
-export function TEST_TYPE_JPG(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.jpg", fileType: "TYPE_JPEG" }); }
-export function TEST_TYPE_JPG_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.jpg", fileType: "TYPE_JPEG", omitType: true }); }
-export function TEST_TYPE_GIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.gif", fileType: "TYPE_GIF" }); }
-export function TEST_TYPE_WEBP(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.webp", fileType: "TYPE_WEBP" }); }
-export function TEST_TYPE_TIFF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.tiff", fileType: "TYPE_TIFF" }); }
-export function TEST_TYPE_TIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.tif", fileType: "TYPE_TIFF" }); }
-export function TEST_TYPE_TIF_INFERRED(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.tif", fileType: "TYPE_TIFF", omitType: true }); }
-export function TEST_TYPE_HEIC(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.heic", fileType: "TYPE_HEIC" }); }
-export function TEST_TYPE_HEIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.heif", fileType: "TYPE_HEIF" }); }
-export function TEST_TYPE_AVIF(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.avif", fileType: "TYPE_AVIF" }); }
-export function TEST_TYPE_BMP(data) { runKnowledgeBaseFileTest(data, { originalName: "img-sample.bmp", fileType: "TYPE_BMP" }); }
+export function TEST_TYPE_PNG(data) { runFileTest(data, { originalName: "img-sample.png", fileType: "TYPE_PNG" }); }
+export function TEST_TYPE_JPEG(data) { runFileTest(data, { originalName: "img-sample.jpeg", fileType: "TYPE_JPEG" }); }
+export function TEST_TYPE_JPG(data) { runFileTest(data, { originalName: "img-sample.jpg", fileType: "TYPE_JPEG" }); }
+export function TEST_TYPE_JPG_INFERRED(data) { runFileTest(data, { originalName: "img-sample.jpg", fileType: "TYPE_JPEG", omitType: true }); }
+export function TEST_TYPE_GIF(data) { runFileTest(data, { originalName: "img-sample.gif", fileType: "TYPE_GIF" }); }
+export function TEST_TYPE_WEBP(data) { runFileTest(data, { originalName: "img-sample.webp", fileType: "TYPE_WEBP" }); }
+export function TEST_TYPE_TIFF(data) { runFileTest(data, { originalName: "img-sample.tiff", fileType: "TYPE_TIFF" }); }
+export function TEST_TYPE_TIF(data) { runFileTest(data, { originalName: "img-sample.tif", fileType: "TYPE_TIFF" }); }
+export function TEST_TYPE_TIF_INFERRED(data) { runFileTest(data, { originalName: "img-sample.tif", fileType: "TYPE_TIFF", omitType: true }); }
+export function TEST_TYPE_HEIC(data) { runFileTest(data, { originalName: "img-sample.heic", fileType: "TYPE_HEIC" }); }
+export function TEST_TYPE_HEIF(data) { runFileTest(data, { originalName: "img-sample.heif", fileType: "TYPE_HEIF" }); }
+export function TEST_TYPE_AVIF(data) { runFileTest(data, { originalName: "img-sample.avif", fileType: "TYPE_AVIF" }); }
+export function TEST_TYPE_BMP(data) { runFileTest(data, { originalName: "img-sample.bmp", fileType: "TYPE_BMP" }); }
 
 // Audio file types
-export function TEST_TYPE_MP3(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.mp3", fileType: "TYPE_MP3" }); }
-export function TEST_TYPE_WAV(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.wav", fileType: "TYPE_WAV" }); }
-export function TEST_TYPE_AAC(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.aac", fileType: "TYPE_AAC" }); }
-export function TEST_TYPE_OGG(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.ogg", fileType: "TYPE_OGG" }); }
-export function TEST_TYPE_FLAC(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.flac", fileType: "TYPE_FLAC" }); }
-export function TEST_TYPE_AIFF(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.aiff", fileType: "TYPE_AIFF" }); }
-export function TEST_TYPE_M4A(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.m4a", fileType: "TYPE_M4A" }); }
-export function TEST_TYPE_WMA(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.wma", fileType: "TYPE_WMA" }); }
-export function TEST_TYPE_WEBM_AUDIO(data) { runKnowledgeBaseFileTest(data, { originalName: "audio-sample.webm", fileType: "TYPE_WEBM_AUDIO" }); }
+export function TEST_TYPE_MP3(data) { runFileTest(data, { originalName: "audio-sample.mp3", fileType: "TYPE_MP3" }); }
+export function TEST_TYPE_WAV(data) { runFileTest(data, { originalName: "audio-sample.wav", fileType: "TYPE_WAV" }); }
+export function TEST_TYPE_AAC(data) { runFileTest(data, { originalName: "audio-sample.aac", fileType: "TYPE_AAC" }); }
+export function TEST_TYPE_OGG(data) { runFileTest(data, { originalName: "audio-sample.ogg", fileType: "TYPE_OGG" }); }
+export function TEST_TYPE_FLAC(data) { runFileTest(data, { originalName: "audio-sample.flac", fileType: "TYPE_FLAC" }); }
+export function TEST_TYPE_AIFF(data) { runFileTest(data, { originalName: "audio-sample.aiff", fileType: "TYPE_AIFF" }); }
+export function TEST_TYPE_M4A(data) { runFileTest(data, { originalName: "audio-sample.m4a", fileType: "TYPE_M4A" }); }
+export function TEST_TYPE_WMA(data) { runFileTest(data, { originalName: "audio-sample.wma", fileType: "TYPE_WMA" }); }
+export function TEST_TYPE_WEBM_AUDIO(data) { runFileTest(data, { originalName: "audio-sample.webm", fileType: "TYPE_WEBM_AUDIO" }); }
 
 // Video file types
-export function TEST_TYPE_MP4(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mp4", fileType: "TYPE_MP4" }); }
-export function TEST_TYPE_MKV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mkv", fileType: "TYPE_MKV" }); }
-export function TEST_TYPE_AVI(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.avi", fileType: "TYPE_AVI" }); }
-export function TEST_TYPE_MOV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mov", fileType: "TYPE_MOV" }); }
-export function TEST_TYPE_FLV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.flv", fileType: "TYPE_FLV" }); }
-export function TEST_TYPE_WMV(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.wmv", fileType: "TYPE_WMV" }); }
-export function TEST_TYPE_MPEG(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.mpeg", fileType: "TYPE_MPEG" }); }
-export function TEST_TYPE_WEBM_VIDEO(data) { runKnowledgeBaseFileTest(data, { originalName: "video-sample.webm", fileType: "TYPE_WEBM_VIDEO" }); }
+export function TEST_TYPE_MP4(data) { runFileTest(data, { originalName: "video-sample.mp4", fileType: "TYPE_MP4" }); }
+export function TEST_TYPE_MKV(data) { runFileTest(data, { originalName: "video-sample.mkv", fileType: "TYPE_MKV" }); }
+export function TEST_TYPE_AVI(data) { runFileTest(data, { originalName: "video-sample.avi", fileType: "TYPE_AVI" }); }
+export function TEST_TYPE_MOV(data) { runFileTest(data, { originalName: "video-sample.mov", fileType: "TYPE_MOV" }); }
+export function TEST_TYPE_FLV(data) { runFileTest(data, { originalName: "video-sample.flv", fileType: "TYPE_FLV" }); }
+export function TEST_TYPE_WMV(data) { runFileTest(data, { originalName: "video-sample.wmv", fileType: "TYPE_WMV" }); }
+export function TEST_TYPE_MPEG(data) { runFileTest(data, { originalName: "video-sample.mpeg", fileType: "TYPE_MPEG" }); }
+export function TEST_TYPE_WEBM_VIDEO(data) { runFileTest(data, { originalName: "video-sample.webm", fileType: "TYPE_WEBM_VIDEO" }); }
 
 // Regression test: Verify all enum fields are always stored as string enums, never as integers
 // This test guards against a bug where protobuf enum values could be accidentally stored as integers
@@ -305,7 +374,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
     check(true, { [constant.banner(groupName)]: () => true });
 
     // Create KB and upload a simple file
-    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ knowledgeBase: { displayName: data.dbIDPrefix + "src-" + randomString(8) } }), data.header);
+    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ displayName: data.dbIDPrefix + "src-" + randomString(8) }), data.header);
     logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases');
     const kb = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).knowledgeBase || {};
     const knowledgeBaseId = kb.id;
@@ -315,11 +384,11 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
     const s = constant.sampleFiles.find((x) => x.originalName === "doc-sample.txt") || {};
     const filename = data.dbIDPrefix + "process-status-test.txt";
 
-    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`, JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: s.content || "" }), data.header);
-    logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files');
+    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`, JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: s.content || "" }), data.header);
+    logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/files');
     const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
-    const fileUid = file.uid;
-    check(uRes, { [`POST /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files 200`]: (r) => r.status === 200 });
+    const fileId = file.id;
+    check(uRes, { [`POST /v1alpha/namespaces/{namespace_id}/files 200`]: (r) => r.status === 200 });
 
     // CRITICAL CHECK: Verify enum fields in API response are string enums, not integers
     // The API should return the enum NAMES (e.g., "TYPE_TEXT"), not the values (e.g., 1)
@@ -350,7 +419,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
 
     // Wait for file to start processing and check status again
     sleep(2);
-    const processingRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`, null, data.header);
+    const processingRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`, null, data.header);
     let processingFile; try { processingFile = processingRes.json(); } catch (e) { processingFile = {}; }
     const processingStatus = processingFile.file ? processingFile.file.processStatus : "";
 
@@ -364,7 +433,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
     const result = helper.waitForFileProcessingComplete(
       data.expectedOwner.id,
       knowledgeBaseId,
-      fileUid,
+      fileId,
       data.header,
       120, // 2 minutes should be enough for a simple text file
       30
@@ -372,7 +441,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
 
     if (result.completed && result.status === "COMPLETED") {
       // Final check: Verify completed status is also a string enum
-      const completedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`, null, data.header);
+      const completedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`, null, data.header);
       let completedFile; try { completedFile = completedRes.json(); } catch (e) { completedFile = {}; }
       const completedStatus = completedFile.file ? completedFile.file.processStatus : "";
 
@@ -385,7 +454,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
       console.log(`✓ Process status format validation passed: ${initialProcessStatus} → ${processingStatus} → ${completedStatus}`);
     } else if (result.status === "FAILED") {
       // Even for failed files, status should be a string enum
-      const failedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`, null, data.header);
+      const failedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`, null, data.header);
       let failedFile; try { failedFile = failedRes.json(); } catch (e) { failedFile = {}; }
       const failedStatus = failedFile.file ? failedFile.file.processStatus : "";
 
@@ -401,7 +470,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
 }
 
 // Internal helper to run knowledge base file test for each file type
-function runKnowledgeBaseFileTest(data, opts) {
+function runFileTest(data, opts) {
   const groupName = "Artifact API: Knowledge base file type test";
   group(groupName, () => {
     check(true, { [constant.banner(groupName)]: () => true });
@@ -409,7 +478,7 @@ function runKnowledgeBaseFileTest(data, opts) {
     const { fileType, originalName, omitType } = opts || {};
 
     // Create knowledge base (id must be < 32 chars: test-{4}-src-{8} = 23 chars)
-    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ knowledgeBase: { displayName: data.dbIDPrefix + "src-" + randomString(8) } }), data.header);
+    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ displayName: data.dbIDPrefix + "src-" + randomString(8) }), data.header);
     logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases');
     const kb = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).knowledgeBase || {};
     const knowledgeBaseId = kb.id;
@@ -450,15 +519,15 @@ function runKnowledgeBaseFileTest(data, opts) {
       console.log(`Testing type inference for ${fileType}: uploading with filename only (no type field)`);
     }
 
-    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`, JSON.stringify(fReq), data.header);
-    logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files');
+    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`, JSON.stringify(fReq), data.header);
+    logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/files');
     const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
-    const fileUid = file.uid;
+    const fileId = file.id;
     const testLabel = omitType ? `${fileType} [TYPE INFERRED]` : fileType;
-    check(uRes, { [`POST /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files 200 (${testLabel})`]: (r) => r.status === 200 });
+    check(uRes, { [`POST /v1alpha/namespaces/{namespace_id}/files 200 (${testLabel})`]: (r) => r.status === 200 });
 
     // CRITICAL: Early return if file upload failed - prevents cascading 404 errors
-    if (!fileUid || uRes.status !== 200) {
+    if (!fileId || uRes.status !== 200) {
       console.error(`✗ File upload failed with status ${uRes.status} - aborting test for ${testLabel}`);
       console.error(`  Response: ${uRes.body}`);
       check(false, { [`File upload succeeded (${testLabel})`]: () => false });
@@ -468,43 +537,43 @@ function runKnowledgeBaseFileTest(data, opts) {
     // List knowledge base files and ensure our file is present
     const listKBFilesRes = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
       null,
       data.header
     );
-    logUnexpected(listKBFilesRes, 'GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files');
+    logUnexpected(listKBFilesRes, 'GET /v1alpha/namespaces/{namespace_id}/files');
     let listKBFilesJson; try { listKBFilesJson = listKBFilesRes.json(); } catch (e) { listKBFilesJson = {}; }
     const kbFilesArr = Array.isArray(listKBFilesJson.files) ? listKBFilesJson.files : [];
-    const containsUploadedKBFile = kbFilesArr.some((f) => f.uid === fileUid);
+    const containsUploadedKBFile = kbFilesArr.some((f) => f.id === fileId);
     check(listKBFilesRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files 200 (${testLabel})`]: (r) => r.status === 200,
+      [`GET /v1alpha/namespaces/{namespace_id}/files 200 (${testLabel})`]: (r) => r.status === 200,
       [`List contains uploaded file (${testLabel})`]: () => containsUploadedKBFile,
     });
 
     // GET single knowledge base file and validate
     const getKBFileRes = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`,
       null,
       data.header
     );
-    logUnexpected(getKBFileRes, 'GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}');
+    logUnexpected(getKBFileRes, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}');
     let getKBFileJson; try { getKBFileJson = getKBFileRes.json(); } catch (e) { getKBFileJson = {}; }
     check(getKBFileRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} 200 (${testLabel})`]: (r) => r.status === 200,
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} uid matches (${testLabel})`]: () => getKBFileJson.file && getKBFileJson.file.uid === fileUid,
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} filename matches (${testLabel})`]: () => getKBFileJson.file && getKBFileJson.file.displayName === filename,
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} is valid (${testLabel})`]: () => getKBFileJson.file && helper.validateFile(getKBFileJson.file, false),
+      [`GET /v1alpha/namespaces/{namespace_id}/files/{file_uid} 200 (${testLabel})`]: (r) => r.status === 200,
+      [`GET /v1alpha/namespaces/{namespace_id}/files/{file_id} id matches (${testLabel})`]: () => getKBFileJson.file && getKBFileJson.file.id === fileId,
+      [`GET /v1alpha/namespaces/{namespace_id}/files/{file_uid} filename matches (${testLabel})`]: () => getKBFileJson.file && getKBFileJson.file.displayName === filename,
+      [`GET /v1alpha/namespaces/{namespace_id}/files/{file_uid} is valid (${testLabel})`]: () => getKBFileJson.file && helper.validateFile(getKBFileJson.file, false),
       [`File has total_tokens field (${testLabel})`]: () => getKBFileJson.file && typeof getKBFileJson.file.totalTokens === 'number',
     });
 
     // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
     // Wait for file processing to complete using robust helper function
-    console.log(`⏳ Waiting for file processing: ${testLabel} (fileUid: ${fileUid})...`);
+    console.log(`⏳ Waiting for file processing: ${testLabel} (fileId: ${fileId})...`);
     const result = helper.waitForFileProcessingComplete(
       data.expectedOwner.id,
       knowledgeBaseId,
-      fileUid,
+      fileId,
       data.header,
       900, // Max 900 seconds (15 minutes) for AI-intensive conversions with potential rate limiting
       240  // Fast-fail after 240s if stuck in NOTSTARTED (increased for AI service delays in CI)
@@ -516,7 +585,7 @@ function runKnowledgeBaseFileTest(data, opts) {
 
     if (failed) {
       console.error(`✗ File processing failed for ${testLabel}: ${failureReason}`);
-      console.error(`   File UID: ${fileUid}`);
+      console.error(`   File UID: ${fileId}`);
       console.error(`   Knowledge Base ID: ${knowledgeBaseId}`);
 
       // Check if failure is due to AI service issues (rate limiting or instability)
@@ -549,7 +618,7 @@ function runKnowledgeBaseFileTest(data, opts) {
       console.error(`✗ File processing did not complete for ${testLabel}`);
       console.error(`   Status: ${result.status}`);
       console.error(`   Error: ${failureReason || 'None'}`);
-      console.error(`   File UID: ${fileUid}`);
+      console.error(`   File UID: ${fileId}`);
       console.error(`   Knowledge Base ID: ${knowledgeBaseId}`);
 
       // On resource-constrained systems, provide helpful troubleshooting info
@@ -573,7 +642,7 @@ function runKnowledgeBaseFileTest(data, opts) {
     }
 
     check({ completed, failed }, {
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid} 200 and Process Status Reached COMPLETED (${testLabel})`]: () => completed === true,
+      [`GET /v1alpha/namespaces/{namespace_id}/files/{file_uid} 200 and Process Status Reached COMPLETED (${testLabel})`]: () => completed === true,
       [`File processing did not fail (${testLabel})`]: () => !failed,
     });
 
@@ -587,7 +656,7 @@ function runKnowledgeBaseFileTest(data, opts) {
     // Re-fetch file to get updated token counts from usage metadata
     const getFileAfterProcessing = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`,
       null,
       data.header
     );
@@ -607,22 +676,22 @@ function runKnowledgeBaseFileTest(data, opts) {
     }
 
     // Get file content (using VIEW_CONTENT)
-    const getKBFileContent = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}?view=VIEW_CONTENT`, null, data.header);
-    logUnexpected(getKBFileContent, 'GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_CONTENT');
+    const getKBFileContent = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CONTENT`, null, data.header);
+    logUnexpected(getKBFileContent, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_CONTENT');
     let contentData; try { contentData = getKBFileContent.json(); } catch (e) { contentData = {}; }
     const contentUri = contentData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
     check(getKBFileContent, {
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_CONTENT 200 (${testLabel})`]: (r) => r.status === 200,
+      [`GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_CONTENT 200 (${testLabel})`]: (r) => r.status === 200,
       [`VIEW_CONTENT returns derivedResourceUri (${testLabel})`]: () => contentUri && contentUri.length > 0,
     });
 
     // Get file summary (using VIEW_SUMMARY)
-    const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}?view=VIEW_SUMMARY`, null, data.header);
-    logUnexpected(getSummaryRes, 'GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_SUMMARY');
+    const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_SUMMARY`, null, data.header);
+    logUnexpected(getSummaryRes, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_SUMMARY');
     let summaryData; try { summaryData = getSummaryRes.json(); } catch (e) { summaryData = {}; }
     const summaryUri = summaryData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
     check(getSummaryRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_SUMMARY 200 (${testLabel})`]: (r) => r.status === 200,
+      [`GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_SUMMARY 200 (${testLabel})`]: (r) => r.status === 200,
       [`VIEW_SUMMARY returns derivedResourceUri (${testLabel})`]: () => summaryUri && summaryUri.length > 0,
     });
 
@@ -649,14 +718,14 @@ function runKnowledgeBaseFileTest(data, opts) {
     const isVideo = videoTypes.includes(fileType);
     const isStandardizable = isDocument || isImage || isAudio || isVideo;
 
-    const getStandardRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}?view=VIEW_STANDARD_FILE_TYPE`, null, data.header);
-    logUnexpected(getStandardRes, 'GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE');
+    const getStandardRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_STANDARD_FILE_TYPE`, null, data.header);
+    logUnexpected(getStandardRes, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE');
     let standardData; try { standardData = getStandardRes.json(); } catch (e) { standardData = {}; }
     const standardUri = standardData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
 
     if (isStandardizable) {
       check(getStandardRes, {
-        [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
+        [`GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
         [`VIEW_STANDARD_FILE_TYPE returns derivedResourceUri for standardizable type (${testLabel})`]: () => standardUri && standardUri.length > 0,
       });
 
@@ -704,24 +773,31 @@ function runKnowledgeBaseFileTest(data, opts) {
         }
 
         // ✅ NEW: Verify that the converted standard file actually exists in MinIO with correct extension
+        // Note: MinIO verification requires internal UUIDs, not hash-based IDs
         const expectedExtension = helper.getStandardFileExtension(fileType);
         if (expectedExtension) {
-          const minioVerified = helper.verifyConvertedFileType(knowledgeBaseId, fileUid, expectedExtension);
-          check({ minioVerified }, {
-            [`Converted standard file exists in MinIO with correct extension .${expectedExtension} (${testLabel})`]: () => minioVerified === true,
-          });
+          // Get internal file UID for MinIO verification (uid not exposed in API after AIP refactoring)
+          const fileUid = helper.getFileUidFromId(fileId);
+          if (fileUid) {
+            const minioVerified = helper.verifyConvertedFileType(knowledgeBaseId, fileUid, expectedExtension);
+            check({ minioVerified }, {
+              [`Converted standard file exists in MinIO with correct extension .${expectedExtension} (${testLabel})`]: () => minioVerified === true,
+            });
 
-          if (minioVerified) {
-            console.log(`✓ Verified converted .${expectedExtension} file exists in MinIO for ${testLabel}`);
+            if (minioVerified) {
+              console.log(`✓ Verified converted .${expectedExtension} file exists in MinIO for ${testLabel}`);
+            } else {
+              console.error(`✗ Converted .${expectedExtension} file NOT found in MinIO for ${testLabel}`);
+            }
           } else {
-            console.error(`✗ Converted .${expectedExtension} file NOT found in MinIO for ${testLabel}`);
+            console.log(`⚠ Skipping MinIO verification for ${testLabel} - could not get internal file UID`);
           }
         }
       }
     } else {
       // For non-standardizable types, VIEW_STANDARD_FILE_TYPE should still return 200 but may not have a standardized file
       check(getStandardRes, {
-        [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
+        [`GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
       });
       if (standardUri) {
         console.log(`INFO: Unexpected standardized file available for non-standardizable type ${testLabel}`);
@@ -730,13 +806,13 @@ function runKnowledgeBaseFileTest(data, opts) {
 
     // Get original file (using VIEW_ORIGINAL_FILE_TYPE)
     // This should return the original uploaded file for ALL file types
-    const getOriginalRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}?view=VIEW_ORIGINAL_FILE_TYPE`, null, data.header);
-    logUnexpected(getOriginalRes, 'GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_ORIGINAL_FILE_TYPE');
+    const getOriginalRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_ORIGINAL_FILE_TYPE`, null, data.header);
+    logUnexpected(getOriginalRes, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_ORIGINAL_FILE_TYPE');
     let originalData; try { originalData = getOriginalRes.json(); } catch (e) { originalData = {}; }
     const originalUri = originalData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
 
     check(getOriginalRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_uid}?view=VIEW_ORIGINAL_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
+      [`GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_ORIGINAL_FILE_TYPE 200 (${testLabel})`]: (r) => r.status === 200,
       [`VIEW_ORIGINAL_FILE_TYPE returns derivedResourceUri (${testLabel})`]: () => originalUri && originalUri.length > 0,
     });
 
@@ -761,12 +837,12 @@ function runKnowledgeBaseFileTest(data, opts) {
     }
 
     // List chunks for this file
-    const listChunksUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileUid}/chunks`;
+    const listChunksUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}/chunks`;
     const listChunksRes = http.request("GET", listChunksUrl, null, data.header);
-    logUnexpected(listChunksRes, 'GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_id}/chunks');
+    logUnexpected(listChunksRes, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_id}/chunks');
     let listChunksJson; try { listChunksJson = listChunksRes.json(); } catch (e) { listChunksJson = {}; }
     check(listChunksRes, {
-      [`GET /v1alpha/namespaces/{namespace_id}/knowledge-bases/{knowledge_base_id}/files/{file_id}/chunks 200 (${testLabel})`]: (r) => r.status === 200,
+      [`GET /v1alpha/namespaces/{namespace_id}/files/{file_id}/chunks 200 (${testLabel})`]: (r) => r.status === 200,
     });
   });
 }

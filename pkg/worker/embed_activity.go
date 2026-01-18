@@ -17,7 +17,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	filetype "github.com/instill-ai/x/file"
 )
@@ -48,7 +48,7 @@ func (w *Worker) UpdateEmbeddingMetadataActivity(ctx context.Context, param *Upd
 		EmbeddingPipe: param.Pipeline,
 	}
 
-	err := w.repository.UpdateKnowledgeFileMetadata(ctx, param.FileUID, mdUpdate)
+	err := w.repository.UpdateFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -96,7 +96,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 	result := &EmbedAndSaveChunksActivityResult{}
 
 	// Step 1: Get file metadata (including soft-deleted files for dual processing)
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(ctx, []types.FileUIDType{param.FileUID})
+	files, err := w.repository.GetFilesByFileUIDsIncludingDeleted(ctx, []types.FileUIDType{param.FileUID})
 	if err != nil || len(files) == 0 {
 		if err == nil {
 			err = fmt.Errorf("no file found with UID %s", param.FileUID.String())
@@ -130,12 +130,12 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 		zap.Int("chunkCount", len(chunks)))
 
 	// Step 3: Load chunk text content from MinIO
-	// ContentDest contains MinIO paths, we need to fetch the actual content
+	// StoragePath contains MinIO paths, we need to fetch the actual content
 	texts := make([]string, len(chunks))
 	bucket := config.Config.Minio.BucketName
 
 	for i, chunk := range chunks {
-		content, err := w.repository.GetMinIOStorage().GetFile(ctx, bucket, chunk.ContentDest)
+		content, err := w.repository.GetMinIOStorage().GetFile(ctx, bucket, chunk.StoragePath)
 		if err != nil {
 			err = errorsx.AddMessage(
 				fmt.Errorf("failed to load chunk content from MinIO: %v", err),
@@ -233,15 +233,15 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 	embeddings := make([]repository.EmbeddingModel, len(chunks))
 	for i, chunk := range chunks {
 		embeddings[i] = repository.EmbeddingModel{
-			UID:         types.EmbeddingUIDType(uuid.Must(uuid.NewV4())),
-			SourceTable: repository.TextChunkTableName,
-			SourceUID:   chunk.UID,
-			Vector:      vectors[i],
-			KBUID:       param.KBUID,
-			FileUID:     param.FileUID,
-			ContentType: contentType,
-			ChunkType:   chunk.ChunkType,
-			Tags:        file.Tags,
+			UID:              types.EmbeddingUIDType(uuid.Must(uuid.NewV4())),
+			SourceTable:      repository.ChunkTableName,
+			SourceUID:        chunk.UID,
+			Vector:           vectors[i],
+			KnowledgeBaseUID: param.KBUID,
+			FileUID:          param.FileUID,
+			ContentType:      contentType,
+			ChunkType:        chunk.ChunkType,
+			Tags:             file.Tags,
 		}
 	}
 

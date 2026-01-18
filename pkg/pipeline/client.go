@@ -11,8 +11,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/v1beta"
 )
 
 // GenerateContentPipe converts a file to Markdown using OpenAI pipeline
@@ -29,7 +29,7 @@ func GenerateContentPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: GenerateContentPipeline.Namespace,
-		PipelineId:  GenerateContentPipeline.ID,
+		PipelineId:  GenerateContentPipeline.Slug(),
 		ReleaseId:   GenerateContentPipeline.Version,
 		Inputs:      []*structpb.Struct{input},
 	}
@@ -56,7 +56,7 @@ func GenerateSummaryPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: GenerateSummaryPipeline.Namespace,
-		PipelineId:  GenerateSummaryPipeline.ID,
+		PipelineId:  GenerateSummaryPipeline.Slug(),
 		ReleaseId:   GenerateSummaryPipeline.Version,
 		Data: []*pipelinepb.TriggerData{
 			{
@@ -103,7 +103,7 @@ func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 		NamespaceId: ConvertFileTypePipeline.Namespace,
-		PipelineId:  ConvertFileTypePipeline.ID,
+		PipelineId:  ConvertFileTypePipeline.Slug(),
 		ReleaseId:   ConvertFileTypePipeline.Version,
 		Inputs: []*structpb.Struct{
 			{
@@ -318,7 +318,7 @@ func EmbedPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServ
 
 		req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
 			NamespaceId: EmbedPipeline.Namespace,
-			PipelineId:  EmbedPipeline.ID,
+			PipelineId:  EmbedPipeline.Slug(),
 			ReleaseId:   EmbedPipeline.Version,
 			Inputs:      inputs,
 		}

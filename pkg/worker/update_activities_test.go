@@ -20,7 +20,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 func TestListKnowledgeBasesForUpdateActivity_Success(t *testing.T) {
@@ -36,7 +36,7 @@ func TestListKnowledgeBasesForUpdateActivity_Success(t *testing.T) {
 		Then([]repository.KnowledgeBaseModel{
 			{
 				UID:          kbUID,
-				KBID:         "test-kb",
+				ID:           "test-kb",
 				Staging:      false,
 				UpdateStatus: artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 			},
@@ -67,7 +67,7 @@ func TestListKnowledgeBasesForUpdateActivity_WithCatalogIDs(t *testing.T) {
 		When(minimock.AnyContext, knowledgeBaseID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:          kbUID,
-			KBID:         knowledgeBaseID,
+			ID:           knowledgeBaseID,
 			Staging:      false,
 			UpdateStatus: artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
 		}, nil)
@@ -83,7 +83,7 @@ func TestListKnowledgeBasesForUpdateActivity_WithCatalogIDs(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Not(qt.IsNil))
 	c.Assert(len(result.KnowledgeBases), qt.Equals, 1)
-	c.Assert(result.KnowledgeBases[0].KBID, qt.Equals, knowledgeBaseID)
+	c.Assert(result.KnowledgeBases[0].ID, qt.Equals, knowledgeBaseID)
 }
 
 func TestValidateUpdateEligibilityActivity_Success(t *testing.T) {
@@ -153,7 +153,7 @@ func TestCreateStagingKnowledgeBaseActivity_Success(t *testing.T) {
 		Then(&repository.KnowledgeBaseWithConfig{
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:       originalKBUID,
-				KBID:      "test-kb",
+				ID:        "test-kb",
 				SystemUID: systemUID,
 			},
 			SystemConfig: repository.SystemConfigJSON{
@@ -175,8 +175,8 @@ func TestCreateStagingKnowledgeBaseActivity_Success(t *testing.T) {
 				}
 			}
 			return &repository.KnowledgeBaseModel{
-				UID:  stagingKBUID,
-				KBID: "test-kb-staging",
+				UID: stagingKBUID,
+				ID:  "test-kb-staging",
 			}, nil
 		})
 	mockRepository.CreateCollectionMock.Set(func(ctx context.Context, collectionName string, dimensionality uint32) error {
@@ -239,16 +239,16 @@ func TestCleanupOldKnowledgeBaseActivity_Success(t *testing.T) {
 		When(minimock.AnyContext, kbUID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:                 kbUID,
-			KBID:                "test-kb",
+			ID:                  "test-kb",
 			NamespaceUID:        uuid.Must(uuid.NewV4()).String(),
 			ActiveCollectionUID: activeCollectionUID,
 			DeleteTime:          gorm.DeletedAt{},
 		}, nil)
 	// Mock for waitForInProgressFiles check
 	mockRepository.GetFileCountByKnowledgeBaseUIDIncludingDeletedMock.Return(int64(0), nil)
-	mockRepository.ListKnowledgeBaseFilesMock.Return(&repository.KnowledgeBaseFileList{Files: []repository.KnowledgeBaseFileModel{}}, nil) // No files = no active workflows
+	mockRepository.ListFilesMock.Return(&repository.FileList{Files: []repository.FileModel{}}, nil) // No files = no active workflows
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
-	mockRepository.DeleteAllKnowledgeBaseFilesMock.Return(nil)
+	mockRepository.DeleteAllFilesMock.Return(nil)
 	mockRepository.DeleteAllConvertedFilesInKbMock.Return(nil)
 	mockRepository.DeleteKnowledgeBaseMock.Return(&repository.KnowledgeBaseModel{}, nil)
 	mockRepository.IsCollectionInUseMock.Return(false, nil)
@@ -304,10 +304,10 @@ func TestListFilesForReprocessingActivity_Success(t *testing.T) {
 			UID:          kbUID,
 			NamespaceUID: uuid.Must(uuid.NewV4()).String(),
 		}, nil)
-	mockRepository.ListKnowledgeBaseFilesMock.
-		Set(func(ctx context.Context, params repository.KnowledgeBaseFileListParams) (*repository.KnowledgeBaseFileList, error) {
-			return &repository.KnowledgeBaseFileList{
-				Files: []repository.KnowledgeBaseFileModel{
+	mockRepository.ListFilesMock.
+		Set(func(ctx context.Context, params repository.KnowledgeBaseFileListParams) (*repository.FileList, error) {
+			return &repository.FileList{
+				Files: []repository.FileModel{
 					{UID: fileUID1, ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String()},
 					{UID: fileUID2, ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String()},
 				},
@@ -343,14 +343,14 @@ func TestCloneFileToStagingKBActivity_Success(t *testing.T) {
 	}, nil)
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []types.FileUIDType{originalFileUID}).
-		Then([]repository.KnowledgeBaseFileModel{
+		Then([]repository.FileModel{
 			{
 				UID:         originalFileUID,
 				DisplayName: "test.pdf",
 				FileType:    "application/pdf",
-				Destination: "kb/file/test.pdf",
+				StoragePath: "kb/file/test.pdf",
 				Size:        1024,
 			},
 		}, nil)
@@ -361,10 +361,10 @@ func TestCloneFileToStagingKBActivity_Success(t *testing.T) {
 			UID:          stagingKBUID,
 			NamespaceUID: ownerUID.String(),
 		}, nil)
-	mockRepository.CreateKnowledgeBaseFileMock.
-		Set(func(ctx context.Context, model repository.KnowledgeBaseFileModel, externalServiceCall func(fileUID string) error) (*repository.KnowledgeBaseFileModel, error) {
-			return &repository.KnowledgeBaseFileModel{
-				UID:             newFileUID,
+	mockRepository.CreateFileMock.
+		Set(func(ctx context.Context, model repository.FileModel, kbUID types.KnowledgeBaseUIDType, externalServiceCall func(fileUID string) error) (*repository.FileModel, error) {
+			return &repository.FileModel{
+				UID:         newFileUID,
 				DisplayName: "test.pdf",
 			}, nil
 		})
@@ -498,7 +498,7 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 		Then(&repository.KnowledgeBaseWithConfig{
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 originalKBUID,
-				KBID:                "test-kb",
+				ID:                  "test-kb",
 				NamespaceUID:        ownerUID.String(),
 				CreatorUID:          func() *types.CreatorUIDType { c := types.CreatorUIDType(ownerUID); return &c }(),
 				ActiveCollectionUID: originalCollectionUID,
@@ -511,7 +511,7 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 		Then(&repository.KnowledgeBaseWithConfig{
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 stagingKBUID,
-				KBID:                "test-kb-staging",
+				ID:                  "test-kb-staging",
 				NamespaceUID:        ownerUID.String(),
 				ActiveCollectionUID: stagingCollectionUID,
 			},
@@ -524,23 +524,23 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 
 	// Create rollback KB
 	var rollbackKBUID types.KBUIDType
-	var rollbackKBID string
+	var rollbackID string
 	mockRepository.CreateKnowledgeBaseMock.
 		Set(func(ctx context.Context, kb repository.KnowledgeBaseModel, externalService func(kbUID types.KBUIDType, collectionUID types.KBUIDType) error) (*repository.KnowledgeBaseModel, error) {
 			rollbackKBUID = types.KBUIDType(uuid.Must(uuid.NewV4()))
-			rollbackKBID = uuid.Must(uuid.NewV4()).String() // UUID-based KBID for rollback KB
+			rollbackID = uuid.Must(uuid.NewV4()).String() // UUID-based ID for rollback KB
 			return &repository.KnowledgeBaseModel{
-				UID:  rollbackKBUID,
-				KBID: rollbackKBID,
+				UID: rollbackKBUID,
+				ID:  rollbackID,
 			}, nil
 		})
 
-	// Get rollback KB by UID (called after creation to retrieve KBID)
+	// Get rollback KB by UID (called after creation to retrieve ID)
 	mockRepository.GetKnowledgeBaseByUIDMock.
 		Set(func(ctx context.Context, kbUID types.KBUIDType) (*repository.KnowledgeBaseModel, error) {
 			return &repository.KnowledgeBaseModel{
-				UID:  rollbackKBUID,
-				KBID: rollbackKBID,
+				UID: rollbackKBUID,
+				ID:  rollbackID,
 			}, nil
 		})
 
@@ -552,7 +552,13 @@ func TestSwapKnowledgeBasesActivity_Success(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	mockRepository.GetDBMock.Return(testDB)
 
-	// Update resource KB UIDs (3 times for swap) - using transaction-based mock
+	// Copy original KB resources to rollback KB - using transaction-based mock
+	mockRepository.CopyKnowledgeBaseResourcesTxMock.Return(nil)
+
+	// Delete original KB resources after copy - using transaction-based mock
+	mockRepository.DeleteKnowledgeBaseResourcesTxMock.Return(nil)
+
+	// Update resource KB UIDs (move staging → original) - using transaction-based mock
 	mockRepository.UpdateKnowledgeBaseResourcesTxMock.Return(nil)
 
 	// Update KB metadata (called multiple times) - using transaction-based mock
@@ -594,7 +600,7 @@ func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T)
 		Then(&repository.KnowledgeBaseWithConfig{
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 originalKBUID,
-				KBID:                "test-kb",
+				ID:                  "test-kb",
 				NamespaceUID:        ownerUID.String(),
 				CreatorUID:          func() *types.CreatorUIDType { c := types.CreatorUIDType(ownerUID); return &c }(),
 				ActiveCollectionUID: originalCollectionUID,
@@ -607,7 +613,7 @@ func TestSwapKnowledgeBasesActivity_OriginalCollectionDoesNotExist(t *testing.T)
 		Then(&repository.KnowledgeBaseWithConfig{
 			KnowledgeBaseModel: repository.KnowledgeBaseModel{
 				UID:                 stagingKBUID,
-				KBID:                "test-kb-staging",
+				ID:                  "test-kb-staging",
 				NamespaceUID:        ownerUID.String(),
 				ActiveCollectionUID: stagingCollectionUID,
 			},
@@ -682,7 +688,7 @@ func TestSynchronizeKBActivity_FilesStillProcessing(t *testing.T) {
 		When(minimock.AnyContext, originalKBUID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:          originalKBUID,
-			KBID:         "test-kb",
+			ID:           "test-kb",
 			NamespaceUID: ownerUID.String(),
 		}, nil)
 
@@ -731,7 +737,7 @@ func TestSynchronizeKBActivity_Success(t *testing.T) {
 		When(minimock.AnyContext, originalKBUID).
 		Then(&repository.KnowledgeBaseModel{
 			UID:          originalKBUID,
-			KBID:         "test-kb",
+			ID:           "test-kb",
 			NamespaceUID: ownerUID.String(),
 		}, nil)
 

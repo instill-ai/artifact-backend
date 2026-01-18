@@ -175,10 +175,8 @@ export default function (data) {
             "POST",
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                knowledgeBase: {
-                    displayName: kbDisplayName,
-                    description: "Test KB for AI content conversion",
-                }
+                displayName: kbDisplayName,
+                description: "Test KB for AI content conversion",
             }),
             data.header
         );
@@ -192,14 +190,15 @@ export default function (data) {
             return; // Skip rest of test if KB creation failed
         }
 
-        const kbUid = createKBResp.json().knowledgeBase.uid;
+        // Note: uid field removed in AIP refactoring - use id for identification
+        const kbId = createKBResp.json().knowledgeBase.id;
         const knowledgeBaseId = createKBResp.json().knowledgeBase.id;
 
         // Upload a text file for conversion testing with Gemini
         const testContent = "This is a test document for Gemini content conversion testing.\n\nIt contains multiple paragraphs.\n\nAnd tests markdown extraction.";
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
             {
                 displayName: "test-gemini-conversion.txt",
                 type: "TYPE_TEXT",
@@ -214,22 +213,22 @@ export default function (data) {
         });
 
         if (!uploadResp || uploadResp.status !== 200) {
-            console.log(`AI Test 2.2 FAILED: Status ${uploadResp.status}, Body: ${uploadResp.body}`);
+            console.log(`AI Test 2.2 FAILED: Status ${uploadResp ? uploadResp.status : 'undefined'}, Body: ${uploadResp ? uploadResp.body : 'N/A'}`);
             // Cleanup KB before returning (no files to wait for since upload failed)
             http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
-        const fileUid = uploadResp.json().file.uid;
-        const fileId = uploadResp.json().file.id; // Short ID for API paths
+        // Note: uid field removed in AIP refactoring - use id for identification
+        const fileId = uploadResp.json().file.id;
 
         // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
         // Wait for processing to complete using robust helper function
-        console.log(`AI Test 2.3: Waiting for file processing (fileUid: ${fileUid})...`);
+        console.log(`AI Test 2.3: Waiting for file processing (fileId: ${fileId})...`);
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseId,
-            fileUid, // Use UID, not short ID
+            fileId, // Use hash-based ID (uid removed in AIP refactoring)
             data.header,
             300, // Max 300 seconds (increased for slower GA environment)
             120  // Fast-fail after 120s if stuck in NOTSTARTED (increased for GA)
@@ -256,7 +255,7 @@ export default function (data) {
                 sleep(1); // Wait 1 second between retries
                 chunksResp = http.request(
                     "GET",
-                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}/chunks`,
+                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}/chunks`,
                     null,
                     data.header
                 );
@@ -323,10 +322,8 @@ export default function (data) {
             "POST",
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                knowledgeBase: {
-                    displayName: kbDisplayName,
-                    description: "Test KB for AI embedding generation",
-                }
+                displayName: kbDisplayName,
+                description: "Test KB for AI embedding generation",
             }),
             data.header
         );
@@ -340,14 +337,15 @@ export default function (data) {
             return;
         }
 
-        const kbUid = createKBResp.json().knowledgeBase.uid;
+        // Note: uid field removed in AIP refactoring - use id for identification
+        const kbId = createKBResp.json().knowledgeBase.id;
         const knowledgeBaseId = createKBResp.json().knowledgeBase.id;
 
         // Upload a file for embedding testing
         const testContent = "Artificial Intelligence and Machine Learning are transforming technology. Deep learning models process vast amounts of data.";
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
             {
                 displayName: "test-embedding.txt",
                 type: "TYPE_TEXT",
@@ -362,22 +360,22 @@ export default function (data) {
         });
 
         if (!uploadResp || uploadResp.status !== 200) {
-            console.log(`AI Test 3.2 FAILED: Status ${uploadResp.status}, Body: ${uploadResp.body}`);
+            console.log(`AI Test 3.2 FAILED: Status ${uploadResp ? uploadResp.status : 'undefined'}, Body: ${uploadResp ? uploadResp.body : 'N/A'}`);
             // Cleanup KB before returning (no files to wait for since upload failed)
             http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
-        const fileUid = uploadResp.json().file.uid;
-        const fileId = uploadResp.json().file.id; // Short ID for API paths
+        // Note: uid field removed in AIP refactoring - use id for identification
+        const fileId = uploadResp.json().file.id;
 
         // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
         // Wait for processing to complete using robust helper function
-        console.log(`AI Test 3.3: Waiting for file embedding processing (fileUid: ${fileUid})...`);
+        console.log(`AI Test 3.3: Waiting for file embedding processing (fileId: ${fileId})...`);
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseId,
-            fileUid, // Use UID, not short ID
+            fileId, // Use hash-based ID (uid removed in AIP refactoring)
             data.header,
             300, // Max 300 seconds (increased for slower GA environment)
             120  // Fast-fail after 120s if stuck in NOTSTARTED (increased for GA)
@@ -393,20 +391,26 @@ export default function (data) {
             "AI Test 3.3: File embedding processing completes": () => processedStatus,
         });
 
-        // Verify embeddings were created by checking if embeddings exist in database
+        // Verify embeddings were created by checking database
+        // Get internal file_uid from hash-based id for database verification
         if (processedStatus) {
-            const embeddingResult = helper.safeQuery(
-                `SELECT COUNT(*) as count FROM embedding WHERE file_uid = $1`,
-                fileUid
-            );
+            const fileUid = helper.getFileUidFromId(fileId);
+            if (fileUid) {
+                const embeddingResult = helper.safeQuery(
+                    `SELECT COUNT(*) as count FROM embedding WHERE file_uid = $1`,
+                    fileUid
+                );
 
-            if (embeddingResult.length > 0) {
-                const count = parseInt(embeddingResult[0].count);
-                console.log(`AI Test 3.4: Generated ${count} embeddings`);
+                if (embeddingResult.length > 0) {
+                    const count = parseInt(embeddingResult[0].count);
+                    console.log(`AI Test 3.4: Generated ${count} embeddings`);
 
-                check({ count }, {
-                    "AI Test 3.4: Embeddings were generated": () => count > 0,
-                });
+                    check({ count }, {
+                        "AI Test 3.4: Embeddings were generated": () => count > 0,
+                    });
+                }
+            } else {
+                console.log(`AI Test 3.4: Could not get file_uid for fileId=${fileId}, skipping embedding verification`);
             }
         }
 
@@ -415,8 +419,9 @@ export default function (data) {
         if (processedStatus) {
             const searchResp = http.request(
                 "POST",
-                `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/searchChunks`,
+                `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/searchChunks`,
                 JSON.stringify({
+                    knowledgeBaseId: knowledgeBaseId,  // Now passed in request body
                     textPrompt: "machine learning",
                     topK: 5,
                 }),
@@ -462,10 +467,8 @@ export default function (data) {
             "POST",
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                knowledgeBase: {
-                    displayName: kbDisplayName,
-                    description: "Test KB for AI summary generation",
-                }
+                displayName: kbDisplayName,
+                description: "Test KB for AI summary generation",
             }),
             data.header
         );
@@ -479,7 +482,8 @@ export default function (data) {
             return;
         }
 
-        const kbUid = createKBResp.json().knowledgeBase.uid;
+        // Note: uid field removed in AIP refactoring - use id for identification
+        const kbId = createKBResp.json().knowledgeBase.id;
         const knowledgeBaseId = createKBResp.json().knowledgeBase.id;
 
         // Upload a longer text file for summary testing
@@ -502,7 +506,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         `.trim();
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
             {
                 displayName: "test-summary.txt",
                 type: "TYPE_TEXT",
@@ -517,22 +521,22 @@ in artificial intelligence integration and customer satisfaction metrics.
         });
 
         if (!uploadResp || uploadResp.status !== 200) {
-            console.log(`AI Test 4.2 FAILED: Status ${uploadResp.status}, Body: ${uploadResp.body}`);
+            console.log(`AI Test 4.2 FAILED: Status ${uploadResp ? uploadResp.status : 'undefined'}, Body: ${uploadResp ? uploadResp.body : 'N/A'}`);
             // Cleanup KB before returning (no files to wait for since upload failed)
             http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
-        const fileUid = uploadResp.json().file.uid;
-        const fileId = uploadResp.json().file.id; // Short ID for API paths
+        // Note: uid field removed in AIP refactoring - use id for identification
+        const fileId = uploadResp.json().file.id;
 
         // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
         // Wait for processing to complete using robust helper function
-        console.log(`AI Test 4.3: Waiting for file summary processing (fileUid: ${fileUid})...`);
+        console.log(`AI Test 4.3: Waiting for file summary processing (fileId: ${fileId})...`);
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseId,
-            fileUid, // Use UID, not short ID
+            fileId, // Use hash-based ID (uid removed in AIP refactoring)
             data.header,
             300, // Max 300 seconds (increased for slower GA environment)
             120  // Fast-fail after 120s if stuck in NOTSTARTED (increased for GA)
@@ -559,7 +563,7 @@ in artificial intelligence integration and customer satisfaction metrics.
                 sleep(1); // Wait 1 second between retries
                 summaryResp = http.request(
                     "GET",
-                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_SUMMARY`,
+                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_SUMMARY`,
                     null,
                     data.header
                 );
@@ -607,10 +611,8 @@ in artificial intelligence integration and customer satisfaction metrics.
             "POST",
             `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
             JSON.stringify({
-                knowledgeBase: {
-                    displayName: kbDisplayName,
-                    description: "Test KB for AI cache functionality",
-                }
+                displayName: kbDisplayName,
+                description: "Test KB for AI cache functionality",
             }),
             data.header
         );
@@ -624,14 +626,15 @@ in artificial intelligence integration and customer satisfaction metrics.
             return;
         }
 
-        const kbUid = createKBResp.json().knowledgeBase.uid;
+        // Note: uid field removed in AIP refactoring - use id for identification
+        const kbId = createKBResp.json().knowledgeBase.id;
         const knowledgeBaseId = createKBResp.json().knowledgeBase.id;
 
         // Upload file - this should create a Gemini cache during processing
         const testContent = "Cache test content for Gemini client validation with native caching support.";
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
             {
                 displayName: "test-gemini-cache.txt",
                 type: "TYPE_TEXT",
@@ -646,22 +649,22 @@ in artificial intelligence integration and customer satisfaction metrics.
         });
 
         if (!uploadResp || uploadResp.status !== 200) {
-            console.log(`AI Test 5.2 FAILED: Status ${uploadResp.status}, Body: ${uploadResp.body}`);
+            console.log(`AI Test 5.2 FAILED: Status ${uploadResp ? uploadResp.status : 'undefined'}, Body: ${uploadResp ? uploadResp.body : 'N/A'}`);
             // Cleanup KB before returning (no files to wait for since upload failed)
             http.request("DELETE", `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
             return;
         }
 
-        const fileUid = uploadResp.json().file.uid;
-        const fileId = uploadResp.json().file.id; // Short ID for API paths
+        // Note: uid field removed in AIP refactoring - use id for identification
+        const fileId = uploadResp.json().file.id;
 
         // Auto-trigger: Processing starts automatically on upload (no manual trigger needed)
         // Wait for processing to complete using robust helper function
-        console.log(`AI Test 5.3: Waiting for file processing with native cache (fileUid: ${fileUid})...`);
+        console.log(`AI Test 5.3: Waiting for file processing with native cache (fileId: ${fileId})...`);
         const result = helper.waitForFileProcessingComplete(
             data.expectedOwner.id,
             knowledgeBaseId,
-            fileUid, // Use UID, not short ID
+            fileId, // Use hash-based ID (uid removed in AIP refactoring)
             data.header,
             300, // Max 300 seconds (increased for slower GA environment)
             120  // Fast-fail after 120s if stuck in NOTSTARTED (increased for GA)

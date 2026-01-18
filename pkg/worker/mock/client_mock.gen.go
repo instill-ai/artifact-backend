@@ -11,7 +11,7 @@ import (
 
 	"github.com/gojuno/minimock/v3"
 	mm_ai "github.com/instill-ai/artifact-backend/pkg/ai"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 // ClientMock implements mm_ai.Client

@@ -110,31 +110,31 @@ func TestCleanupFileWorkflow_Success(t *testing.T) {
 	mockRepository := mock.NewRepositoryMock(mc)
 
 	// Mock for DeleteOriginalFileActivity
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.Return([]repository.KnowledgeBaseFileModel{
-		{UID: fileUID, Destination: "kb/test-file.pdf"},
+	mockRepository.GetFilesByFileUIDsMock.Return([]repository.FileModel{
+		{UID: fileUID, StoragePath: "kb/test-file.pdf"},
 	}, nil)
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
-	mockRepository.DeleteObjectByDestinationMock.Return(nil)
+	mockRepository.DeleteObjectByStoragePathMock.Return(nil)
 
 	// Mock for DeleteConvertedFileActivity
 	mockRepository.GetAllConvertedFilesByFileUIDMock.Return([]repository.ConvertedFileModel{
 		{
-			UID:   uuid.Must(uuid.NewV4()),
-			KBUID: kbUID,
+			UID:              uuid.Must(uuid.NewV4()),
+			KnowledgeBaseUID: kbUID,
 		},
 	}, nil)
 	mockRepository.HardDeleteConvertedFileByFileUIDMock.Return(nil)
 
 	// Mock for DeleteTextChunksFromMinIOActivity
-	mockRepository.ListTextChunksByKBFileUIDMock.Return([]repository.TextChunkModel{
-		{UID: uuid.Must(uuid.NewV4()), KBUID: kbUID},
+	mockRepository.ListTextChunksByKBFileUIDMock.Return([]repository.ChunkModel{
+		{UID: uuid.Must(uuid.NewV4()), KnowledgeBaseUID: kbUID},
 	}, nil)
 	mockRepository.HardDeleteTextChunksByKBFileUIDMock.Return(nil)
 
 	// Mock for DeleteEmbeddingsFromVectorDBActivity and DeleteEmbeddingRecordsActivity
 	activeCollectionUID := types.KBUIDType(uuid.Must(uuid.NewV4()))
 	mockRepository.ListEmbeddingsByKBFileUIDMock.Return([]repository.EmbeddingModel{
-		{UID: uuid.Must(uuid.NewV4()), KBUID: kbUID},
+		{UID: uuid.Must(uuid.NewV4()), KnowledgeBaseUID: kbUID},
 	}, nil)
 	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
 		UID:                 types.KBUIDType(kbUID),
@@ -185,15 +185,15 @@ func TestCleanupFileWorkflow_WithoutOriginalFile(t *testing.T) {
 	// Mock for DeleteConvertedFileActivity
 	mockRepository.GetAllConvertedFilesByFileUIDMock.Return([]repository.ConvertedFileModel{
 		{
-			UID:   uuid.Must(uuid.NewV4()),
-			KBUID: kbUID,
+			UID:              uuid.Must(uuid.NewV4()),
+			KnowledgeBaseUID: kbUID,
 		},
 	}, nil)
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	mockRepository.HardDeleteConvertedFileByFileUIDMock.Return(nil)
 
 	// Mock for DeleteTextChunksFromMinIOActivity (empty chunks - activity returns early)
-	mockRepository.ListTextChunksByKBFileUIDMock.Return([]repository.TextChunkModel{}, nil)
+	mockRepository.ListTextChunksByKBFileUIDMock.Return([]repository.ChunkModel{}, nil)
 
 	// Mock for DeleteEmbeddingsFromVectorDBActivity (empty embeddings - activity returns early)
 	mockRepository.ListEmbeddingsByKBFileUIDMock.Return([]repository.EmbeddingModel{}, nil)
@@ -249,7 +249,7 @@ func TestCleanupKnowledgeBaseWorkflow_Success(t *testing.T) {
 	mockRepository.DropCollectionMock.Return(nil)
 
 	// Mock for DeleteKBFileRecordsActivity
-	mockRepository.DeleteAllKnowledgeBaseFilesMock.Return(nil)
+	mockRepository.DeleteAllFilesMock.Return(nil)
 
 	// Mock for DeleteKBConvertedFileRecordsActivity
 	mockRepository.DeleteAllConvertedFilesInKbMock.Return(nil)
@@ -310,7 +310,7 @@ func TestCleanupKnowledgeBaseWorkflow_VectorDBError(t *testing.T) {
 	mockRepository.DropCollectionMock.Return(fmt.Errorf("can't find collection"))
 
 	// Mock for remaining activities (all succeed)
-	mockRepository.DeleteAllKnowledgeBaseFilesMock.Return(nil)
+	mockRepository.DeleteAllFilesMock.Return(nil)
 	mockRepository.DeleteAllConvertedFilesInKbMock.Return(nil)
 	mockRepository.HardDeleteTextChunksByKBUIDMock.Return(nil)
 	mockRepository.HardDeleteEmbeddingsByKBUIDMock.Return(nil)

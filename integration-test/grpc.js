@@ -15,8 +15,12 @@ const publicClient = new grpc.Client();
 const privateClient = new grpc.Client();
 
 // Load proto files in init context (required by k6)
-publicClient.load(["./proto"], "artifact/artifact/v1alpha/artifact_public_service.proto");
-privateClient.load(["./proto"], "artifact/artifact/v1alpha/artifact_private_service.proto");
+publicClient.load(["proto"], "artifact/v1alpha/artifact_public_service.proto");
+privateClient.load(["proto"], "artifact/v1alpha/artifact_private_service.proto");
+
+// CI mode: run tests sequentially without scenarios (less resource intensive)
+// Non-CI mode: run tests in parallel using scenarios
+const isCI = __ENV.CI === 'true';
 
 export let options = {
   setupTimeout: "10s",
@@ -25,37 +29,64 @@ export let options = {
   thresholds: {
     checks: ["rate == 1.0"],
   },
-  scenarios: {
-    // Health checks
-    test_01_health: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_01_Health' },
+  // Only use scenarios in non-CI mode for parallel execution
+  ...(isCI ? { vus: 1, iterations: 1 } : {
+    scenarios: {
+      // Health checks
+      test_01_health: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_01_Health' },
 
-    // Public gRPC tests - Knowledge Bases
-    test_02_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_CreateKnowledgeBase' },
-    test_03_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_ListKnowledgeBases' },
-    test_04_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_GetKnowledgeBase' },
-    test_05_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_UpdateKnowledgeBase' },
-    test_06_delete_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_DeleteKnowledgeBase' },
+      // Public gRPC tests - Knowledge Bases
+      test_02_create_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_CreateKnowledgeBase' },
+      test_03_list_knowledge_bases: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_ListKnowledgeBases' },
+      test_04_get_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_GetKnowledgeBase' },
+      test_05_update_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_UpdateKnowledgeBase' },
+      test_06_delete_knowledge_base: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_DeleteKnowledgeBase' },
 
-    // Public gRPC tests - Files
-    test_07_upload_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_UploadFile' },
-    test_08_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_ListFiles' },
-    test_09_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_GetFile' },
-    test_10_cleanup_on_delete: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_CleanupOnDelete' },
+      // Public gRPC tests - Files
+      test_07_upload_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_UploadFile' },
+      test_08_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_ListFiles' },
+      test_09_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_GetFile' },
+      test_10_cleanup_on_delete: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_CleanupOnDelete' },
 
-    // JWT/Auth tests
-    test_11_jwt_upload_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_JWT_UploadFile' },
-    test_12_jwt_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_JWT_ListFiles' },
-    test_13_jwt_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_JWT_GetFile' },
+      // JWT/Auth tests
+      test_11_jwt_upload_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_JWT_UploadFile' },
+      test_12_jwt_list_files: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_JWT_ListFiles' },
+      test_13_jwt_get_file: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_JWT_GetFile' },
 
-    // Private gRPC tests (admin only)
-    test_14_get_object: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_GetObject' },
-    test_15_get_object_url: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_GetObjectURL' },
-    test_16_update_object: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_UpdateObject' },
-    test_17_create_kb_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_CreateKnowledgeBaseAdmin' },
-    test_18_update_kb_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_UpdateKnowledgeBaseAdmin' },
-    test_19_update_file_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_UpdateFileAdmin' },
-  },
+      // Private gRPC tests (admin only)
+      test_14_get_object: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_GetObject' },
+      // test_15_get_object_url removed - GetObjectURLAdmin RPC was deprecated
+      test_16_update_object: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_UpdateObject' },
+      test_17_create_kb_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_CreateKnowledgeBaseAdmin' },
+      test_18_update_kb_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_UpdateKnowledgeBaseAdmin' },
+      test_19_update_file_admin: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_UpdateFileAdmin' },
+    },
+  }),
 };
+
+// Default function for CI mode - runs all tests sequentially
+export default function (data) {
+  if (!isCI) return; // In non-CI mode, scenarios handle execution
+
+  TEST_01_Health(data);
+  TEST_02_CreateKnowledgeBase(data);
+  TEST_03_ListKnowledgeBases(data);
+  TEST_04_GetKnowledgeBase(data);
+  TEST_05_UpdateKnowledgeBase(data);
+  TEST_06_DeleteKnowledgeBase(data);
+  TEST_07_UploadFile(data);
+  TEST_08_ListFiles(data);
+  TEST_09_GetFile(data);
+  TEST_10_CleanupOnDelete(data);
+  TEST_11_JWT_UploadFile(data);
+  TEST_12_JWT_ListFiles(data);
+  TEST_13_JWT_GetFile(data);
+  TEST_14_GetObject(data);
+  TEST_16_UpdateObject(data);
+  TEST_17_CreateKnowledgeBaseAdmin(data);
+  TEST_18_UpdateKnowledgeBaseAdmin(data);
+  TEST_19_UpdateFileAdmin(data);
+}
 
 export function setup() {
   check(true, { [constant.banner('Artifact API (gRPC): Setup')]: () => true });
@@ -147,11 +178,11 @@ export function TEST_01_Health(data) {
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
     check(
-      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/Liveness", {}),
+      publicClient.invoke("artifact.v1alpha.ArtifactPublicService/Liveness", {}),
       { "Liveness response status is StatusOK": (r) => r.status === grpc.StatusOK }
     );
     check(
-      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/Readiness", {}),
+      publicClient.invoke("artifact.v1alpha.ArtifactPublicService/Readiness", {}),
       { "Readiness response status is StatusOK": (r) => r.status === grpc.StatusOK }
     );
 
@@ -171,24 +202,24 @@ export function TEST_02_CreateKnowledgeBase(data) {
 
     const displayName = "Test " + data.dbIDPrefix + randomString(10);
     const req = {
-      namespaceId: data.expectedOwner.id,
-      knowledgeBase: {
-        displayName: displayName,
+      parent: `namespaces/${data.expectedOwner.id}`,
+      knowledge_base: {
+        display_name: displayName,
         description: randomString(30),
         tags: ["test", "grpc"],
         type: "KNOWLEDGE_BASE_TYPE_PERSISTENT"
       }
     };
-    const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", req, data.metadata);
+    const res = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", req, data.metadata);
 
     check(res, {
       "CreateKnowledgeBase response status is StatusOK": (r) => r.status === grpc.StatusOK,
-      "CreateKnowledgeBase response has knowledge base with hash-based id": (r) => r.message && r.message.knowledgeBase && r.message.knowledgeBase.id && /^[a-z][-a-z0-9]*-[a-f0-9]{8}$/.test(r.message.knowledgeBase.id),
+      "CreateKnowledgeBase response has knowledge base with hash-based id": (r) => r.message && r.message.knowledgeBase && r.message.knowledgeBase.id && /^kb-[A-Za-z0-9]+$/.test(r.message.knowledgeBase.id),
     });
 
     // Cleanup
     if (res.message && res.message.knowledgeBase) {
-      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: res.message.knowledgeBase.id }, data.metadata);
+      publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${res.message.knowledgeBase.id}` }, data.metadata);
     }
 
     publicClient.close();
@@ -202,7 +233,7 @@ export function TEST_03_ListKnowledgeBases(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListKnowledgeBases", { namespaceId: data.expectedOwner.id }, data.metadata);
+    const res = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/ListKnowledgeBases", { parent: `namespaces/${data.expectedOwner.id}` }, data.metadata);
     check(res, {
       "ListKnowledgeBases response status is StatusOK": (r) => r.status === grpc.StatusOK,
       "ListKnowledgeBases response knowledge_bases is array": (r) => Array.isArray(r.message.knowledgeBases),
@@ -220,17 +251,17 @@ export function TEST_04_GetKnowledgeBase(data) {
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
     const displayName = "Test " + data.dbIDPrefix + randomString(10);
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: displayName, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: displayName, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message.knowledgeBase;
 
-    const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListKnowledgeBases", { namespaceId: data.expectedOwner.id }, data.metadata);
+    const res = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/ListKnowledgeBases", { parent: `namespaces/${data.expectedOwner.id}` }, data.metadata);
     const found = Array.isArray(res.message.knowledgeBases) && res.message.knowledgeBases.some((c) => c.id === knowledgeBase.id);
 
     check(res, {
       "ListKnowledgeBases response includes created knowledge base": () => found,
     });
 
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     publicClient.close();
   });
 }
@@ -243,18 +274,17 @@ export function TEST_05_UpdateKnowledgeBase(data) {
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
     const displayName = "Test " + data.dbIDPrefix + randomString(10);
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: displayName, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: displayName, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message.knowledgeBase;
 
     const newDescription = randomString(25);
-    const uRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/UpdateKnowledgeBase", {
-      namespaceId: data.expectedOwner.id,
-      knowledgeBaseId: knowledgeBase.id,
-      knowledgeBase: {
+    const uRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/UpdateKnowledgeBase", {
+      knowledge_base: {
+        name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}`,
         description: newDescription,
         tags: ["test", "grpc", "updated"]
       },
-      update_mask: "description,tags"
+      update_mask: { paths: ["description", "tags"] }
     }, data.metadata);
 
     check(uRes, {
@@ -263,7 +293,7 @@ export function TEST_05_UpdateKnowledgeBase(data) {
       "UpdateKnowledgeBase response description applied": (r) => r.message.knowledgeBase.description === newDescription,
     });
 
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     publicClient.close();
   });
 }
@@ -276,10 +306,10 @@ export function TEST_06_DeleteKnowledgeBase(data) {
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
     const displayName = "Test " + data.dbIDPrefix + randomString(10);
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: displayName, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: displayName, description: randomString(20), tags: ["test", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message.knowledgeBase;
 
-    const res = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    const res = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     check(res, {
       "DeleteKnowledgeBase response status is StatusOK": (r) => r.status === grpc.StatusOK,
     });
@@ -298,25 +328,25 @@ export function TEST_07_UploadFile(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
+      { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message && cRes.message.knowledgeBase ? cRes.message.knowledgeBase : {};
 
-    const reqBody = { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } };
-    const resOrigin = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", reqBody, data.metadata);
+    const reqBody = { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base_id: knowledgeBase.id, file: { display_name: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } };
+    const resOrigin = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateFile", reqBody, data.metadata);
 
     check(resOrigin, {
       "CreateFile response status is StatusOK": (r) => r.status === grpc.StatusOK,
-      "CreateFile response file displayName": (r) => r.message.file.displayName === reqBody.file.displayName,
-      "CreateFile response file uid": (r) => helper.isUUID(r.message.file.uid),
+      "CreateFile response file display_name": (r) => r.message.file.displayName === reqBody.file.display_name,
+      "CreateFile response file id": (r) => r.message.file.id && r.message.file.id.length > 0,
       "CreateFile response file type": (r) => r.message.file.type === "TYPE_DOC",
       "CreateFile response file is valid": (r) => helper.validateFileGRPC(r.message.file, false),
     });
 
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: resOrigin.message.file.uid }, data.metadata);
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteFile", { name: `namespaces/${data.expectedOwner.id}/files/${resOrigin.message.file.id}` }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     publicClient.close();
   });
 }
@@ -328,7 +358,7 @@ export function TEST_08_ListFiles(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message && cRes.message.knowledgeBase ? cRes.message.knowledgeBase : {};
 
     if (!knowledgeBase.id) {
@@ -337,25 +367,25 @@ export function TEST_08_ListFiles(data) {
       return;
     }
 
-    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } }, data.metadata);
+    const fRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateFile", { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base_id: knowledgeBase.id, file: { display_name: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } }, data.metadata);
     const file = fRes.message && fRes.message.file ? fRes.message.file : null;
 
     if (!file) {
       console.log(`TEST_08_ListFiles: File creation failed, status=${fRes.status}`);
-      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+      publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
       publicClient.close();
       return;
     }
 
-    const resOrigin = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListFiles", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, pageSize: 10 }, data.metadata);
+    const resOrigin = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/ListFiles", { parent: `namespaces/${data.expectedOwner.id}`, page_size: 10 }, data.metadata);
     check(resOrigin, {
       "ListFiles response status is StatusOK": (r) => r.status === grpc.StatusOK,
       "ListFiles response files is array": (r) => r.message && Array.isArray(r.message.files)
     });
 
     // Cleanup
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: file.uid }, data.metadata);
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteFile", { name: `namespaces/${data.expectedOwner.id}/files/${file.id}` }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     publicClient.close();
   });
 }
@@ -367,21 +397,21 @@ export function TEST_09_GetFile(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase", { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } }, data.metadata);
     const knowledgeBase = cRes.message && cRes.message.knowledgeBase ? cRes.message.knowledgeBase : {};
-    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } }, data.metadata);
+    const fRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateFile", { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base_id: knowledgeBase.id, file: { display_name: data.dbIDPrefix + "test-file-grpc-" + randomString(5) + ".doc", type: "TYPE_DOC", content: constant.docSampleDoc } }, data.metadata);
     const file = fRes.message.file;
 
-    const resOrigin = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/GetFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: file.uid }, data.metadata);
+    const resOrigin = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/GetFile", { name: `namespaces/${data.expectedOwner.id}/files/${file.id}` }, data.metadata);
     check(resOrigin, {
       "GetFile response status is StatusOK": (r) => r.status === grpc.StatusOK,
-      "GetFile response file uid": (r) => r.message.file.uid === file.uid,
-      "GetFile response file displayName": (r) => r.message.file.displayName === file.displayName,
+      "GetFile response file id": (r) => r.message.file.id === file.id,
+      "GetFile response file display_name": (r) => r.message.file.displayName === file.displayName,
       "GetFile response file is valid": (r) => helper.validateFileGRPC(r.message.file, false)
     });
 
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: file.uid }, data.metadata);
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteFile", { name: `namespaces/${data.expectedOwner.id}/files/${file.id}` }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     publicClient.close();
   });
 }
@@ -394,25 +424,25 @@ export function TEST_10_CleanupOnDelete(data) {
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
     // Create knowledge base
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + "clf-" + randomString(5), description: "Cleanup test", tags: ["test", "cleanup"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
+      { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: "Test " + data.dbIDPrefix + "clf-" + randomString(5), description: "Cleanup test", tags: ["test", "cleanup"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message && cRes.message.knowledgeBase ? cRes.message.knowledgeBase : {};
 
     // Upload a PDF file
-    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
-      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "clf.pdf", type: "TYPE_PDF", content: constant.docSamplePdf } },
+    const fRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateFile",
+      { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base_id: knowledgeBase.id, file: { display_name: data.dbIDPrefix + "clf.pdf", type: "TYPE_PDF", content: constant.docSamplePdf } },
       data.metadata
     );
     const file = fRes.message && fRes.message.file ? fRes.message.file : {};
 
     check(fRes, {
-      "DeleteFile: File uploaded": (r) => r.status === grpc.StatusOK && file.uid,
+      "DeleteFile: File uploaded": (r) => r.status === grpc.StatusOK && file.id,
     });
 
-    if (!file.uid) {
-      publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    if (!file.id) {
+      publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
       publicClient.close();
       return;
     }
@@ -420,9 +450,15 @@ export function TEST_10_CleanupOnDelete(data) {
     // Wait for processing to create temporary files
     sleep(5);
 
+    // Get internal file_uid BEFORE deletion for database verification
+    const fileUid = helper.getFileUidFromId(file.id);
+    if (!fileUid) {
+      console.log(`DeleteFile: Could not get internal file_uid for fileId=${file.id}, skipping DB verification`);
+    }
+
     // Delete file (triggers CleanupFileWorkflow)
-    const dRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile",
-      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: file.uid },
+    const dRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteFile",
+      { name: `namespaces/${data.expectedOwner.id}/files/${file.id}` },
       data.metadata
     );
 
@@ -433,29 +469,31 @@ export function TEST_10_CleanupOnDelete(data) {
     // Wait for Temporal workflow cleanup
     sleep(10);
 
-    // Verify cleanup
-    const checkAfter = `
-      SELECT
-        (SELECT COUNT(*) FROM converted_file WHERE file_uid = '${file.uid}') as converted,
-        (SELECT COUNT(*) FROM chunk WHERE file_uid = '${file.uid}') as chunks,
-        (SELECT COUNT(*) FROM embedding WHERE file_uid = '${file.uid}') as embeddings
-    `;
-    try {
-      const result = constant.db.exec(checkAfter);
-      if (result && result.length > 0) {
-        const after = result[0];
-        check(after, {
-          "DeleteFile: Converted files removed": () => parseInt(after.converted) === 0,
-          "DeleteFile: Chunks removed": () => parseInt(after.chunks) === 0,
-          "DeleteFile: Embeddings removed": () => parseInt(after.embeddings) === 0,
-        });
+    // Verify database cleanup using the internal file_uid
+    if (fileUid) {
+      const checkAfter = `
+        SELECT
+          (SELECT COUNT(*) FROM converted_file WHERE file_uid = '${fileUid}') as converted,
+          (SELECT COUNT(*) FROM chunk WHERE file_uid = '${fileUid}') as chunks,
+          (SELECT COUNT(*) FROM embedding WHERE file_uid = '${fileUid}') as embeddings
+      `;
+      try {
+        const result = constant.db.exec(checkAfter);
+        if (result && result.length > 0) {
+          const after = result[0];
+          check(after, {
+            "DeleteFile: Converted files removed": () => parseInt(after.converted) === 0,
+            "DeleteFile: Chunks removed": () => parseInt(after.chunks) === 0,
+            "DeleteFile: Embeddings removed": () => parseInt(after.embeddings) === 0,
+          });
+        }
+      } catch (e) {
+        console.log(`DeleteFile: Database verification failed: ${e}`);
       }
-    } catch (e) {
-      // Cleanup verification failed
     }
 
     // Cleanup knowledge base
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     publicClient.close();
   });
 }
@@ -471,21 +509,21 @@ export function TEST_11_JWT_UploadFile(data) {
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
     // Create knowledge base with authorized metadata
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
+      { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message.knowledgeBase;
 
-    const reqBody = { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } };
+    const reqBody = { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base_id: knowledgeBase.id, file: { display_name: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } };
     // Invoke with invalid Authorization metadata
-    const resNeg = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile", reqBody, constant.paramsGRPCWithJwt);
+    const resNeg = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateFile", reqBody, constant.paramsGRPCWithJwt);
     check(resNeg, {
       "CreateFile unauthenticated/denied": (r) => r.status === grpc.StatusPermissionDenied,
     });
 
     // Cleanup
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     publicClient.close();
   });
 }
@@ -498,22 +536,22 @@ export function TEST_12_JWT_ListFiles(data) {
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
     // Create resources with authorized metadata
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
+      { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message.knowledgeBase;
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
-      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } },
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateFile",
+      { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base_id: knowledgeBase.id, file: { display_name: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } },
       data.metadata
     );
 
     // Negative: list with invalid Authorization
-    const resNeg = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/ListFiles", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, pageSize: 10 }, constant.paramsGRPCWithJwt);
+    const resNeg = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/ListFiles", { parent: `namespaces/${data.expectedOwner.id}`, page_size: 10 }, constant.paramsGRPCWithJwt);
     check(resNeg, { "ListFiles unauthenticated/denied": (r) => r.status === grpc.StatusPermissionDenied });
 
     // Cleanup
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     publicClient.close();
   });
 }
@@ -525,24 +563,24 @@ export function TEST_13_JWT_GetFile(data) {
 
     publicClient.connect(constant.artifactGRPCPublicHost, { plaintext: true });
 
-    const cRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
-      { namespaceId: data.expectedOwner.id, knowledgeBase: { displayName: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
+    const cRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateKnowledgeBase",
+      { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base: { display_name: "Test " + data.dbIDPrefix + randomString(10), description: randomString(30), tags: ["test", "integration", "grpc"], type: "KNOWLEDGE_BASE_TYPE_PERSISTENT" } },
       data.metadata
     );
     const knowledgeBase = cRes.message.knowledgeBase;
-    const fRes = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
-      { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, file: { displayName: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } },
+    const fRes = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/CreateFile",
+      { parent: `namespaces/${data.expectedOwner.id}`, knowledge_base_id: knowledgeBase.id, file: { display_name: data.dbIDPrefix + "test-file-grpc-jwt-" + randomString(5) + ".docx", type: "TYPE_DOCX", content: constant.docSampleDocx } },
       data.metadata
     );
     const file = fRes.message.file;
 
     // Negative: get file with invalid Authorization
-    const resNeg = publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/GetFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: file.uid }, constant.paramsGRPCWithJwt);
+    const resNeg = publicClient.invoke("artifact.v1alpha.ArtifactPublicService/GetFile", { name: `namespaces/${data.expectedOwner.id}/files/${file.id}` }, constant.paramsGRPCWithJwt);
     check(resNeg, { "GetFile unauthenticated/denied": (r) => r.status === grpc.StatusPermissionDenied });
 
     // Cleanup
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id, fileId: file.uid }, data.metadata);
-    publicClient.invoke("artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { namespaceId: data.expectedOwner.id, knowledgeBaseId: knowledgeBase.id }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteFile", { name: `namespaces/${data.expectedOwner.id}/files/${file.id}` }, data.metadata);
+    publicClient.invoke("artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase", { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBase.id}` }, data.metadata);
     publicClient.close();
   });
 }
@@ -569,7 +607,7 @@ export function TEST_14_GetObject(data) {
       return;
     }
 
-    var res = privateClient.invoke("artifact.artifact.v1alpha.ArtifactPrivateService/GetObjectAdmin", { uid: uid }, data.metadata);
+    var res = privateClient.invoke("artifact.v1alpha.ArtifactPrivateService/GetObjectAdmin", { uid: uid }, data.metadata);
     check(res, {
       "GetObject returns StatusOK": (r) => r.status === grpc.StatusOK,
       "GetObject returns object": (r) => !!r.message && !!r.message.object,
@@ -579,29 +617,7 @@ export function TEST_14_GetObject(data) {
   });
 }
 
-export function TEST_15_GetObjectURL(data) {
-  const groupName = "Artifact API: Get Object URL (private gRPC)";
-  group(groupName, () => {
-    check(true, { [constant.banner(groupName)]: () => true });
-
-    if (constant.apiGatewayMode) {
-      check(true, { "skipped: apiGatewayMode enabled": () => true });
-      return;
-    }
-
-    privateClient.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
-
-    const uid = constant.testObjectUrlUid;
-    const encoded = constant.testEncodedUrlPath;
-    if (!uid && !encoded) {
-      check(true, { "skipped: testObjectUrlUid or testEncodedUrlPath not provided": () => true });
-      privateClient.close();
-      return;
-    }
-
-    privateClient.close();
-  });
-}
+// TEST_15_GetObjectURL removed - GetObjectURLAdmin RPC was deprecated
 
 export function TEST_16_UpdateObject(data) {
   const groupName = "Artifact API: Update Object (private gRPC)";
@@ -622,7 +638,7 @@ export function TEST_16_UpdateObject(data) {
       return;
     }
 
-    var res = privateClient.invoke("artifact.artifact.v1alpha.ArtifactPrivateService/UpdateObjectAdmin",
+    var res = privateClient.invoke("artifact.v1alpha.ArtifactPrivateService/UpdateObjectAdmin",
       { uid: uid, isUploaded: true },
       data.metadata
     );
@@ -656,9 +672,9 @@ export function TEST_17_CreateKnowledgeBaseAdmin(data) {
     // Create a system knowledge base without a creator using the admin endpoint
     // Admin endpoints can set reserved tags that public APIs cannot (agent:, instill-)
     var createRes = privateClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
+      "artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
       {
-        namespace_id: constant.defaultUserId,
+        parent: `namespaces/${constant.defaultUserId}`,
         knowledge_base: {
           display_name: systemKbDisplayName,
           description: "System knowledge base created via admin endpoint (no creator)",
@@ -670,38 +686,36 @@ export function TEST_17_CreateKnowledgeBaseAdmin(data) {
     );
     check(createRes, {
       "CreateKnowledgeBaseAdmin returns StatusOK": (r) => r.status === grpc.StatusOK,
-      "CreateKnowledgeBaseAdmin returns knowledge_base": (r) => !!r.message && !!r.message.knowledge_base,
-      "CreateKnowledgeBaseAdmin returns hash-based id": (r) => r.message?.knowledge_base?.id && /^[a-z][-a-z0-9]*-[a-f0-9]{8}$/.test(r.message.knowledge_base.id),
-      "CreateKnowledgeBaseAdmin has no creator_uid": (r) => !r.message?.knowledge_base?.creator_uid || r.message?.knowledge_base?.creator_uid === "",
+      "CreateKnowledgeBaseAdmin returns knowledge_base": (r) => !!r.message && !!r.message.knowledgeBase,
+      "CreateKnowledgeBaseAdmin returns hash-based id": (r) => r.message?.knowledgeBase?.id && /^kb-[A-Za-z0-9]+$/.test(r.message.knowledgeBase.id),
+      "CreateKnowledgeBaseAdmin has no creator_uid": (r) => !r.message?.knowledgeBase?.creatorUid || r.message?.knowledgeBase?.creatorUid === "",
       "CreateKnowledgeBaseAdmin can use reserved tags": (r) => {
-        const tags = r.message?.knowledge_base?.tags || [];
+        const tags = r.message?.knowledgeBase?.tags || [];
         return tags.includes("instill-internal") && tags.includes("agent:system");
       },
     });
-    const systemKbId = createRes.message?.knowledge_base?.id;
+    const systemKbId = createRes.message?.knowledgeBase?.id;
 
     // Verify the KB exists by getting it via public API
     if (createRes.status === grpc.StatusOK) {
       var getRes = publicClient.invoke(
-        "artifact.artifact.v1alpha.ArtifactPublicService/GetKnowledgeBase",
+        "artifact.v1alpha.ArtifactPublicService/GetKnowledgeBase",
         {
-          namespace_id: constant.defaultUserId,
-          knowledge_base_id: systemKbId,
+          name: `namespaces/${constant.defaultUserId}/knowledge-bases/${systemKbId}`,
         },
         data.metadata
       );
       check(getRes, {
         "GetKnowledgeBase returns StatusOK": (r) => r.status === grpc.StatusOK,
-        "GetKnowledgeBase returns the system KB": (r) => r.message?.knowledge_base?.id === systemKbId,
-        "System KB has no creator_uid (null/empty)": (r) => !r.message?.knowledge_base?.creator_uid || r.message?.knowledge_base?.creator_uid === "",
+        "GetKnowledgeBase returns the system KB": (r) => r.message?.knowledgeBase?.id === systemKbId,
+        "System KB has no creator_uid (null/empty)": (r) => !r.message?.knowledgeBase?.creatorUid || r.message?.knowledgeBase?.creatorUid === "",
       });
 
       // Cleanup: Delete the test KB
       var deleteRes = publicClient.invoke(
-        "artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
+        "artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
         {
-          namespace_id: constant.defaultUserId,
-          knowledge_base_id: systemKbId,
+          name: `namespaces/${constant.defaultUserId}/knowledge-bases/${systemKbId}`,
         },
         data.metadata
       );
@@ -736,9 +750,9 @@ export function TEST_18_UpdateKnowledgeBaseAdmin(data) {
 
     // First create a system KB using admin endpoint
     var createRes = privateClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
+      "artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
       {
-        namespace_id: constant.defaultUserId,
+        parent: `namespaces/${constant.defaultUserId}`,
         knowledge_base: {
           display_name: testKbDisplayName,
           description: "KB for testing UpdateKnowledgeBaseAdmin",
@@ -757,15 +771,14 @@ export function TEST_18_UpdateKnowledgeBaseAdmin(data) {
       publicClient.close();
       return;
     }
-    const testKbId = createRes.message?.knowledge_base?.id;
+    const testKbId = createRes.message?.knowledgeBase?.id;
 
     // Update with reserved tags using admin endpoint - should succeed
     var updateRes = privateClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/UpdateKnowledgeBaseAdmin",
+      "artifact.v1alpha.ArtifactPrivateService/UpdateKnowledgeBaseAdmin",
       {
-        namespace_id: constant.defaultUserId,
-        knowledge_base_id: testKbId,
         knowledge_base: {
+          name: `namespaces/${constant.defaultUserId}/knowledge-bases/${testKbId}`,
           tags: ["instill-internal", "agent:system", "user-tag"],
         },
         update_mask: { paths: ["tags"] },
@@ -774,20 +787,19 @@ export function TEST_18_UpdateKnowledgeBaseAdmin(data) {
     );
     check(updateRes, {
       "UpdateKnowledgeBaseAdmin returns StatusOK": (r) => r.status === grpc.StatusOK,
-      "UpdateKnowledgeBaseAdmin returns knowledge_base": (r) => !!r.message?.knowledge_base,
+      "UpdateKnowledgeBaseAdmin returns knowledge_base": (r) => !!r.message?.knowledgeBase,
       "UpdateKnowledgeBaseAdmin can set reserved tags": (r) => {
-        const tags = r.message?.knowledge_base?.tags || [];
+        const tags = r.message?.knowledgeBase?.tags || [];
         return tags.includes("instill-internal") && tags.includes("agent:system");
       },
     });
 
     // Verify public API cannot set reserved tags
     var publicUpdateRes = publicClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPublicService/UpdateKnowledgeBase",
+      "artifact.v1alpha.ArtifactPublicService/UpdateKnowledgeBase",
       {
-        namespace_id: constant.defaultUserId,
-        knowledge_base_id: testKbId,
         knowledge_base: {
+          name: `namespaces/${constant.defaultUserId}/knowledge-bases/${testKbId}`,
           tags: ["instill-blocked-tag"],
         },
         update_mask: { paths: ["tags"] },
@@ -800,10 +812,9 @@ export function TEST_18_UpdateKnowledgeBaseAdmin(data) {
 
     // Cleanup
     var deleteRes = publicClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
+      "artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
       {
-        namespace_id: constant.defaultUserId,
-        knowledge_base_id: testKbId,
+        name: `namespaces/${constant.defaultUserId}/knowledge-bases/${testKbId}`,
       },
       data.metadata
     );
@@ -837,9 +848,9 @@ export function TEST_19_UpdateFileAdmin(data) {
 
     // Create a KB for file testing
     var createKbRes = privateClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
+      "artifact.v1alpha.ArtifactPrivateService/CreateKnowledgeBaseAdmin",
       {
-        namespace_id: constant.defaultUserId,
+        parent: `namespaces/${constant.defaultUserId}`,
         knowledge_base: {
           display_name: testKbDisplayName,
           description: "KB for testing UpdateFileAdmin",
@@ -857,16 +868,16 @@ export function TEST_19_UpdateFileAdmin(data) {
       publicClient.close();
       return;
     }
-    const testKbId = createKbRes.message?.knowledge_base?.id;
+    const testKbId = createKbRes.message?.knowledgeBase?.id;
 
     // Create a file using public API
     var createFileRes = publicClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPublicService/CreateFile",
+      "artifact.v1alpha.ArtifactPublicService/CreateFile",
       {
-        namespace_id: constant.defaultUserId,
+        parent: `namespaces/${constant.defaultUserId}`,
         knowledge_base_id: testKbId,
         file: {
-          displayName: "test-admin-update.txt",
+          display_name: "test-admin-update.txt",
           type: "TYPE_TEXT",
         },
       },
@@ -879,8 +890,8 @@ export function TEST_19_UpdateFileAdmin(data) {
     if (createFileRes.status !== grpc.StatusOK) {
       // Cleanup KB
       publicClient.invoke(
-        "artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
-        { namespace_id: constant.defaultUserId, knowledge_base_id: testKbId },
+        "artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
+        { name: `namespaces/${constant.defaultUserId}/knowledge-bases/${testKbId}` },
         data.metadata
       );
       privateClient.close();
@@ -888,16 +899,14 @@ export function TEST_19_UpdateFileAdmin(data) {
       return;
     }
 
-    const fileUid = createFileRes.message?.file?.uid;
+    const fileId = createFileRes.message?.file?.id;
 
     // Update file with reserved tags using admin endpoint - should succeed
     var updateFileRes = privateClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPrivateService/UpdateFileAdmin",
+      "artifact.v1alpha.ArtifactPrivateService/UpdateFileAdmin",
       {
-        namespace_id: constant.defaultUserId,
-        knowledge_base_id: testKbId,
-        file_id: fileUid,
         file: {
+          name: `namespaces/${constant.defaultUserId}/files/${fileId}`,
           tags: ["agent:collection:fake-uid-123", "user-tag"],
         },
         update_mask: { paths: ["tags"] },
@@ -915,12 +924,10 @@ export function TEST_19_UpdateFileAdmin(data) {
 
     // Verify public API cannot set reserved tags on files
     var publicUpdateRes = publicClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPublicService/UpdateFile",
+      "artifact.v1alpha.ArtifactPublicService/UpdateFile",
       {
-        namespace_id: constant.defaultUserId,
-        knowledge_base_id: testKbId,
-        file_id: fileUid,
         file: {
+          name: `namespaces/${constant.defaultUserId}/files/${fileId}`,
           tags: ["agent:blocked-tag"],
         },
         update_mask: { paths: ["tags"] },
@@ -933,17 +940,15 @@ export function TEST_19_UpdateFileAdmin(data) {
 
     // Cleanup
     publicClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPublicService/DeleteFile",
+      "artifact.v1alpha.ArtifactPublicService/DeleteFile",
       {
-        namespace_id: constant.defaultUserId,
-        knowledge_base_id: testKbId,
-        file_id: fileUid,
+        name: `namespaces/${constant.defaultUserId}/files/${fileId}`,
       },
       data.metadata
     );
     publicClient.invoke(
-      "artifact.artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
-      { namespace_id: constant.defaultUserId, knowledge_base_id: testKbId },
+      "artifact.v1alpha.ArtifactPublicService/DeleteKnowledgeBase",
+      { name: `namespaces/${constant.defaultUserId}/knowledge-bases/${testKbId}` },
       data.metadata
     );
 

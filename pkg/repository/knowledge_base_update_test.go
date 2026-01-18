@@ -5,7 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 func TestIsUpdateInProgress(t *testing.T) {
@@ -109,54 +109,6 @@ func TestIsUpdateComplete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := IsUpdateComplete(tt.status)
-			c.Check(result, qt.Equals, tt.expected)
-		})
-	}
-}
-
-func TestIsDualProcessingNeeded(t *testing.T) {
-	c := qt.New(t)
-
-	tests := []struct {
-		name     string
-		status   string
-		expected bool
-	}{
-		{
-			name:     "UPDATING status - needs dual processing",
-			status:   artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String(),
-			expected: true,
-		},
-		{
-			name:     "SWAPPING status - needs dual processing",
-			status:   artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_SWAPPING.String(),
-			expected: true,
-		},
-		{
-			name:     "COMPLETED status - needs dual processing (retention period)",
-			status:   artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_COMPLETED.String(),
-			expected: true,
-		},
-		{
-			name:     "ROLLED_BACK status - needs dual processing (retention period)",
-			status:   artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String(),
-			expected: true,
-		},
-		{
-			name:     "FAILED status - no dual processing",
-			status:   artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String(),
-			expected: false,
-		},
-		{
-			name:     "Empty status - no dual processing",
-			status:   "",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := IsDualProcessingNeeded(tt.status)
 			c.Check(result, qt.Equals, tt.expected)
 		})
 	}
@@ -391,7 +343,7 @@ func TestKnowledgeBaseColumns(t *testing.T) {
 
 	// Test that column constants are properly defined
 	c.Check(KnowledgeBaseColumn.UID, qt.Equals, "uid")
-	c.Check(KnowledgeBaseColumn.KBID, qt.Equals, "id")
+	c.Check(KnowledgeBaseColumn.ID, qt.Equals, "id")
 	c.Check(KnowledgeBaseColumn.Description, qt.Equals, "description")
 	c.Check(KnowledgeBaseColumn.Tags, qt.Equals, "tags")
 	c.Check(KnowledgeBaseColumn.NamespaceUID, qt.Equals, "namespace_uid")

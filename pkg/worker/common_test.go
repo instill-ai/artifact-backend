@@ -4,55 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gofrs/uuid"
-	"github.com/gojuno/minimock/v3"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 )
 
-func TestGetFileByUID_Success(t *testing.T) {
-	c := qt.New(t)
-	mc := minimock.NewController(t)
-
-	ctx := context.Background()
-	fileUID := uuid.Must(uuid.NewV4())
-	expectedFile := repository.KnowledgeBaseFileModel{
-		UID:      fileUID,
-		DisplayName: "test.pdf",
-	}
-
-	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
-		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{expectedFile}, nil)
-
-	file, err := getFileByUID(ctx, mockRepository, fileUID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(file, qt.DeepEquals, expectedFile)
-}
-
-func TestGetFileByUID_NotFound(t *testing.T) {
-	c := qt.New(t)
-	mc := minimock.NewController(t)
-
-	ctx := context.Background()
-	fileUID := uuid.Must(uuid.NewV4())
-
-	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
-		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{}, nil)
-
-	file, err := getFileByUID(ctx, mockRepository, fileUID)
-	c.Assert(err, qt.Not(qt.IsNil))
-	c.Assert(err.Error(), qt.Contains, "not found")
-	c.Assert(file, qt.DeepEquals, repository.KnowledgeBaseFileModel{})
-}
+// NOTE: Tests for getFileByUID were removed as the function was removed during dead code cleanup.
 
 func TestExtractRequestMetadata_Success(t *testing.T) {
 	c := qt.New(t)

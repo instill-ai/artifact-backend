@@ -6,7 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	healthcheckpb "github.com/instill-ai/protogen-go/common/healthcheck/v1beta"
 )
 

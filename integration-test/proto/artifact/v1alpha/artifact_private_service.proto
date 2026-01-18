@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-package artifact.artifact.v1alpha;
+package artifact.v1alpha;
 
-import "artifact/artifact/v1alpha/file.proto";
-import "artifact/artifact/v1alpha/knowledge_base.proto";
-import "artifact/artifact/v1alpha/object.proto";
-import "artifact/artifact/v1alpha/system.proto";
-import "artifact/artifact/v1alpha/update.proto";
+import "artifact/v1alpha/file.proto";
+import "artifact/v1alpha/knowledge_base.proto";
+import "artifact/v1alpha/object.proto";
+import "artifact/v1alpha/system.proto";
+import "artifact/v1alpha/update.proto";
 
 // ArtifactPrivateService exposes the private endpoints that allow clients to
 // manage artifacts.

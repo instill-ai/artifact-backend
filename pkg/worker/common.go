@@ -10,8 +10,6 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
-	"github.com/instill-ai/artifact-backend/pkg/repository"
-	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	errorsx "github.com/instill-ai/x/errors"
 )
@@ -76,20 +74,6 @@ func activityErrorNonRetryableFlat(message string, errorType string, cause error
 // Used when we only have a message and type, no underlying cause error.
 func activityErrorSimple(message string, errorType string) error {
 	return temporal.NewApplicationError(message, errorType)
-}
-
-// getFileByUID is a helper function to retrieve a single file by UID.
-// It returns the file or an error if not found.
-func getFileByUID(ctx context.Context, repo repository.Repository, fileUID types.FileUIDType) (repository.KnowledgeBaseFileModel, error) {
-	files, err := repo.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
-	if err != nil {
-		return repository.KnowledgeBaseFileModel{}, errorsx.AddMessage(err, "Unable to retrieve file information. Please try again.")
-	}
-	if len(files) == 0 {
-		err := errorsx.AddMessage(errorsx.ErrNotFound, "File not found. It may have been deleted.")
-		return repository.KnowledgeBaseFileModel{}, err
-	}
-	return files[0], nil
 }
 
 // extractRequestMetadata extracts the gRPC metadata from a file's ExternalMetadataE

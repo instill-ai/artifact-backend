@@ -1,9 +1,9 @@
 syntax = "proto3";
 
-package artifact.artifact.v1alpha;
+package artifact.v1alpha;
 
 // Artifact definitions
-import "artifact/artifact/v1alpha/knowledge_base.proto";
+import "artifact/v1alpha/knowledge_base.proto";
 
 // KnowledgeBaseUpdateStatus represents the various states of a Knowledge Base update lifecycle
 enum KnowledgeBaseUpdateStatus {

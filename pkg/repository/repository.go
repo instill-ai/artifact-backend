@@ -8,7 +8,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 // Type aliases to help minimock detect imports from embedded interfaces
@@ -22,11 +22,11 @@ type Repository interface {
 	// KnowledgeBase manages knowledge base CRUD operations and listings
 	KnowledgeBase
 	// KnowledgeBaseFile manages files within knowledge bases including upload and processing
-	KnowledgeBaseFile
+	File
 	// ConvertedFile handles converted file operations (e.g., PDF to markdown conversions)
 	ConvertedFile
 	// TextChunk manages text chunks extracted from files for RAG and search
-	TextChunk
+	Chunk
 	// Embedding manages vector embeddings for semantic search and similarity matching
 	Embedding
 	// Object manages object metadata and CRUD operations
@@ -64,6 +64,15 @@ func NewRepository(db *gorm.DB, vectorDatabase VectorDatabase, minioStorage obje
 		minioStorage:   minioStorage,
 		gcsStorage:     gcsStorage,
 		Cache:          NewCache(redisClient),
+	}
+}
+
+// NewDBOnlyRepository returns a minimal repository with only database access.
+// This is used for initialization processes like seeding default systems.
+// Note: Methods requiring vectorDB, MinIO, or Redis will panic if called.
+func NewDBOnlyRepository(db *gorm.DB) Repository {
+	return &repository{
+		db: db,
 	}
 }
 

@@ -21,7 +21,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	filetype "github.com/instill-ai/x/file"
 )
@@ -46,9 +46,9 @@ import (
 //      Note: Both activities return symmetric data structures for consistent processing
 //
 // 4. Chunking & Embedding Phase:
-//    - ChunkContentActivity - Splits content/summary into manageable text chunks
-//    - DeleteOldTextChunksActivity - Removes outdated text chunks before saving new ones
-//    - SaveTextChunksActivity - Persists text chunks to database and MinIO storage
+//    - ChunkContentActivity - Splits content/summary into manageable chunks
+//    - DeleteOldTextChunksActivity - Removes outdated chunks before saving new ones
+//    - SaveChunksActivity - Persists chunks to database and MinIO storage
 //      Content chunks reference content converted_file UID
 //      Summary chunks reference summary converted_file UID (separate source_uid)
 //    - (EmbedAndSaveChunksActivity - in embed_activity.go, combined: queries chunks, embeds, saves)
@@ -92,7 +92,7 @@ const (
 	updateConversionMetadataActivityError       = "UpdateConversionMetadataActivity"
 	updateUsageMetadataActivityError            = "UpdateUsageMetadataActivity"
 	deleteOldTextChunksActivityError            = "DeleteOldTextChunksActivity"
-	saveTextChunksActivityError                 = "SaveTextChunksActivity"
+	saveChunksActivityError                     = "SaveChunksActivity"
 	standardizeFileTypeActivityError            = "StandardizeFileTypeActivity"
 	processContentActivityError                 = "ProcessContentActivity"
 	processSummaryActivityError                 = "ProcessSummaryActivity"
@@ -108,10 +108,10 @@ type GetFileMetadataActivityParam struct {
 
 // GetFileMetadataActivityResult contains file and KB configuration
 type GetFileMetadataActivityResult struct {
-	File               *repository.KnowledgeBaseFileModel // File metadata from database
-	ExternalMetadata   *structpb.Struct                   // External metadata from request
-	KBModelFamily      string                             // KB's model family (e.g., "openai", "gemini") - used for caching decisions
-	DualProcessingInfo *repository.DualProcessingTarget   // Dual-processing target info (if needed) - used for sequential coordination after completion
+	File               *repository.FileModel            // File metadata from database
+	ExternalMetadata   *structpb.Struct                 // External metadata from request
+	KBModelFamily      string                           // KB's model family (e.g., "openai", "gemini") - used for caching decisions
+	DualProcessingInfo *repository.DualProcessingTarget // Dual-processing target info (if needed) - used for sequential coordination after completion
 }
 
 // GetFileContentActivityParam for retrieving file content from MinIO
@@ -128,7 +128,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Get file metadata
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
+	files, err := w.repository.GetFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
 	if err != nil {
 		return nil, activityErrorWithCauseFlat(
 			errorsx.MessageOrErr(err),
@@ -182,7 +182,7 @@ func (w *Worker) GetFileMetadataActivity(ctx context.Context, param *GetFileMeta
 		// This is a staging or rollback KB - no dual-processing needed
 		w.log.Debug("Skipping dual-processing check (staging/rollback KB)",
 			zap.String("kbUID", param.KBUID.String()),
-			zap.String("kbID", kb.KBID))
+			zap.String("kbID", kb.ID))
 	} else {
 		// This is a production KB - check if we need to trigger target files
 		dualTarget, err := w.repository.GetDualProcessingTarget(ctx, kb)
@@ -341,7 +341,7 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 		w.log.Info("DeleteOldConvertedFilesActivity: Deleting old converted file",
 			zap.String("oldConvertedFileUID", file.UID.String()),
 			zap.String("convertedType", file.ConvertedType),
-			zap.String("destination", file.Destination))
+			zap.String("storagePath", file.StoragePath))
 
 		// CRITICAL: Delete old chunk blobs FIRST (before deleting converted_file DB record)
 		// This is necessary because chunks reference the converted_file UID
@@ -354,7 +354,7 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 		} else if len(oldChunks) > 0 {
 			oldChunkPaths := make([]string, len(oldChunks))
 			for i, chunk := range oldChunks {
-				oldChunkPaths[i] = chunk.ContentDest
+				oldChunkPaths[i] = chunk.StoragePath
 			}
 			w.log.Info("DeleteOldConvertedFilesActivity: Deleting old chunk blobs",
 				zap.String("convertedFileUID", file.UID.String()),
@@ -379,10 +379,10 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 		// Delete converted file from MinIO
 		// Note: MinIO DeleteFile is idempotent - if file doesn't exist, it succeeds.
 		// Any error returned here is a real error (network, permissions, etc.) that should be retried.
-		err = w.repository.GetMinIOStorage().DeleteFile(ctx, config.Config.Minio.BucketName, file.Destination)
+		err = w.repository.GetMinIOStorage().DeleteFile(ctx, config.Config.Minio.BucketName, file.StoragePath)
 		if err != nil {
 			w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old converted file from MinIO",
-				zap.String("destination", file.Destination),
+				zap.String("storagePath", file.StoragePath),
 				zap.Error(err))
 			return activityErrorWithCauseFlat(
 				fmt.Sprintf("Failed to delete old converted file from MinIO: %s", errorsx.MessageOrErr(err)),
@@ -422,13 +422,13 @@ func (w *Worker) CreateConvertedFileRecordActivity(ctx context.Context, param *C
 		zap.String("convertedFileUID", param.ConvertedFileUID.String()))
 
 	convertedFile := repository.ConvertedFileModel{
-		UID:           param.ConvertedFileUID,
-		KBUID:         param.KBUID,
-		FileUID:       param.FileUID,
-		ContentType:   "text/markdown",
-		ConvertedType: param.ConvertedType.String(),
-		Destination:   param.Destination,
-		PositionData:  param.PositionData,
+		UID:              param.ConvertedFileUID,
+		KnowledgeBaseUID: param.KBUID,
+		FileUID:          param.FileUID,
+		ContentType:      "text/markdown",
+		ConvertedType:    param.ConvertedType.String(),
+		StoragePath:      param.Destination,
+		PositionData:     param.PositionData,
 	}
 
 	createdFile, err := w.repository.CreateConvertedFileWithDestination(ctx, convertedFile)
@@ -506,8 +506,8 @@ func (w *Worker) UpdateConvertedFileDestinationActivity(ctx context.Context, par
 		zap.String("convertedFileUID", param.ConvertedFileUID.String()),
 		zap.String("destination", param.Destination))
 
-	// Update the destination
-	update := map[string]any{"destination": param.Destination}
+	// Update the storage_path
+	update := map[string]any{"storage_path": param.Destination}
 	err := w.repository.UpdateConvertedFile(ctx, param.ConvertedFileUID, update)
 	if err != nil {
 		w.log.Error("UpdateConvertedFileDestinationActivity: Failed to update destination",
@@ -567,7 +567,7 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 		SummarizingPipe: summaryPipeline,
 	}
 
-	err := w.repository.UpdateKnowledgeFileMetadata(ctx, param.FileUID, mdUpdate)
+	err := w.repository.UpdateFileMetadata(ctx, param.FileUID, mdUpdate)
 	if err != nil {
 		// If file not found, it may have been deleted during processing - this is OK
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -638,7 +638,7 @@ func (w *Worker) UpdateUsageMetadataActivity(ctx context.Context, param *UpdateU
 	}
 
 	// Update file record with usage metadata using the repository method
-	err := w.repository.UpdateKnowledgeFileUsageMetadata(ctx, param.FileUID, usageMetadata)
+	err := w.repository.UpdateFileUsageMetadata(ctx, param.FileUID, usageMetadata)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			w.log.Info("UpdateUsageMetadataActivity: File not found (may have been deleted), skipping metadata update",
@@ -664,7 +664,7 @@ func (w *Worker) UpdateUsageMetadataActivity(ctx context.Context, param *UpdateU
 type ChunkContentActivityParam struct {
 	FileUID      types.FileUIDType     // File unique identifier
 	KBUID        types.KBUIDType       // Knowledge base unique identifier
-	Content      string                // Content to chunk into text chunks
+	Content      string                // Content to chunk into chunks
 	Metadata     *structpb.Struct      // Request metadata for authentication
 	Type         artifactpb.Chunk_Type // Type of chunk: TYPE_CONTENT or TYPE_SUMMARY
 	PositionData *types.PositionData   // Position data from conversion (page delimiters)
@@ -672,7 +672,7 @@ type ChunkContentActivityParam struct {
 
 // ChunkContentActivityResult contains chunked content
 type ChunkContentActivityResult struct {
-	TextChunks []types.TextChunk // Generated text chunks
+	Chunks []types.Chunk // Generated chunks
 }
 
 // ChunkContentActivity chunks content by pages using position data
@@ -692,21 +692,21 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		// This estimation is inaccurate and should be replaced with actual token counts from the AI model
 		// For now, we use a simple heuristic: 1 token ≈ 4 characters
 		tokens := ai.EstimateTokenCount(param.Content)
-		chunk := types.TextChunk{
+		chunk := types.Chunk{
 			Text:   param.Content,
 			Start:  0,
 			End:    len(param.Content),
 			Tokens: tokens,
-			Reference: &types.TextChunkReference{
+			Reference: &types.ChunkReference{
 				PageRange: [2]uint32{1, 1}, // Treat as single-page file
 			},
 			Type: param.Type, // Set type (chunk or summary)
 		}
-		w.log.Info("ChunkContentActivity: Created single text chunk",
+		w.log.Info("ChunkContentActivity: Created single chunk",
 			zap.Int("contentLength", len(param.Content)),
 			zap.Int("tokens", tokens))
 		return &ChunkContentActivityResult{
-			TextChunks: []types.TextChunk{chunk},
+			Chunks: []types.Chunk{chunk},
 		}, nil
 	}
 
@@ -723,21 +723,21 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		// Fall back to single chunk for summaries or mismatched content
 		// TODO: Replace EstimateTokenCount with actual AI token count from CountTokens API
 		tokens := ai.EstimateTokenCount(param.Content)
-		chunk := types.TextChunk{
+		chunk := types.Chunk{
 			Text:   param.Content,
 			Start:  0,
 			End:    len(param.Content),
 			Tokens: tokens,
-			Reference: &types.TextChunkReference{
+			Reference: &types.ChunkReference{
 				PageRange: [2]uint32{1, 1}, // Treat as single-page file
 			},
 			Type: param.Type, // Set type (chunk or summary)
 		}
-		w.log.Info("ChunkContentActivity: Created single text chunk (fallback)",
+		w.log.Info("ChunkContentActivity: Created single chunk (fallback)",
 			zap.Int("contentLength", len(param.Content)),
 			zap.Int("tokens", tokens))
 		return &ChunkContentActivityResult{
-			TextChunks: []types.TextChunk{chunk},
+			Chunks: []types.Chunk{chunk},
 		}, nil
 	}
 
@@ -745,7 +745,7 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 	w.log.Info("ChunkContentActivity: Chunking by page delimiters",
 		zap.Int("pageCount", len(param.PositionData.PageDelimiters)))
 
-	chunks := make([]types.TextChunk, 0, len(param.PositionData.PageDelimiters))
+	chunks := make([]types.Chunk, 0, len(param.PositionData.PageDelimiters))
 	var startPos uint32
 
 	for pageNum, endPos := range param.PositionData.PageDelimiters {
@@ -769,12 +769,12 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		// Create chunk for this page
 		// TODO: Replace EstimateTokenCount with actual AI token count from CountTokens API
 		tokens := ai.EstimateTokenCount(pageText)
-		chunk := types.TextChunk{
+		chunk := types.Chunk{
 			Text:   pageText,
 			Start:  int(startPos),
 			End:    int(endPos),
 			Tokens: tokens,
-			Reference: &types.TextChunkReference{
+			Reference: &types.ChunkReference{
 				PageRange: [2]uint32{uint32(pageNum + 1), uint32(pageNum + 1)}, // Single page
 			},
 			Type: param.Type, // Set type (chunk or summary)
@@ -789,75 +789,75 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		zap.Int("pageCount", len(param.PositionData.PageDelimiters)))
 
 	return &ChunkContentActivityResult{
-		TextChunks: chunks,
+		Chunks: chunks,
 	}, nil
 }
 
-// DeleteOldTextChunksActivityParam for deleting old text chunk DB records
+// DeleteOldTextChunksActivityParam for deleting old chunk DB records
 type DeleteOldTextChunksActivityParam struct {
 	FileUID types.FileUIDType // File unique identifier
 }
 
-// DeleteOldTextChunksActivity deletes old text chunk DB records for a file
+// DeleteOldTextChunksActivity deletes old chunk DB records for a file
 // Note: Chunk blobs are deleted by DeleteOldConvertedFilesActivity (when converted files are deleted)
 // This activity only deletes the chunk table records
 func (w *Worker) DeleteOldTextChunksActivity(ctx context.Context, param *DeleteOldTextChunksActivityParam) error {
-	w.log.Info("DeleteOldTextChunksActivity: Deleting old text chunk records",
+	w.log.Info("DeleteOldTextChunksActivity: Deleting old chunk records",
 		zap.String("fileUID", param.FileUID.String()))
 
-	// Delete all text chunk records for this file from the database
+	// Delete all chunk records for this file from the database
 	// This uses hard delete (Unscoped) to remove records completely
 	err := w.repository.HardDeleteTextChunksByKBFileUID(ctx, param.FileUID)
 	if err != nil {
-		w.log.Error("DeleteOldTextChunksActivity: Failed to delete text chunk records",
+		w.log.Error("DeleteOldTextChunksActivity: Failed to delete chunk records",
 			zap.String("fileUID", param.FileUID.String()),
 			zap.Error(err))
 		return activityErrorWithCauseFlat(
-			fmt.Sprintf("Failed to delete old text chunk records: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to delete old chunk records: %s", errorsx.MessageOrErr(err)),
 			deleteOldTextChunksActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("DeleteOldTextChunksActivity: Successfully deleted old text chunk records",
+	w.log.Info("DeleteOldTextChunksActivity: Successfully deleted old chunk records",
 		zap.String("fileUID", param.FileUID.String()))
 
 	return nil
 }
 
-// SaveTextChunksActivityParam for saving text chunks to database and MinIO
-type SaveTextChunksActivityParam struct {
+// SaveChunksActivityParam for saving chunks to database and MinIO
+type SaveChunksActivityParam struct {
 	FileUID          types.FileUIDType          // File unique identifier
 	KBUID            types.KBUIDType            // Knowledge base unique identifier
-	TextChunks       []types.TextChunk          // Text chunks to save
+	Chunks           []types.Chunk              // Chunks to save
 	ConvertedFileUID types.ConvertedFileUIDType // Converted file UID (content or summary)
 }
 
-// SaveTextChunksActivityResult contains saved text chunk UIDs from SaveTextChunksActivity
-type SaveTextChunksActivityResult struct {
-	TextChunkUIDs []types.TextChunkUIDType // Saved text chunk unique identifiers
+// SaveChunksActivityResult contains saved chunk UIDs from SaveChunksActivity
+type SaveChunksActivityResult struct {
+	ChunkUIDs []types.ChunkUIDType // Saved chunk unique identifiers
 }
 
-// SaveTextChunksActivity saves text chunks to database and MinIO storage
+// SaveChunksActivity saves chunks to database and MinIO storage
 // Note: Old data cleanup is handled at workflow level before this activity:
 //   - Chunk blobs: DeleteOldConvertedFilesActivity (when converted files are deleted)
 //   - Chunk DB records: DeleteOldTextChunksActivity
 //
 // This activity only creates new chunks without performing any deletion
-func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChunksActivityParam) (*SaveTextChunksActivityResult, error) {
-	w.log.Info("SaveTextChunksActivity: Saving text chunks to database and MinIO",
+func (w *Worker) SaveChunksActivity(ctx context.Context, param *SaveChunksActivityParam) (*SaveChunksActivityResult, error) {
+	w.log.Info("SaveChunksActivity: Saving chunks to database and MinIO",
 		zap.String("fileUID", param.FileUID.String()),
-		zap.Int("chunkCount", len(param.TextChunks)))
+		zap.Int("chunkCount", len(param.Chunks)))
 
 	// Use the provided converted file UID (either content or summary converted_file)
 	convertedFileUID := param.ConvertedFileUID
 
-	w.log.Info("SaveTextChunksActivity: Using converted file UID",
+	w.log.Info("SaveChunksActivity: Using converted file UID",
 		zap.String("convertedFileUID", convertedFileUID.String()))
 
 	// Chunks already have page references from ChunkContentActivity
 	// No need to add them again
-	chunksWithReferences := param.TextChunks
+	chunksWithReferences := param.Chunks
 
 	// Log how many chunks already have references
 	chunksWithRefs := 0
@@ -866,54 +866,54 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 			chunksWithRefs++
 		}
 	}
-	w.log.Info("SaveTextChunksActivity: Chunks with references",
+	w.log.Info("SaveChunksActivity: Chunks with references",
 		zap.Int("totalChunks", len(chunksWithReferences)),
 		zap.Int("chunksWithRefs", chunksWithRefs))
 
 	// IMPORTANT: Save chunks to database and upload to MinIO
-	// Step 1: Create text chunk models
-	textChunks := make([]*repository.TextChunkModel, len(chunksWithReferences))
+	// Step 1: Create chunk models
+	chunks := make([]*repository.ChunkModel, len(chunksWithReferences))
 	texts := make([]string, len(chunksWithReferences))
 	for i, c := range chunksWithReferences {
 		// Convert protobuf Chunk.Type enum to string for database storage using .String() method
 		if c.Type == artifactpb.Chunk_TYPE_UNSPECIFIED {
-			w.log.Warn("SaveTextChunksActivity: Type is UNSPECIFIED, defaulting to content",
+			w.log.Warn("SaveChunksActivity: Type is UNSPECIFIED, defaulting to content",
 				zap.Int("chunkIndex", i),
 				zap.String("fileUID", param.FileUID.String()))
 		}
 
-		textChunks[i] = &repository.TextChunkModel{
-			SourceUID:   convertedFileUID, // Use the provided converted file UID (content or summary)
-			SourceTable: repository.ConvertedFileTableName,
-			StartPos:    c.Start,
-			EndPos:      c.End,
-			Reference:   c.Reference,
-			ContentDest: "pending", // Placeholder, will be updated after MinIO save
-			Tokens:      c.Tokens,
-			Retrievable: true,
-			InOrder:     i,
-			KBUID:       param.KBUID,
-			FileUID:     param.FileUID,
-			ContentType: "text/markdown",
-			ChunkType:   c.Type.String(),
+		chunks[i] = &repository.ChunkModel{
+			SourceUID:        convertedFileUID, // Use the provided converted file UID (content or summary)
+			SourceTable:      repository.ConvertedFileTableName,
+			StartPos:         c.Start,
+			EndPos:           c.End,
+			Reference:        c.Reference,
+			StoragePath:      "pending", // Placeholder, will be updated after MinIO save
+			Tokens:           c.Tokens,
+			Retrievable:      true,
+			InOrder:          i,
+			KnowledgeBaseUID: param.KBUID,
+			FileUID:          param.FileUID,
+			ContentType:      "text/markdown",
+			ChunkType:        c.Type.String(),
 		}
 		texts[i] = c.Text
 	}
 
-	// Step 2: Save text chunks to database with placeholder destinations
+	// Step 2: Save chunks to database with placeholder destinations
 	// Note: Old chunks are deleted by DeleteOldTextChunksActivity at workflow level
 	// This activity only creates new chunks
-	err := w.repository.CreateTextChunks(ctx, textChunks)
+	err := w.repository.CreateChunks(ctx, chunks)
 	if err != nil {
 		return nil, activityErrorWithCauseFlat(
-			fmt.Sprintf("Failed to save text chunks to database: %s", errorsx.MessageOrErr(err)),
-			saveTextChunksActivityError,
+			fmt.Sprintf("Failed to save chunks to database: %s", errorsx.MessageOrErr(err)),
+			saveChunksActivityError,
 			err,
 		)
 	}
-	createdChunks := textChunks
+	createdChunks := chunks
 
-	// Step 3: Upload text chunks to MinIO after DB transaction commits
+	// Step 3: Upload chunks to MinIO after DB transaction commits
 	destinations := make(map[string]string, len(createdChunks))
 	for i, chunk := range createdChunks {
 		chunkUID := chunk.UID.String()
@@ -922,10 +922,10 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 		basePath := fmt.Sprintf("kb-%s/file-%s/chunk", param.KBUID.String(), param.FileUID.String())
 		path := fmt.Sprintf("%s/%s.md", basePath, chunkUID)
 
-		// Encode text chunk content to base64
+		// Encode chunk content to base64
 		base64Content := base64.StdEncoding.EncodeToString([]byte(texts[i]))
 
-		// Save text chunk content to MinIO
+		// Save chunk content to MinIO
 		err := w.repository.GetMinIOStorage().UploadBase64File(
 			ctx,
 			config.Config.Minio.BucketName,
@@ -935,8 +935,8 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 		)
 		if err != nil {
 			return nil, activityErrorWithCauseFlat(
-				fmt.Sprintf("Failed to upload text chunk (ID: %s) to MinIO: %s", chunkUID, errorsx.MessageOrErr(err)),
-				saveTextChunksActivityError,
+				fmt.Sprintf("Failed to upload chunk (ID: %s) to MinIO: %s", chunkUID, errorsx.MessageOrErr(err)),
+				saveChunksActivityError,
 				err,
 			)
 		}
@@ -944,22 +944,22 @@ func (w *Worker) SaveTextChunksActivity(ctx context.Context, param *SaveTextChun
 		destinations[chunkUID] = path
 	}
 
-	// Step 4: Update text chunk destinations in database
+	// Step 4: Update chunk destinations in database
 	err = w.repository.UpdateTextChunkDestinations(ctx, destinations)
 	if err != nil {
 		return nil, activityErrorWithCauseFlat(
-			fmt.Sprintf("Failed to update text chunk destinations: %s", errorsx.MessageOrErr(err)),
-			saveTextChunksActivityError,
+			fmt.Sprintf("Failed to update chunk destinations: %s", errorsx.MessageOrErr(err)),
+			saveChunksActivityError,
 			err,
 		)
 	}
 
-	w.log.Info("SaveTextChunksActivity: Successfully saved text chunks",
+	w.log.Info("SaveChunksActivity: Successfully saved chunks",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Int("chunkCount", len(createdChunks)))
 
-	return &SaveTextChunksActivityResult{
-		TextChunkUIDs: nil,
+	return &SaveChunksActivityResult{
+		ChunkUIDs: nil,
 	}, nil
 }
 
@@ -1060,13 +1060,13 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 
 			// Create converted_file DB record with actual destination (after successful upload)
 			convertedFileRecord := repository.ConvertedFileModel{
-				UID:           convertedFileUID,
-				KBUID:         param.KBUID,
-				FileUID:       param.FileUID,
-				ContentType:   contentType,
-				ConvertedType: convertedFileTypeEnum.String(),
-				Destination:   convertedDestination, // Use actual destination, not placeholder
-				PositionData:  nil,
+				UID:              convertedFileUID,
+				KnowledgeBaseUID: param.KBUID,
+				FileUID:          param.FileUID,
+				ContentType:      contentType,
+				ConvertedType:    convertedFileTypeEnum.String(),
+				StoragePath:      convertedDestination, // Use actual storage path, not placeholder
+				PositionData:     nil,
 			}
 
 			_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
@@ -1228,13 +1228,13 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 
 	// Create converted_file DB record with actual destination (after successful upload)
 	convertedFileRecord := repository.ConvertedFileModel{
-		UID:           convertedFileUID,
-		KBUID:         param.KBUID,
-		FileUID:       param.FileUID,
-		ContentType:   convertedMimeType,
-		ConvertedType: convertedFileTypeEnum.String(),
-		Destination:   convertedDestination, // Use actual destination, not placeholder
-		PositionData:  nil,                  // Position data extraction not yet implemented for converted files
+		UID:              convertedFileUID,
+		KnowledgeBaseUID: param.KBUID,
+		FileUID:          param.FileUID,
+		ContentType:      convertedMimeType,
+		ConvertedType:    convertedFileTypeEnum.String(),
+		StoragePath:      convertedDestination, // Use actual storage path, not placeholder
+		PositionData:     nil,                  // Position data extraction not yet implemented for converted files
 	}
 
 	_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
@@ -2191,7 +2191,7 @@ func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTa
 
 	// List all files in the target KB and filter by name
 	// Note: We don't paginate since dual-processing typically involves a small number of files
-	files, err := w.repository.ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
+	files, err := w.repository.ListFiles(ctx, repository.KnowledgeBaseFileListParams{
 		OwnerUID: param.TargetOwnerUID,
 		KBUID:    param.TargetKBUID.String(),
 		PageSize: 1000, // Large enough to cover typical KB update scenarios

@@ -6,7 +6,9 @@
 include .env
 export
 
-# Integration test defaults (for running from host)
+# Integration test configuration
+# - From host: make integration-test (uses localhost:8080)
+# - In container: make integration-test API_GATEWAY_URL=api-gateway:8080 DB_HOST=pg_sql
 API_GATEWAY_PROTOCOL ?= http
 API_GATEWAY_URL ?= localhost:8080
 DB_HOST ?= localhost
@@ -94,11 +96,7 @@ unit-test:       				## Run unit test
 
 .PHONY: integration-test
 integration-test:		## Run integration tests (parallel by default, sequential if CI=true)
-	@if [ -n "${API_GATEWAY_URL}" ]; then \
-		echo "✓ Running tests through API Gateway: ${API_GATEWAY_URL}"; \
-	else \
-		echo "⚠ WARNING: No API_GATEWAY_URL set - using default localhost:8080"; \
-	fi
+	@echo "✓ Running tests via API Gateway: ${API_GATEWAY_URL}"
 	@echo "  DB_HOST: ${DB_HOST}"
 ifeq ($(CI),true)
 	@echo "Running integration tests sequentially (CI mode)..."
@@ -108,18 +106,21 @@ ifeq ($(CI),true)
 		integration-test/rest.js \
 		integration-test/rest-object-storage.js \
 		integration-test/rest-hash-based-ids.js \
+		integration-test/rest-invariants.js \
 		integration-test/rest-file-type.js \
 		integration-test/rest-db.js \
 		integration-test/rest-ai-client.js \
 		integration-test/rest-kb-e2e-file-process.js \
 		integration-test/rest-file-reprocess.js \
 		integration-test/rest-kb-delete.js \
+		integration-test/rest-namespace-permission.js \
 		integration-test/grpc.js \
 		integration-test/grpc-kb-update.js \
 		integration-test/grpc-system-config-update.js \
 		integration-test/grpc-system-admin.js; do \
 		echo "Running $$test..." | tee -a /tmp/artifact-integration-test.log; \
 		TEST_FOLDER_ABS_PATH=$(PWD) k6 run --address="" \
+			-e CI=true \
 			-e API_GATEWAY_PROTOCOL=$(API_GATEWAY_PROTOCOL) \
 			-e API_GATEWAY_URL=$(API_GATEWAY_URL) \
 			-e DB_HOST=$(DB_HOST) \
@@ -138,13 +139,15 @@ else
 		{} --no-usage-report" ::: \
 		integration-test/rest.js \
 		integration-test/rest-object-storage.js \
-		integration-test/rest-hash-based-ids.js 2>&1 | tee -a /tmp/artifact-integration-test.log
+		integration-test/rest-hash-based-ids.js \
+		integration-test/rest-invariants.js 2>&1 | tee -a /tmp/artifact-integration-test.log
 	# Batch 2: File processing tests (heavy AI workload)
 	@parallel --halt now,fail=1 --tag --line-buffer \
 		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \
 		-e API_GATEWAY_PROTOCOL=${API_GATEWAY_PROTOCOL} -e API_GATEWAY_URL=${API_GATEWAY_URL} \
 		-e DB_HOST=${DB_HOST} \
 		{} --no-usage-report" ::: \
+		integration-test/rest-namespace-permission.js \
 		integration-test/rest-file-type.js \
 		integration-test/rest-db.js \
 		integration-test/rest-ai-client.js 2>&1 | tee -a /tmp/artifact-integration-test.log

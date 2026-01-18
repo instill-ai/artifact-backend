@@ -16,7 +16,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 func TestExtractPageReferences(t *testing.T) {
@@ -127,14 +127,13 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.Return([]repository.KnowledgeBaseFileModel{
+	mockRepository.GetFilesByFileUIDsMock.Return([]repository.FileModel{
 		{
-			UID:             fileUID,
-			KBUID:           kbUID,
+			UID:         fileUID,
 			DisplayName: "test.pdf",
-			FileType:        "TYPE_PDF",
-			Size:            1024,
-			Destination:     "kb/test.pdf",
+			FileType:    "TYPE_PDF",
+			Size:        1024,
+			StoragePath: "kb/test.pdf",
 		},
 	}, nil)
 
@@ -166,7 +165,6 @@ func TestGetFileMetadataActivity_Success(t *testing.T) {
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.File, qt.IsNotNil)
 	c.Assert(result.File.UID, qt.Equals, fileUID)
-	c.Assert(result.File.KBUID, qt.Equals, kbUID)
 	c.Assert(result.File.DisplayName, qt.Equals, "test.pdf")
 	c.Assert(result.File.FileType, qt.Equals, "TYPE_PDF")
 }
@@ -528,20 +526,20 @@ func TestContentVsSummaryConvertedFiles(t *testing.T) {
 
 	// Simulate content converted file
 	contentConvertedFile := &repository.ConvertedFileModel{
-		UID:          contentConvertedFileUID,
-		FileUID:      fileUID,
-		KBUID:        kbUID,
-		Destination:  "kb-" + kbUID.String() + "/file-" + fileUID.String() + "/converted-file/" + contentConvertedFileUID.String() + ".md",
-		PositionData: &types.PositionData{PageDelimiters: []uint32{100, 200, 300}}, // Multi-page
+		UID:              contentConvertedFileUID,
+		FileUID:          fileUID,
+		KnowledgeBaseUID: kbUID,
+		StoragePath:      "kb-" + kbUID.String() + "/file-" + fileUID.String() + "/converted-file/" + contentConvertedFileUID.String() + ".md",
+		PositionData:     &types.PositionData{PageDelimiters: []uint32{100, 200, 300}}, // Multi-page
 	}
 
 	// Simulate summary converted file
 	summaryConvertedFile := &repository.ConvertedFileModel{
-		UID:          summaryConvertedFileUID,
-		FileUID:      fileUID,
-		KBUID:        kbUID,
-		Destination:  "kb-" + kbUID.String() + "/file-" + fileUID.String() + "/converted-file/" + summaryConvertedFileUID.String() + ".md",
-		PositionData: &types.PositionData{PageDelimiters: []uint32{50}}, // Single page (summary)
+		UID:              summaryConvertedFileUID,
+		FileUID:          fileUID,
+		KnowledgeBaseUID: kbUID,
+		StoragePath:      "kb-" + kbUID.String() + "/file-" + fileUID.String() + "/converted-file/" + summaryConvertedFileUID.String() + ".md",
+		PositionData:     &types.PositionData{PageDelimiters: []uint32{50}}, // Single page (summary)
 	}
 
 	// Verify they have different UIDs
@@ -549,19 +547,19 @@ func TestContentVsSummaryConvertedFiles(t *testing.T) {
 
 	// Verify they reference the same original file
 	c.Assert(contentConvertedFile.FileUID, qt.Equals, summaryConvertedFile.FileUID)
-	c.Assert(contentConvertedFile.KBUID, qt.Equals, summaryConvertedFile.KBUID)
+	c.Assert(contentConvertedFile.KnowledgeBaseUID, qt.Equals, summaryConvertedFile.KnowledgeBaseUID)
 
-	// Verify they have different destinations
-	c.Assert(contentConvertedFile.Destination, qt.Not(qt.Equals), summaryConvertedFile.Destination)
+	// Verify they have different storage paths
+	c.Assert(contentConvertedFile.StoragePath, qt.Not(qt.Equals), summaryConvertedFile.StoragePath)
 
 	// Verify both use the same path pattern (kb-.../file-.../converted-file/)
-	c.Assert(contentConvertedFile.Destination, qt.Contains, "kb-"+kbUID.String())
-	c.Assert(contentConvertedFile.Destination, qt.Contains, "file-"+fileUID.String())
-	c.Assert(contentConvertedFile.Destination, qt.Contains, "converted-file/")
+	c.Assert(contentConvertedFile.StoragePath, qt.Contains, "kb-"+kbUID.String())
+	c.Assert(contentConvertedFile.StoragePath, qt.Contains, "file-"+fileUID.String())
+	c.Assert(contentConvertedFile.StoragePath, qt.Contains, "converted-file/")
 
-	c.Assert(summaryConvertedFile.Destination, qt.Contains, "kb-"+kbUID.String())
-	c.Assert(summaryConvertedFile.Destination, qt.Contains, "file-"+fileUID.String())
-	c.Assert(summaryConvertedFile.Destination, qt.Contains, "converted-file/")
+	c.Assert(summaryConvertedFile.StoragePath, qt.Contains, "kb-"+kbUID.String())
+	c.Assert(summaryConvertedFile.StoragePath, qt.Contains, "file-"+fileUID.String())
+	c.Assert(summaryConvertedFile.StoragePath, qt.Contains, "converted-file/")
 
 	// Verify position data structure differences
 	c.Assert(len(contentConvertedFile.PositionData.PageDelimiters), qt.Equals, 3, qt.Commentf("Content has multiple pages"))
@@ -579,27 +577,27 @@ func TestTextChunkSourceUIDReferences(t *testing.T) {
 	kbUID := uuid.Must(uuid.NewV4())
 
 	// Simulate content chunks
-	contentChunk := &repository.TextChunkModel{
-		UID:         uuid.Must(uuid.NewV4()),
-		SourceUID:   contentConvertedFileUID, // References content converted_file
-		SourceTable: repository.ConvertedFileTableName,
-		StartPos:    0,
-		EndPos:      100,
-		ChunkType:   "content",
-		FileUID:     fileUID,
-		KBUID:       kbUID,
+	contentChunk := &repository.ChunkModel{
+		UID:              uuid.Must(uuid.NewV4()),
+		SourceUID:        contentConvertedFileUID, // References content converted_file
+		SourceTable:      repository.ConvertedFileTableName,
+		StartPos:         0,
+		EndPos:           100,
+		ChunkType:        "content",
+		FileUID:          fileUID,
+		KnowledgeBaseUID: kbUID,
 	}
 
 	// Simulate summary chunk
-	summaryChunk := &repository.TextChunkModel{
-		UID:         uuid.Must(uuid.NewV4()),
-		SourceUID:   summaryConvertedFileUID, // References summary converted_file
-		SourceTable: repository.ConvertedFileTableName,
-		StartPos:    0,
-		EndPos:      50,
-		ChunkType:   "summary",
-		FileUID:     fileUID,
-		KBUID:       kbUID,
+	summaryChunk := &repository.ChunkModel{
+		UID:              uuid.Must(uuid.NewV4()),
+		SourceUID:        summaryConvertedFileUID, // References summary converted_file
+		SourceTable:      repository.ConvertedFileTableName,
+		StartPos:         0,
+		EndPos:           50,
+		ChunkType:        "summary",
+		FileUID:          fileUID,
+		KnowledgeBaseUID: kbUID,
 	}
 
 	// Verify chunks reference different source UIDs
@@ -607,7 +605,7 @@ func TestTextChunkSourceUIDReferences(t *testing.T) {
 
 	// Verify chunks reference the same file and KB
 	c.Assert(contentChunk.FileUID, qt.Equals, summaryChunk.FileUID)
-	c.Assert(contentChunk.KBUID, qt.Equals, summaryChunk.KBUID)
+	c.Assert(contentChunk.KnowledgeBaseUID, qt.Equals, summaryChunk.KnowledgeBaseUID)
 
 	// Verify both use converted_file as source table
 	c.Assert(contentChunk.SourceTable, qt.Equals, repository.ConvertedFileTableName)
@@ -750,7 +748,7 @@ func TestChunkContentActivity_TypeParameter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Simulate chunk creation
-			chunk := types.TextChunk{
+			chunk := types.Chunk{
 				Text:   "Sample text",
 				Start:  0,
 				End:    11,

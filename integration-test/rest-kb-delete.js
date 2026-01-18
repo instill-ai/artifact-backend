@@ -95,8 +95,8 @@ export function setup() {
       let cleanedCount = 0;
       for (const kb of knowledgeBases) {
         const kbId = kb.id;
-        if (catId && catId.match(/test-[a-z0-9]+-cleanup-/)) {
-          const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases/${catId}`, null, header);
+        if (kbId && kbId.match(/test-[a-z0-9]+-cleanup-/)) {
+          const delResp = http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases/${kbId}`, null, header);
           if (delResp.status === 200 || delResp.status === 204) {
             cleanedCount++;
           }
@@ -155,11 +155,9 @@ export function CheckKnowledgeBaseDeletion(data) {
       "POST",
       `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`,
       JSON.stringify({
-        knowledgeBase: {
-          displayName: kbName,
-          description: "Knowledge base deletion cleanup test",
-          tags: ["test", "cleanup"]
-        }
+        displayName: kbName,
+        description: "Knowledge base deletion cleanup test",
+        tags: ["test", "cleanup"]
       }),
       data.header
     );
@@ -167,15 +165,23 @@ export function CheckKnowledgeBaseDeletion(data) {
     let kb;
     try { kb = createRes.json().knowledgeBase; } catch (e) { kb = {}; }
     const knowledgeBaseId = kb ? kb.id : null;
-    const knowledgeBaseUid = kb ? kb.uid : null;
 
     check(createRes, {
-      "Cleanup: Knowledge base created": (r) => r.status === 200 && knowledgeBaseId && knowledgeBaseUid,
+      "Cleanup: Knowledge base created": (r) => r.status === 200 && knowledgeBaseId,
     });
+
+    if (!knowledgeBaseId) {
+      console.log("✗ Failed to create knowledge base, aborting test");
+      return;
+    }
+
+    // Get internal KB UID for database queries (uid not exposed in API after AIP refactoring)
+    const knowledgeBaseUid = helper.getKnowledgeBaseUidFromId(knowledgeBaseId);
     console.log(`✓ Knowledge base created: ${knowledgeBaseId} (UID: ${knowledgeBaseUid})`);
 
-    if (!knowledgeBaseId || !knowledgeBaseUid) {
-      console.log("✗ Failed to create knowledge base, aborting test");
+    if (!knowledgeBaseUid) {
+      console.log("✗ Failed to get KB internal UID, aborting test");
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       return;
     }
 
@@ -191,7 +197,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     // This provides comprehensive coverage of cleanup logic
     const filename = `${data.dbIDPrefix}cleanup-test.pdf`;
     const uploadRes = helper.uploadFileWithRetry(
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
       {
         displayName: filename,
         type: "TYPE_PDF",
@@ -202,19 +208,28 @@ export function CheckKnowledgeBaseDeletion(data) {
     );
 
     let uploadedFile;
-    let fileUid = null;
+    let fileId = null;
     if (uploadRes) {
       try { uploadedFile = uploadRes.json().file; } catch (e) { uploadedFile = {}; }
-      fileUid = uploadedFile ? uploadedFile.uid : null;
+      fileId = uploadedFile ? uploadedFile.id : null;
     }
 
     check(uploadRes, {
-      "Cleanup: File uploaded": (r) => r && r.status === 200 && fileUid,
+      "Cleanup: File uploaded": (r) => r && r.status === 200 && fileId,
     });
-    console.log(`✓ File uploaded: ${filename} (UID: ${fileUid})`);
+
+    if (!fileId) {
+      console.log("✗ Failed to upload file, cleaning up and aborting");
+      http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
+      return;
+    }
+
+    // Get internal file UID for database queries (uid not exposed in API after AIP refactoring)
+    const fileUid = helper.getFileUidFromId(fileId);
+    console.log(`✓ File uploaded: ${filename} (ID: ${fileId}, UID: ${fileUid})`);
 
     if (!fileUid) {
-      console.log("✗ Failed to upload file, cleaning up and aborting");
+      console.log("✗ Failed to get file internal UID, cleaning up and aborting");
       http.request("DELETE", `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
       return;
     }
@@ -227,7 +242,7 @@ export function CheckKnowledgeBaseDeletion(data) {
     const result = helper.waitForFileProcessingComplete(
       data.expectedOwner.id,
       knowledgeBaseId,
-      fileUid,
+      fileId, // Use hash-based ID for API calls
       data.header,
       300, // Max 300 seconds for PDF processing
       60   // Fast-fail after 60s if stuck in NOTSTARTED

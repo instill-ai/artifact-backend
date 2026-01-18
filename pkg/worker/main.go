@@ -21,8 +21,8 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	pipelinepb "github.com/instill-ai/protogen-go/pipeline/pipeline/v1beta"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
+	pipelinepb "github.com/instill-ai/protogen-go/pipeline/v1beta"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
@@ -61,7 +61,7 @@ const (
 
 // PostFileCompletionFn allows extensions of the worker to provide some logic
 // to be executed after a file is successfully processed.
-type PostFileCompletionFn func(_ workflow.Context, file *repository.KnowledgeBaseFileModel, effectiveFileType artifactpb.File_Type) error
+type PostFileCompletionFn func(_ workflow.Context, file *repository.FileModel, effectiveFileType artifactpb.File_Type) error
 
 // Worker implements the Temporal worker with all workflows and activities
 type Worker struct {
@@ -455,16 +455,15 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseID
 			ownerUID, err := uuid.FromString(kb.NamespaceUID)
 			if err != nil {
 				w.log.Error("Failed to parse owner UID",
-					zap.String("knowledgeBaseID", kb.KBID),
+					zap.String("knowledgeBaseID", kb.ID),
 					zap.String("kbUID", kb.UID.String()),
 					zap.Error(err))
 				return
 			}
 
 			// Start child workflow for this KB
-			// Use unique workflow ID by adding timestamp to support rollback → re-update scenarios
 			workflowOptions := client.StartWorkflowOptions{
-				ID:                       fmt.Sprintf("update-kb-%s-%d", kb.UID.String(), time.Now().UnixNano()),
+				ID:                       fmt.Sprintf("update-kb-%s", kb.UID.String()),
 				TaskQueue:                "artifact-backend",
 				WorkflowExecutionTimeout: 24 * time.Hour,
 			}
@@ -487,7 +486,7 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseID
 
 			if err != nil {
 				w.log.Error("Failed to start update workflow for KB",
-					zap.String("knowledgeBaseID", kb.KBID),
+					zap.String("knowledgeBaseID", kb.ID),
 					zap.String("kbUID", kb.UID.String()),
 					zap.Error(err))
 				return
@@ -498,7 +497,7 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseID
 			mu.Unlock()
 
 			w.log.Info("Update workflow started for KB",
-				zap.String("knowledgeBaseID", kb.KBID),
+				zap.String("knowledgeBaseID", kb.ID),
 				zap.String("kbUID", kb.UID.String()))
 		}(kb)
 	}
@@ -593,7 +592,7 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs 
 
 	for _, kb := range kbs {
 		status := KnowledgeBaseAbortStatus{
-			KnowledgeBaseID:  kb.KBID,
+			KnowledgeBaseID:  kb.ID,
 			KnowledgeBaseUID: kb.UID.String(),
 			WorkflowID:       kb.UpdateWorkflowID,
 			Status:           artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
@@ -604,7 +603,7 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs 
 			err := w.temporalClient.CancelWorkflow(ctx, kb.UpdateWorkflowID, "")
 			if err != nil {
 				w.log.Warn("Failed to cancel workflow (may have already completed)",
-					zap.String("knowledgeBaseID", kb.KBID),
+					zap.String("knowledgeBaseID", kb.ID),
 					zap.String("workflowID", kb.UpdateWorkflowID),
 					zap.Error(err))
 				// Continue with cleanup even if cancel fails
@@ -612,15 +611,15 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs 
 		}
 
 		// Find and cleanup staging KB
-		stagingKBID := fmt.Sprintf("%s-staging", kb.KBID)
+		stagingID := fmt.Sprintf("%s-staging", kb.ID)
 		ownerUID, err := uuid.FromString(kb.NamespaceUID)
 		if err != nil {
 			w.log.Warn("Failed to parse owner UID",
-				zap.String("knowledgeBaseID", kb.KBID),
+				zap.String("knowledgeBaseID", kb.ID),
 				zap.String("owner", kb.NamespaceUID),
 				zap.Error(err))
 		} else {
-			stagingKB, err := w.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(ownerUID), stagingKBID)
+			stagingKB, err := w.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(ownerUID), stagingID)
 			if err == nil && stagingKB != nil {
 				// Cleanup staging KB resources
 				err = w.CleanupOldKnowledgeBaseActivity(ctx, &CleanupOldKnowledgeBaseActivityParam{
@@ -642,7 +641,7 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs 
 		err = w.repository.UpdateKnowledgeBaseAborted(ctx, kb.UID)
 		if err != nil {
 			w.log.Error("Failed to update KB status to aborted",
-				zap.String("knowledgeBaseID", kb.KBID),
+				zap.String("knowledgeBaseID", kb.ID),
 				zap.String("kbUID", kb.UID.String()),
 				zap.Error(err))
 			status.ErrorMessage = fmt.Sprintf("failed to update status: %v", err)
@@ -650,7 +649,7 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs 
 		} else {
 			abortedCount++
 			w.log.Info("Successfully aborted KB update",
-				zap.String("knowledgeBaseID", kb.KBID),
+				zap.String("knowledgeBaseID", kb.ID),
 				zap.String("kbUID", kb.UID.String()),
 				zap.String("workflowID", kb.UpdateWorkflowID))
 		}

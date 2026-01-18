@@ -9,19 +9,20 @@ import (
 
 	"gorm.io/gorm"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	"github.com/instill-ai/x/checkfield"
+	"github.com/instill-ai/artifact-backend/pkg/repository"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
-// GetSystemAdmin retrieves a system configuration by ID
+// GetSystemAdmin retrieves a system configuration by ID or slug
 func (s *service) GetSystemAdmin(ctx context.Context, id string) (*artifactpb.GetSystemAdminResponse, error) {
 	// Default to "default" if not specified
 	if id == "" {
 		id = "default"
 	}
 
-	// Get system from repository
-	system, err := s.repository.GetSystem(ctx, id)
+	// Get system from repository - accepts both ID (sys-xxx) and slug (openai, gemini)
+	system, err := s.repository.GetSystemByIDOrSlug(ctx, id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("system %q not found", id)
@@ -37,30 +38,44 @@ func (s *service) GetSystemAdmin(ctx context.Context, id string) (*artifactpb.Ge
 
 	// Build response
 	resp := &artifactpb.GetSystemAdminResponse{
-		System: &artifactpb.System{
-			Name:        fmt.Sprintf("systems/%s", system.ID),
-			Uid:         system.UID.String(),
-			Id:          system.ID,
-			Config:      configStruct,
-			Description: &system.Description,
-			IsDefault:   system.IsDefault,
-			CreateTime:  timestamppb.New(*system.CreateTime),
-			UpdateTime:  timestamppb.New(*system.UpdateTime),
-			DeleteTime:  nil,
-		},
+		System: systemModelToProto(system, configStruct),
 	}
 
 	return resp, nil
 }
 
+// systemModelToProto converts a SystemModel to an artifactpb.System
+func systemModelToProto(system *repository.SystemModel, configStruct *structpb.Struct) *artifactpb.System {
+	pbSystem := &artifactpb.System{
+		Name:        fmt.Sprintf("systems/%s", system.ID),
+		Id:          system.ID,
+		DisplayName: system.DisplayName,
+		Slug:        system.Slug,
+		Config:      configStruct,
+		Description: &system.Description,
+		IsDefault:   system.IsDefault,
+		CreateTime:  timestamppb.New(*system.CreateTime),
+		UpdateTime:  timestamppb.New(*system.UpdateTime),
+	}
+	if system.DeleteTime.Valid {
+		pbSystem.DeleteTime = timestamppb.New(system.DeleteTime.Time)
+	}
+	return pbSystem
+}
+
 // CreateSystemAdmin creates a new system configuration
+// The ID is auto-generated as "sys-{hash}" following AIP resource ID convention
+// displayName is required and used to generate the human-readable slug
 func (s *service) CreateSystemAdmin(ctx context.Context, req *artifactpb.CreateSystemAdminRequest) (*artifactpb.CreateSystemAdminResponse, error) {
 	if req.System == nil {
 		return nil, fmt.Errorf("system is required")
 	}
 
-	if req.System.Id == "" {
-		return nil, fmt.Errorf("system id is required")
+	// display_name is required for creating a system
+	// ID is auto-generated, so we use display_name for identification
+	displayName := req.System.DisplayName
+	if displayName == "" {
+		return nil, fmt.Errorf("system display_name is required")
 	}
 
 	// Convert structpb.Struct to map[string]interface{}
@@ -72,16 +87,10 @@ func (s *service) CreateSystemAdmin(ctx context.Context, req *artifactpb.CreateS
 		description = *req.System.Description
 	}
 
-	// Create system in repository
-	err := s.repository.CreateSystem(ctx, req.System.Id, config, description)
+	// Create system in repository - ID is auto-generated
+	system, err := s.repository.CreateSystem(ctx, displayName, config, description)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create system: %w", err)
-	}
-
-	// Retrieve the created system to return with timestamp and UID
-	system, err := s.repository.GetSystem(ctx, req.System.Id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve created system: %w", err)
 	}
 
 	// Convert map[string]interface{} to structpb.Struct
@@ -92,17 +101,7 @@ func (s *service) CreateSystemAdmin(ctx context.Context, req *artifactpb.CreateS
 
 	// Build response
 	resp := &artifactpb.CreateSystemAdminResponse{
-		System: &artifactpb.System{
-			Name:        fmt.Sprintf("systems/%s", system.ID),
-			Uid:         system.UID.String(),
-			Id:          system.ID,
-			Config:      configStruct,
-			Description: &system.Description,
-			IsDefault:   system.IsDefault,
-			CreateTime:  timestamppb.New(*system.CreateTime),
-			UpdateTime:  timestamppb.New(*system.UpdateTime),
-			DeleteTime:  nil,
-		},
+		System: systemModelToProto(system, configStruct),
 	}
 
 	return resp, nil
@@ -144,7 +143,7 @@ func (s *service) UpdateSystemAdmin(ctx context.Context, req *artifactpb.UpdateS
 	}
 
 	// Retrieve the saved system to return with updated timestamp
-	system, err := s.repository.GetSystem(ctx, req.System.Id)
+	system, err := s.repository.GetSystemByIDOrSlug(ctx, req.System.Id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve updated system: %w", err)
 	}
@@ -157,17 +156,7 @@ func (s *service) UpdateSystemAdmin(ctx context.Context, req *artifactpb.UpdateS
 
 	// Build response
 	resp := &artifactpb.UpdateSystemAdminResponse{
-		System: &artifactpb.System{
-			Name:        fmt.Sprintf("systems/%s", system.ID),
-			Uid:         system.UID.String(),
-			Id:          system.ID,
-			Config:      configStruct,
-			Description: &system.Description,
-			IsDefault:   system.IsDefault,
-			CreateTime:  timestamppb.New(*system.CreateTime),
-			UpdateTime:  timestamppb.New(*system.UpdateTime),
-			DeleteTime:  nil,
-		},
+		System: systemModelToProto(system, configStruct),
 	}
 
 	return resp, nil
@@ -183,24 +172,15 @@ func (s *service) ListSystemsAdmin(ctx context.Context) (*artifactpb.ListSystems
 
 	// Convert to protobuf messages
 	pbSystems := make([]*artifactpb.System, 0, len(systems))
-	for _, system := range systems {
+	for i := range systems {
+		system := &systems[i]
 		// Convert map[string]interface{} to structpb.Struct
 		configStruct, err := structpb.NewStruct(system.Config)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert config for system %q: %w", system.ID, err)
 		}
 
-		pbSystems = append(pbSystems, &artifactpb.System{
-			Name:        fmt.Sprintf("systems/%s", system.ID),
-			Uid:         system.UID.String(),
-			Id:          system.ID,
-			Config:      configStruct,
-			Description: &system.Description,
-			IsDefault:   system.IsDefault,
-			CreateTime:  timestamppb.New(*system.CreateTime),
-			UpdateTime:  timestamppb.New(*system.UpdateTime),
-			DeleteTime:  nil, // Not exposed in API for active systems
-		})
+		pbSystems = append(pbSystems, systemModelToProto(system, configStruct))
 	}
 
 	resp := &artifactpb.ListSystemsAdminResponse{
@@ -231,29 +211,25 @@ func (s *service) DeleteSystemAdmin(ctx context.Context, id string) (*artifactpb
 	return resp, nil
 }
 
-// RenameSystemAdmin renames a system configuration (changes its ID)
+// RenameSystemAdmin renames a system configuration (updates display_name and slug)
+// Note: The canonical ID (sys-xxx) is immutable. Only display_name and slug change.
 func (s *service) RenameSystemAdmin(ctx context.Context, req *artifactpb.RenameSystemAdminRequest) (*artifactpb.RenameSystemAdminResponse, error) {
-	if req.SystemId == "" {
+	if req.GetSystemId() == "" {
 		return nil, fmt.Errorf("system id is required")
 	}
 
-	if req.NewSystemId == "" {
-		return nil, fmt.Errorf("new system id is required")
+	if req.GetNewDisplayName() == "" {
+		return nil, fmt.Errorf("new display name is required")
 	}
 
-	// Validate new ID format (RFC-1034)
-	if err := checkfield.CheckResourceID(req.NewSystemId); err != nil {
-		return nil, fmt.Errorf("invalid new system id: %w", err)
-	}
-
-	// Rename system in repository
-	err := s.repository.RenameSystemByID(ctx, req.SystemId, req.NewSystemId)
+	// Rename system in repository (updates display_name and regenerates slug)
+	err := s.repository.RenameSystemByID(ctx, req.GetSystemId(), req.GetNewDisplayName())
 	if err != nil {
 		return nil, fmt.Errorf("failed to rename system: %w", err)
 	}
 
 	// Retrieve the renamed system
-	system, err := s.repository.GetSystem(ctx, req.NewSystemId)
+	system, err := s.repository.GetSystem(ctx, req.GetSystemId())
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve renamed system: %w", err)
 	}
@@ -266,17 +242,7 @@ func (s *service) RenameSystemAdmin(ctx context.Context, req *artifactpb.RenameS
 
 	// Build response
 	resp := &artifactpb.RenameSystemAdminResponse{
-		System: &artifactpb.System{
-			Name:        fmt.Sprintf("systems/%s", system.ID),
-			Uid:         system.UID.String(),
-			Id:          system.ID,
-			Config:      configStruct,
-			Description: &system.Description,
-			IsDefault:   system.IsDefault,
-			CreateTime:  timestamppb.New(*system.CreateTime),
-			UpdateTime:  timestamppb.New(*system.UpdateTime),
-			DeleteTime:  nil,
-		},
+		System: systemModelToProto(system, configStruct),
 	}
 
 	return resp, nil
@@ -284,18 +250,18 @@ func (s *service) RenameSystemAdmin(ctx context.Context, req *artifactpb.RenameS
 
 // SetDefaultSystemAdmin sets a system as the default
 func (s *service) SetDefaultSystemAdmin(ctx context.Context, req *artifactpb.SetDefaultSystemAdminRequest) (*artifactpb.SetDefaultSystemAdminResponse, error) {
-	if req.Id == "" {
+	if req.GetSystemId() == "" {
 		return nil, fmt.Errorf("system id is required")
 	}
 
 	// Set as default in repository
-	err := s.repository.SetDefaultSystem(ctx, req.Id)
+	err := s.repository.SetDefaultSystem(ctx, req.GetSystemId())
 	if err != nil {
 		return nil, fmt.Errorf("failed to set default system: %w", err)
 	}
 
 	// Retrieve the updated system to return
-	system, err := s.repository.GetSystem(ctx, req.Id)
+	system, err := s.repository.GetSystem(ctx, req.GetSystemId())
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve updated system: %w", err)
 	}
@@ -308,17 +274,7 @@ func (s *service) SetDefaultSystemAdmin(ctx context.Context, req *artifactpb.Set
 
 	// Build response
 	resp := &artifactpb.SetDefaultSystemAdminResponse{
-		System: &artifactpb.System{
-			Name:        fmt.Sprintf("systems/%s", system.ID),
-			Uid:         system.UID.String(),
-			Id:          system.ID,
-			Config:      configStruct,
-			Description: &system.Description,
-			IsDefault:   system.IsDefault,
-			CreateTime:  timestamppb.New(*system.CreateTime),
-			UpdateTime:  timestamppb.New(*system.UpdateTime),
-			DeleteTime:  nil,
-		},
+		System: systemModelToProto(system, configStruct),
 	}
 
 	return resp, nil
@@ -340,17 +296,7 @@ func (s *service) GetDefaultSystemAdmin(ctx context.Context, req *artifactpb.Get
 
 	// Build response
 	resp := &artifactpb.GetDefaultSystemAdminResponse{
-		System: &artifactpb.System{
-			Name:        fmt.Sprintf("systems/%s", system.ID),
-			Uid:         system.UID.String(),
-			Id:          system.ID,
-			Config:      configStruct,
-			Description: &system.Description,
-			IsDefault:   system.IsDefault,
-			CreateTime:  timestamppb.New(*system.CreateTime),
-			UpdateTime:  timestamppb.New(*system.UpdateTime),
-			DeleteTime:  nil,
-		},
+		System: systemModelToProto(system, configStruct),
 	}
 
 	return resp, nil

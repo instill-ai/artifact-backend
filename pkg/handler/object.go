@@ -3,14 +3,25 @@ package handler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
 )
+
+// parseObjectFromName parses a resource name of format "namespaces/{namespace}/objects/{object}"
+// and returns the namespace_id and object_id
+func parseObjectFromName(name string) (namespaceID, objectID string, err error) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "objects" {
+		return "", "", fmt.Errorf("invalid object name format, expected namespaces/{namespace}/objects/{object}")
+	}
+	return parts[1], parts[3], nil
+}
 
 // GetObjectUploadURL returns the upload URL for an object.
 func (ph *PublicHandler) GetObjectUploadURL(ctx context.Context, req *artifactpb.GetObjectUploadURLRequest) (*artifactpb.GetObjectUploadURLResponse, error) {
@@ -30,12 +41,21 @@ func (ph *PublicHandler) GetObjectUploadURL(ctx context.Context, req *artifactpb
 		)
 	}
 
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	// Parse namespace ID from parent (format: namespaces/{namespace})
+	namespaceID, err := parseNamespaceFromParent(req.GetParent())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("invalid parent format: %w", err),
+			"Invalid parent format. Expected format: namespaces/{namespace}",
+		)
+	}
+
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to get namespace: %w", err),
@@ -48,7 +68,7 @@ func (ph *PublicHandler) GetObjectUploadURL(ctx context.Context, req *artifactpb
 		logger.Error(
 			"failed to check namespace permission",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to check namespace permission: %w", err),
@@ -80,12 +100,21 @@ func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifact
 		)
 	}
 
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	// Parse the AIP-compliant name field
+	namespaceID, objectID, err := parseObjectFromName(req.GetName())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("invalid name format: %w", err),
+			"Invalid object name format. Expected format: namespaces/{namespace}/objects/{object}",
+		)
+	}
+
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Error(
 			"failed to get namespace ",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to get namespace: %w", err),
@@ -99,7 +128,7 @@ func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifact
 		logger.Error(
 			"failed to check namespace permission",
 			zap.Error(err),
-			zap.String("owner_id(ns_id)", req.GetNamespaceId()),
+			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("failed to check namespace permission: %w", err),
@@ -108,7 +137,7 @@ func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifact
 	}
 
 	// Call the service to get the download URL
-	response, err := ph.service.GetDownloadURL(ctx, req, ns.NsUID, ns.NsID)
+	response, err := ph.service.GetDownloadURL(ctx, objectID, ns.NsUID, ns.NsID, req.GetUrlExpireDays(), req.GetDownloadFilename())
 	if err != nil {
 		logger.Error("failed to get download URL", zap.Error(err))
 		return nil, errorsx.AddMessage(

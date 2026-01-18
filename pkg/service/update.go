@@ -12,7 +12,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	logx "github.com/instill-ai/x/log"
 )
 
@@ -27,7 +27,7 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 	}
 
 	// Find the rollback KB (contains the old resources to restore)
-	// Use parent_kb_uid lookup instead of KBID string manipulation
+	// Use parent_kb_uid lookup instead of ID string manipulation
 	rollbackKB, err := s.repository.GetRollbackKBForProduction(ctx, ownerUID, knowledgeBaseID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find rollback KB: %w", err)
@@ -126,29 +126,16 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 		zap.String("productionSystemUID", productionSystemUID.String()),
 		zap.String("rollbackSystemUID", rollbackSystemUID.String()))
 
-	// Use temp UID to avoid conflicts during the swap
-	tempUID := uuid.Must(uuid.NewV4())
-
-	// Step 1: Move production KB's resources → temp (current/new data)
-	if err := s.repository.UpdateKnowledgeBaseResources(ctx, productionKB.UID, types.KBUIDType(tempUID)); err != nil {
-		return nil, fmt.Errorf("failed to move production resources to temp: %w", err)
-	}
-
-	// Step 2: Move rollback KB's resources → production KB (restore old data)
-	// CRITICAL: Resources now point to the SAME production KB UID
-	if err := s.repository.UpdateKnowledgeBaseResources(ctx, rollbackKB.UID, productionKB.UID); err != nil {
-		return nil, fmt.Errorf("failed to restore rollback resources to production: %w", err)
-	}
-
-	// Step 3: Move temp resources → rollback KB (save current data for potential re-rollback)
-	if err := s.repository.UpdateKnowledgeBaseResources(ctx, types.KBUIDType(tempUID), rollbackKB.UID); err != nil {
-		return nil, fmt.Errorf("failed to move current resources to rollback: %w", err)
+	// Atomically swap resources between production and rollback KBs
+	// Uses CASE expression to avoid FK constraint issues with temp UIDs
+	if err := s.repository.SwapKnowledgeBaseResources(ctx, productionKB.UID, rollbackKB.UID); err != nil {
+		return nil, fmt.Errorf("failed to swap resources: %w", err)
 	}
 
 	// Step 4: Swap system configs
 	// Production KB gets the old system config (from rollback)
 	// This ensures the restored embeddings match their original system config
-	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.NamespaceUID, map[string]any{
+	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.ID, productionKB.NamespaceUID, map[string]any{
 		"update_status": artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ROLLED_BACK.String(),
 		"staging":       false, // Ensure it stays as production
 		"system_uid":    rollbackSystemUID,
@@ -160,7 +147,7 @@ func (s *service) RollbackAdmin(ctx context.Context, ownerUID types.OwnerUIDType
 	// Step 5: Update rollback KB to have the new system config
 	// Rollback KB gets the new system config (from production)
 	// This maintains consistency - rollback KB represents what was rolled back from
-	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKB.KBID, productionKB.NamespaceUID, map[string]any{
+	err = s.repository.UpdateKnowledgeBaseWithMap(ctx, rollbackKB.ID, productionKB.NamespaceUID, map[string]any{
 		"system_uid": productionSystemUID,
 	})
 	if err != nil {
@@ -340,13 +327,13 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 	var rollbackKB *repository.KnowledgeBaseModel
 	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		rollbackKB, err = s.repository.GetRollbackKBForProduction(ctx, ownerUID, currentKB.KBID)
+		rollbackKB, err = s.repository.GetRollbackKBForProduction(ctx, ownerUID, currentKB.ID)
 		if err == nil && rollbackKB != nil {
 			break
 		}
 		if attempt < maxRetries {
 			logger.Warn("Rollback KB not found yet, retrying...",
-				zap.String("productionKBID", currentKB.KBID),
+				zap.String("productionID", currentKB.ID),
 				zap.Int("attempt", attempt),
 				zap.Int("maxRetries", maxRetries))
 			time.Sleep(time.Second)
@@ -357,12 +344,12 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 		return nil, fmt.Errorf("failed to find rollback KB after %d attempts: %w", maxRetries, err)
 	}
 	if rollbackKB == nil {
-		return nil, fmt.Errorf("rollback KB not found for production KB %s after %d attempts", currentKB.KBID, maxRetries)
+		return nil, fmt.Errorf("rollback KB not found for production KB %s after %d attempts", currentKB.ID, maxRetries)
 	}
 
 	// CRITICAL: Update retention timestamp on ROLLBACK KB (not production KB)
 	// The cleanup workflow checks the rollback KB's retention field to decide when to clean up
-	_, err = s.repository.UpdateKnowledgeBase(ctx, rollbackKB.KBID, rollbackKB.NamespaceUID, repository.KnowledgeBaseModel{
+	_, err = s.repository.UpdateKnowledgeBase(ctx, rollbackKB.ID, rollbackKB.NamespaceUID, repository.KnowledgeBaseModel{
 		RollbackRetentionUntil: &newRetention,
 	})
 	if err != nil {
@@ -370,7 +357,7 @@ func (s *service) SetRollbackRetentionAdmin(ctx context.Context, ownerUID types.
 	}
 
 	// Also update production KB's retention field for reference/audit trail
-	_, err = s.repository.UpdateKnowledgeBase(ctx, currentKB.KBID, currentKB.NamespaceUID, repository.KnowledgeBaseModel{
+	_, err = s.repository.UpdateKnowledgeBase(ctx, currentKB.ID, currentKB.NamespaceUID, repository.KnowledgeBaseModel{
 		RollbackRetentionUntil: &newRetention,
 	})
 	if err != nil {
@@ -468,8 +455,8 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 		switch kb.UpdateStatus {
 		case artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_UPDATING.String():
 			// Find the staging KB (it has the same ID with "-staging" suffix)
-			stagingKBID := fmt.Sprintf("%s-staging", kb.KBID)
-			stagingKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(uuid.FromStringOrNil(kb.NamespaceUID)), stagingKBID)
+			stagingID := fmt.Sprintf("%s-staging", kb.ID)
+			stagingKB, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, types.OwnerUIDType(uuid.FromStringOrNil(kb.NamespaceUID)), stagingID)
 			if err == nil && stagingKB != nil {
 				// Count completed files in the staging KB
 				if count, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, stagingKB.UID, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String()); err == nil {
@@ -501,7 +488,7 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 		}
 
 		knowledgeBaseStatuses = append(knowledgeBaseStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
-			KnowledgeBaseId: kb.UID.String(),
+			KnowledgeBaseId: kb.ID,
 			Status:           statusEnum,
 			WorkflowId:       kb.UpdateWorkflowID,
 			StartedAt:        formatTime(kb.UpdateStartedAt),
@@ -570,7 +557,7 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 	// Extract knowledge base IDs
 	knowledgeBaseIDs := make([]string, len(kbs))
 	for i, kb := range kbs {
-		knowledgeBaseIDs[i] = kb.KBID
+		knowledgeBaseIDs[i] = kb.ID
 	}
 
 	// Execute knowledge base update via worker
@@ -636,18 +623,23 @@ func (s *service) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifa
 
 func convertKBToCatalogProto(kb *repository.KnowledgeBaseModel, namespaceID string) *artifactpb.KnowledgeBase {
 	// Construct Google AIP resource name: namespaces/{namespace}/knowledge-bases/{knowledge_base}
-	// Note: namespace format is "users/user-123" or "organizations/org-456"
-	resourceName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.KBID)
+	resourceName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)
+	ownerName := fmt.Sprintf("namespaces/%s", namespaceID)
 
 	return &artifactpb.KnowledgeBase{
-		Name:           resourceName,
-		Uid:            kb.UID.String(),
-		Id:             kb.KBID,
-		Description:    kb.Description,
+		// AIP standard fields 1-6
+		Name:        resourceName,
+		Id:          kb.ID,
+		DisplayName: kb.DisplayName,
+		Slug:        kb.Slug,
+		Aliases:     kb.Aliases,
+		Description: kb.Description,
+		// Timestamps
+		CreateTime: timestamppb.New(*kb.CreateTime),
+		UpdateTime: timestamppb.New(*kb.UpdateTime),
+		// Resource-specific fields
 		Tags:           kb.Tags,
-		OwnerName:      kb.NamespaceUID,
-		CreateTime:     timestamppb.New(*kb.CreateTime),
-		UpdateTime:     timestamppb.New(*kb.UpdateTime),
+		OwnerName:      ownerName,
 		DownstreamApps: []string{},
 		TotalFiles:     0, // Would need to query file count if needed
 		TotalTokens:    0,

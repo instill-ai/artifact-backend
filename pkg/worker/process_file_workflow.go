@@ -18,7 +18,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 )
 
@@ -271,7 +271,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			return handleFileError(fileUID, "get file metadata", err)
 		}
 
-		bucket := object.BucketFromDestination(metadata.File.Destination)
+		bucket := object.BucketFromDestination(metadata.File.StoragePath)
 		fileType := artifactpb.File_Type(artifactpb.File_Type_value[metadata.File.FileType])
 
 		// Capture KB model family and dual-processing info from first file
@@ -382,14 +382,14 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			var result StandardizeFileTypeActivityResult
 			if err := workflow.ExecuteActivity(ctx, w.StandardizeFileTypeActivity, &StandardizeFileTypeActivityParam{
-				FileUID:     fm.fileUID,
-				KBUID:       kbUID,
-				Bucket:      fm.bucket,
-				Destination: fm.metadata.File.Destination,
-				FileType:    fm.fileType,
+				FileUID:         fm.fileUID,
+				KBUID:           kbUID,
+				Bucket:          fm.bucket,
+				Destination:     fm.metadata.File.StoragePath,
+				FileType:        fm.fileType,
 				FileDisplayName: fm.metadata.File.DisplayName,
-				Pipelines:   []pipeline.Release{pipeline.ConvertFileTypePipeline},
-				Metadata:    fm.metadata.ExternalMetadata,
+				Pipelines:       []pipeline.Release{pipeline.ConvertFileTypePipeline},
+				Metadata:        fm.metadata.ExternalMetadata,
 			}).Get(ctx, &result); err != nil {
 				// File type standardization failure is fatal - fail the workflow immediately
 				// This prevents downstream AI processing failures when the format is not supported
@@ -398,7 +398,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			// Determine effective file location for caching and processing
 			effectiveBucket := fm.bucket
-			effectiveDestination := fm.metadata.File.Destination
+			effectiveDestination := fm.metadata.File.StoragePath
 			effectiveFileType := result.ConvertedType
 
 			if result.Converted {
@@ -454,13 +454,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					},
 				})
 				fileCacheFuture = workflow.ExecuteActivity(cacheCtx, w.CacheFileContextActivity, &CacheFileContextActivityParam{
-					FileUID:     cr.fileUID,
-					KBUID:       kbUID,
-					Bucket:      cr.effectiveBucket,
-					Destination: cr.effectiveDestination,
-					FileType:    cr.effectiveFileType,
+					FileUID:         cr.fileUID,
+					KBUID:           kbUID,
+					Bucket:          cr.effectiveBucket,
+					Destination:     cr.effectiveDestination,
+					FileType:        cr.effectiveFileType,
 					FileDisplayName: cr.fileMetadata.metadata.File.DisplayName,
-					Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
+					Metadata:        cr.fileMetadata.metadata.ExternalMetadata,
 				})
 				logger.Info("Creating file cache (Gemini)", "fileUID", cr.fileUID.String())
 			} else {
@@ -546,14 +546,14 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			// Use the CONVERTED file location (effectiveBucket/effectiveDestination/effectiveFileType)
 			contentFuture := workflow.ExecuteActivity(ctx, w.ProcessContentActivity, &ProcessContentActivityParam{
-				FileUID:     cr.fileUID,
-				KBUID:       kbUID,
-				Bucket:      cr.effectiveBucket,
-				Destination: cr.effectiveDestination,
-				FileType:    cr.effectiveFileType,
+				FileUID:         cr.fileUID,
+				KBUID:           kbUID,
+				Bucket:          cr.effectiveBucket,
+				Destination:     cr.effectiveDestination,
+				FileType:        cr.effectiveFileType,
 				FileDisplayName: cr.fileMetadata.metadata.File.DisplayName,
-				Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
-				CacheName:   fileCacheName,
+				Metadata:        cr.fileMetadata.metadata.ExternalMetadata,
+				CacheName:       fileCacheName,
 			})
 
 			var summaryFuture workflow.Future
@@ -574,14 +574,14 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					},
 				})
 				summaryFuture = workflow.ExecuteActivity(summaryCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
-					FileUID:     cr.fileUID,
-					KBUID:       kbUID,
-					Bucket:      cr.effectiveBucket,
-					Destination: cr.effectiveDestination,
+					FileUID:         cr.fileUID,
+					KBUID:           kbUID,
+					Bucket:          cr.effectiveBucket,
+					Destination:     cr.effectiveDestination,
 					FileDisplayName: cr.fileMetadata.metadata.File.DisplayName,
-					FileType:    cr.effectiveFileType,
-					Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
-					CacheName:   fileCacheName,
+					FileType:        cr.effectiveFileType,
+					Metadata:        cr.fileMetadata.metadata.ExternalMetadata,
+					CacheName:       fileCacheName,
 					// ContentMarkdown left empty - Gemini reads raw file
 				})
 				summaryFutureChan = nil // No channel for Gemini
@@ -787,10 +787,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 
 			// Save content chunks (reference the content converted_file)
-			if err := workflow.ExecuteActivity(ctx, w.SaveTextChunksActivity, &SaveTextChunksActivityParam{
+			if err := workflow.ExecuteActivity(ctx, w.SaveChunksActivity, &SaveChunksActivityParam{
 				KBUID:            kbUID,
 				FileUID:          fileUID,
-				TextChunks:       contentChunks.TextChunks,
+				Chunks:           contentChunks.Chunks,
 				ConvertedFileUID: contentResult.ConvertedFileUID, // Use UID from ProcessContentActivity
 			}).Get(ctx, nil); err != nil {
 				filesFailed[fileUID.String()] = handleFileError(fileUID, "save content chunks", err)
@@ -800,7 +800,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			// Process summary chunks if present (summary converted_file already created in ProcessSummaryActivity)
 			var totalChunkCount int
-			totalChunkCount = len(contentChunks.TextChunks)
+			totalChunkCount = len(contentChunks.Chunks)
 
 			if len(summaryResult.Summary) > 0 && summaryResult.ConvertedFileUID != uuid.Nil {
 				// Chunk the summary
@@ -819,10 +819,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				}
 
 				// Save summary chunks (reference the summary converted_file created by ProcessSummaryActivity)
-				if err := workflow.ExecuteActivity(ctx, w.SaveTextChunksActivity, &SaveTextChunksActivityParam{
+				if err := workflow.ExecuteActivity(ctx, w.SaveChunksActivity, &SaveChunksActivityParam{
 					KBUID:            kbUID,
 					FileUID:          fileUID,
-					TextChunks:       summaryChunks.TextChunks,
+					Chunks:           summaryChunks.Chunks,
 					ConvertedFileUID: summaryResult.ConvertedFileUID, // Summary chunks reference summary converted_file
 				}).Get(ctx, nil); err != nil {
 					filesFailed[fileUID.String()] = handleFileError(fileUID, "save summary chunks", err)
@@ -830,7 +830,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					continue
 				}
 
-				totalChunkCount += len(summaryChunks.TextChunks)
+				totalChunkCount += len(summaryChunks.Chunks)
 			}
 
 			logger.Info("CHUNKING phase completed for file",
@@ -975,8 +975,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		for _, prodFileMeta := range filesMetadata {
 			var findResult FindTargetFileByNameActivityResult
 			err := workflow.ExecuteActivity(findActivityCtx, w.FindTargetFileByNameActivity, &FindTargetFileByNameActivityParam{
-				TargetKBUID:    dualProcessingInfo.TargetKB.UID,
-				TargetOwnerUID: dualProcessingInfo.TargetKB.NamespaceUID,
+				TargetKBUID:     dualProcessingInfo.TargetKB.UID,
+				TargetOwnerUID:  dualProcessingInfo.TargetKB.NamespaceUID,
 				FileDisplayName: prodFileMeta.metadata.File.DisplayName,
 			}).Get(findActivityCtx, &findResult)
 			if err != nil {

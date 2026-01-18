@@ -15,7 +15,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 func TestUpdateFileStatusActivityParam_Validation(t *testing.T) {
@@ -87,9 +87,9 @@ func TestGetFileStatusActivity_Success(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{
+		Then([]repository.FileModel{
 			{UID: fileUID, ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String()},
 		}, nil)
 
@@ -108,9 +108,9 @@ func TestGetFileStatusActivity_FileNotFound(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{}, nil)
+		Then([]repository.FileModel{}, nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
@@ -127,7 +127,7 @@ func TestGetFileStatusActivity_DatabaseError(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
 		Then(nil, fmt.Errorf("database error"))
 
@@ -146,12 +146,12 @@ func TestUpdateFileStatusActivity_Success(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{
+		Then([]repository.FileModel{
 			{UID: fileUID, ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING.String()},
 		}, nil)
-	mockRepository.UpdateKnowledgeBaseFileMock.Return(&repository.KnowledgeBaseFileModel{}, nil)
+	mockRepository.UpdateFileMock.Return(&repository.FileModel{}, nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 	err := w.UpdateFileStatusActivity(ctx, &UpdateFileStatusActivityParam{
@@ -171,14 +171,14 @@ func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
 	failMessage := "Conversion failed: invalid file format"
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{
+		Then([]repository.FileModel{
 			{UID: fileUID, ProcessStatus: "FILE_PROCESS_STATUS_PROCESSING"},
 		}, nil)
 
 	metadataUpdateCalled := false
-	mockRepository.UpdateKnowledgeFileMetadataMock.
+	mockRepository.UpdateFileMetadataMock.
 		Inspect(func(ctx context.Context, fuid types.FileUIDType, metadata repository.ExtraMetaData) {
 			metadataUpdateCalled = true
 			c.Check(fuid, qt.Equals, fileUID)
@@ -187,12 +187,12 @@ func TestUpdateFileStatusActivity_WithMessage(t *testing.T) {
 		Return(nil)
 
 	statusUpdateCalled := false
-	mockRepository.UpdateKnowledgeBaseFileMock.
+	mockRepository.UpdateFileMock.
 		Inspect(func(ctx context.Context, uid string, updateMap map[string]any) {
 			statusUpdateCalled = true
 			c.Check(uid, qt.Equals, fileUID.String())
 		}).
-		Return(&repository.KnowledgeBaseFileModel{}, nil)
+		Return(&repository.FileModel{}, nil)
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 
@@ -216,9 +216,9 @@ func TestUpdateFileStatusActivity_FileDeleted(t *testing.T) {
 	fileUID := uuid.Must(uuid.NewV4())
 
 	mockRepository := mock.NewRepositoryMock(mc)
-	mockRepository.GetKnowledgeBaseFilesByFileUIDsMock.
+	mockRepository.GetFilesByFileUIDsMock.
 		When(minimock.AnyContext, []uuid.UUID{fileUID}).
-		Then([]repository.KnowledgeBaseFileModel{}, nil) // File was deleted
+		Then([]repository.FileModel{}, nil) // File was deleted
 
 	w := &Worker{repository: mockRepository, log: zap.NewNop()}
 

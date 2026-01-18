@@ -11,7 +11,9 @@ import (
 	"github.com/gofrs/uuid"
 	"go.einride.tech/aip/filtering"
 
+	"github.com/instill-ai/artifact-backend/pkg/constant"
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/artifact-backend/pkg/utils"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -19,46 +21,45 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/instill-ai/artifact-backend/pkg/constant"
-
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	logx "github.com/instill-ai/x/log"
 )
 
 const (
-	// KnowledgeBaseFileTableName is the table name for knowledge base files
-	KnowledgeBaseFileTableName = "file"
+	// FileTableName is the table name for files
+	FileTableName = "file"
 )
 
-// KnowledgeBaseFile interface defines the methods for the knowledge base file table
-type KnowledgeBaseFile interface {
-	// CreateKnowledgeBaseFile creates a new knowledge base file
-	CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFileModel, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFileModel, error)
-	// ListKnowledgeBaseFiles returns a list of knowledge base files.
-	ListKnowledgeBaseFiles(context.Context, KnowledgeBaseFileListParams) (*KnowledgeBaseFileList, error)
-	// GetKnowledgeBaseFilesByFileUIDs returns the knowledge base files by file UIDs
-	GetKnowledgeBaseFilesByFileUIDs(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]KnowledgeBaseFileModel, error)
-	// GetKnowledgeBaseFilesByFileUIDsIncludingDeleted returns files by UIDs, INCLUDING soft-deleted files
+// File interface defines the methods for the file table
+type File interface {
+	// CreateFile creates a new file and associates it with a knowledge base.
+	// The file is namespace-scoped, and the KB association is stored in the junction table.
+	CreateFile(ctx context.Context, file FileModel, kbUID types.KnowledgeBaseUIDType, externalServiceCall func(fileUID string) error) (*FileModel, error)
+	// ListFiles returns a list of files.
+	ListFiles(context.Context, KnowledgeBaseFileListParams) (*FileList, error)
+	// GetFilesByFileUIDs returns the files by file UIDs
+	GetFilesByFileUIDs(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]FileModel, error)
+	// GetFilesByFileUIDsIncludingDeleted returns files by UIDs, INCLUDING soft-deleted files
 	// Used for embedding activities to generate embeddings even if file was deleted during processing
-	GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]KnowledgeBaseFileModel, error)
-	// GetKnowledgeBaseFilesByFileIDs returns files by their hash-based IDs (slug format like 'my-file-abc12345').
+	GetFilesByFileUIDsIncludingDeleted(ctx context.Context, fileUIDs []types.FileUIDType, columns ...string) ([]FileModel, error)
+	// GetFilesByFileIDs returns files by their hash-based IDs (slug format like 'my-file-abc12345').
 	// This is more robust than UUIDs for LLM interactions as the IDs are human-readable and less prone to hallucination.
 	// The function also checks aliases for backward compatibility when display_name is renamed.
-	GetKnowledgeBaseFilesByFileIDs(ctx context.Context, fileIDs []string, columns ...string) ([]KnowledgeBaseFileModel, error)
+	GetFilesByFileIDs(ctx context.Context, fileIDs []string, columns ...string) ([]FileModel, error)
 	// GetFileByIDOrAlias looks up a file by its canonical ID or any of its aliases within a KB
 	// Aliases preserve old URLs when display_name is renamed
-	GetFileByIDOrAlias(ctx context.Context, kbUID types.KBUIDType, id string) (*KnowledgeBaseFileModel, error)
-	// GetKnowledgeBaseFilesByName retrieves files by name in a specific KB
+	GetFileByIDOrAlias(ctx context.Context, kbUID types.KBUIDType, id string) (*FileModel, error)
+	// GetFilesByName retrieves files by name in a specific KB
 	// Used for dual deletion to find corresponding files in staging/rollback KB
-	GetKnowledgeBaseFilesByName(ctx context.Context, kbUID types.KBUIDType, filename string) ([]KnowledgeBaseFileModel, error)
-	// DeleteKnowledgeBaseFile deletes the knowledge base file by file UID
-	DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error
-	// DeleteAllKnowledgeBaseFiles deletes all files in the knowledge base
-	DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) error
-	// ProcessKnowledgeBaseFiles updates the process status of the files
-	ProcessKnowledgeBaseFiles(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType) ([]KnowledgeBaseFileModel, error)
-	// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
-	UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]any) (*KnowledgeBaseFileModel, error)
+	GetFilesByName(ctx context.Context, kbUID types.KBUIDType, filename string) ([]FileModel, error)
+	// DeleteFile deletes the file by file UID
+	DeleteFile(ctx context.Context, fileUID string) error
+	// DeleteAllFiles deletes all files
+	DeleteAllFiles(ctx context.Context, kbUID string) error
+	// ProcessFiles updates the process status of the files
+	ProcessFiles(ctx context.Context, fileUIDs []string, requester types.RequesterUIDType) ([]FileModel, error)
+	// UpdateFile updates the data and retrieves the latest data
+	UpdateFile(ctx context.Context, fileUID string, updateMap map[string]any) (*FileModel, error)
 	// GetFileCountByKnowledgeBaseUID returns the number of files for a KB, optionally filtered by process status
 	// If processStatus is empty, returns all non-deleted files
 	// If processStatus is provided (e.g., "FILE_PROCESS_STATUS_COMPLETED"), returns only files with that status
@@ -73,45 +74,53 @@ type KnowledgeBaseFile interface {
 	// Used during synchronization to exclude files that were just created by reconciliation
 	GetNotStartedFileCountExcluding(ctx context.Context, kbUID types.KBUIDType, excludeUIDs []types.FileUIDType) (int64, error)
 	// GetContentByFileUIDs returns the content converted file source table and uid by file UID list
-	GetContentByFileUIDs(ctx context.Context, files []KnowledgeBaseFileModel) (map[types.FileUIDType]struct {
+	GetContentByFileUIDs(ctx context.Context, files []FileModel) (map[types.FileUIDType]struct {
 		SourceTable string
 		SourceUID   types.SourceUIDType
 	}, error)
 	// GetSourceByFileUID returns the content converted file metadata by file UID
 	GetSourceByFileUID(ctx context.Context, fileUID types.FileUIDType) (*SourceMeta, error)
-	// UpdateKnowledgeFileMetadata updates the metadata fields of a knowledge base file.
-	UpdateKnowledgeFileMetadata(_ context.Context, fileUID types.FileUIDType, _ ExtraMetaData) error
-	// UpdateKnowledgeFileUsageMetadata updates the usage metadata (AI token counts) for a knowledge base file.
+	// UpdateFileMetadata updates the metadata fields of a file.
+	UpdateFileMetadata(_ context.Context, fileUID types.FileUIDType, _ ExtraMetaData) error
+	// UpdateFileUsageMetadata updates the usage metadata (AI token counts) for a file.
 	// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
-	UpdateKnowledgeFileUsageMetadata(_ context.Context, fileUID types.FileUIDType, _ UsageMetadata) error
-	// DeleteKnowledgeBaseFileAndDecreaseUsage deletes the knowledge base file and decreases the knowledge base usage
-	DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID types.FileUIDType) error
+	UpdateFileUsageMetadata(_ context.Context, fileUID types.FileUIDType, _ UsageMetadata) error
+	// DeleteFileAndDecreaseUsage deletes the file and decreases the knowledge base usage
+	DeleteFileAndDecreaseUsage(ctx context.Context, fileUID types.FileUIDType) error
+	// GetKnowledgeBaseUIDsForFile returns all KB UIDs associated with a file via the junction table
+	GetKnowledgeBaseUIDsForFile(ctx context.Context, fileUID types.FileUIDType) ([]types.KnowledgeBaseUIDType, error)
+	// GetKnowledgeBaseIDsForFiles returns a map of file UID to KB IDs (hash-based IDs) for batch lookup
+	GetKnowledgeBaseIDsForFiles(ctx context.Context, fileUIDs []types.FileUIDType) (map[types.FileUIDType][]string, error)
 
 	// Deprecated methods
 
-	// GetKnowledgebaseFileByKBUIDAndFileID returns the knowledge base file by
+	// GetFileByKBUIDAndFileID returns the file by
 	// knowledge base ID and file ID. File ID (filename) isn't unique by
-	// knowledge base anymore, so this method is deprecated. Files should be identified by their UID.
-	GetKnowledgebaseFileByKBUIDAndFileID(ctx context.Context, kbUID types.KBUIDType, fileID string) (*KnowledgeBaseFileModel, error)
+	// knowledge base any more, so this method is deprecated. Files should be identified by their UID.
+	GetFileByKBUIDAndFileID(ctx context.Context, kbUID types.KBUIDType, fileID string) (*FileModel, error)
 }
 
-// KnowledgeBaseFileModel is the model for the knowledge base file table
-type KnowledgeBaseFileModel struct {
+// FileModel is the model for the file table
+// Field ordering follows AIP standard: name (derived), id, display_name, slug, aliases, description
+type FileModel struct {
 	UID types.FileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
-	// ID is a hash-based resource identifier (e.g., "my-file-abc12345")
+	// Field 2: Immutable canonical ID with prefix (e.g., "fil-8f3A2k9E7c1")
 	ID string `gorm:"column:id;size:255;not null" json:"id"`
+	// Field 3: Human-readable display name for UI (filename)
+	DisplayName string `gorm:"column:display_name;size:255;not null" json:"display_name"`
+	// Field 4: URL-friendly slug without prefix
+	Slug string `gorm:"column:slug;size:255" json:"slug"`
+	// Field 5: Previous slugs for backward compatibility with old URLs
+	Aliases AliasesArray `gorm:"column:aliases;type:text[]" json:"aliases"`
+	// Field 6: Optional description
+	Description string `gorm:"column:description" json:"description"`
 	// NamespaceUID is the namespace that owns this file
 	NamespaceUID types.NamespaceUIDType `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
-	KBUID        types.KBUIDType        `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	CreatorUID   types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
-	DisplayName  string                 `gorm:"column:display_name;size:255;not null" json:"display_name"`
-	Description  string                 `gorm:"column:description" json:"description"`
-	// Aliases stores previous IDs for backward compatibility with old URLs
-	Aliases AliasesArray `gorm:"column:aliases;type:text[]" json:"aliases"`
 	// FileType stores the FileType enum string (e.g., "TYPE_PDF", "TYPE_TEXT")
 	FileType string `gorm:"column:file_type;not null" json:"file_type"`
-	// Destination is the path in the MinIO bucket
-	Destination string `gorm:"column:destination;size:255;not null" json:"destination"`
+	// StoragePath is the path in the MinIO bucket
+	StoragePath string `gorm:"column:storage_path;size:255;not null" json:"storage_path"`
 	// Process status is defined in the grpc proto file
 	ProcessStatus string `gorm:"column:process_status;size:100;not null" json:"process_status"`
 	// Note: use ExtraMetaDataMarshal method to marshal and unmarshal. do not populate this field directly
@@ -141,11 +150,23 @@ type KnowledgeBaseFileModel struct {
 }
 
 // TableName overrides the default table name for GORM
-func (KnowledgeBaseFileModel) TableName() string {
-	return KnowledgeBaseFileTableName
+func (FileModel) TableName() string {
+	return FileTableName
 }
 
-// ExtraMetaData is the extra meta data of the knowledge base file
+// FileKnowledgeBase represents the many-to-many relationship between files and knowledge bases
+type FileKnowledgeBase struct {
+	FileUID   types.FileUIDType          `gorm:"column:file_uid;type:uuid;primaryKey" json:"file_uid"`
+	KBUID     types.KnowledgeBaseUIDType `gorm:"column:kb_uid;type:uuid;primaryKey" json:"kb_uid"`
+	CreatedAt time.Time                  `gorm:"column:created_at;not null;default:now()" json:"created_at"`
+}
+
+// TableName overrides the default table name for GORM
+func (FileKnowledgeBase) TableName() string {
+	return "file_knowledge_base"
+}
+
+// ExtraMetaData is the extra meta data of the file
 type ExtraMetaData struct {
 	// StatusMessage stores status messages for all processing stages (success or failure)
 	// Examples: "File processing completed successfully", "Conversion failed: invalid format"
@@ -173,17 +194,17 @@ type UsageMetadata struct {
 	Summary map[string]interface{} `json:"summary,omitempty"`
 }
 
-// KnowledgeBaseFileColumns is the columns for the knowledge base file table
-type KnowledgeBaseFileColumns struct {
+// FileColumns is the columns for the file table
+type FileColumns struct {
 	UID              string
 	ID               string
 	Owner            string
-	KnowledgeBaseUID string
 	CreatorUID       string
 	DisplayName      string
+	Slug             string
 	Aliases          string
 	FileType         string
-	Destination      string
+	StoragePath      string
 	ProcessStatus    string
 	CreateTime       string
 	ExtraMetaData    string
@@ -196,17 +217,17 @@ type KnowledgeBaseFileColumns struct {
 	UsageMetadata    string
 }
 
-// KnowledgeBaseFileColumn is the columns for the knowledge base file table
-var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
+// FileColumn is the columns for the file table
+var FileColumn = FileColumns{
 	UID:              "uid",
 	ID:               "id",
 	Owner:            "owner",
-	KnowledgeBaseUID: "kb_uid",
 	CreatorUID:       "creator_uid",
 	DisplayName:      "display_name",
+	Slug:             "slug",
 	Aliases:          "aliases",
 	FileType:         "file_type",
-	Destination:      "destination",
+	StoragePath:      "storage_path",
 	ProcessStatus:    "process_status",
 	ExtraMetaData:    "extra_meta_data",
 	CreateTime:       "create_time",
@@ -221,7 +242,7 @@ var KnowledgeBaseFileColumn = KnowledgeBaseFileColumns{
 
 // ConvertingPipeline extracts the conversion pipeline, if present, from the
 // file metadata.
-func (kf KnowledgeBaseFileModel) ConvertingPipeline() *string {
+func (kf FileModel) ConvertingPipeline() *string {
 	if kf.ExtraMetaDataUnmarshal == nil || kf.ExtraMetaDataUnmarshal.ConvertingPipe == "" {
 		return nil
 	}
@@ -230,7 +251,7 @@ func (kf KnowledgeBaseFileModel) ConvertingPipeline() *string {
 }
 
 // ExtraMetaDataMarshal marshals the ExtraMetaData struct to a JSON string
-func (kf *KnowledgeBaseFileModel) ExtraMetaDataMarshal() error {
+func (kf *FileModel) ExtraMetaDataMarshal() error {
 	if kf.ExtraMetaDataUnmarshal == nil {
 		kf.ExtraMetaData = "{}"
 		return nil
@@ -244,7 +265,7 @@ func (kf *KnowledgeBaseFileModel) ExtraMetaDataMarshal() error {
 }
 
 // ExtraMetaDataUnmarshalFunc unmarshals the ExtraMetaData JSON string to a struct
-func (kf *KnowledgeBaseFileModel) ExtraMetaDataUnmarshalFunc() error {
+func (kf *FileModel) ExtraMetaDataUnmarshalFunc() error {
 	var data ExtraMetaData
 	if kf.ExtraMetaData == "" {
 		kf.ExtraMetaDataUnmarshal = nil
@@ -258,7 +279,7 @@ func (kf *KnowledgeBaseFileModel) ExtraMetaDataUnmarshalFunc() error {
 }
 
 // ExternalMetadataToJSON converts structpb.Struct to JSON string for DB storage
-func (kf *KnowledgeBaseFileModel) ExternalMetadataToJSON() error {
+func (kf *FileModel) ExternalMetadataToJSON() error {
 	if kf.ExternalMetadataUnmarshal == nil {
 		kf.ExternalMetadata = "{}"
 		return nil
@@ -274,7 +295,7 @@ func (kf *KnowledgeBaseFileModel) ExternalMetadataToJSON() error {
 }
 
 // JSONToExternalMetadata converts JSON string from DB to structpb.Struct
-func (kf *KnowledgeBaseFileModel) JSONToExternalMetadata() error {
+func (kf *FileModel) JSONToExternalMetadata() error {
 	if kf.ExternalMetadata == "" {
 		kf.ExternalMetadataUnmarshal = nil
 		return nil
@@ -294,7 +315,7 @@ func (kf *KnowledgeBaseFileModel) JSONToExternalMetadata() error {
 // ExternalMetadata is used internally to propagate the context from a file
 // request in the server (e.g. upload) to the worker, but such information
 // shouldn't be exposed publicly.
-func (kf *KnowledgeBaseFileModel) PublicExternalMetadataUnmarshal() *structpb.Struct {
+func (kf *FileModel) PublicExternalMetadataUnmarshal() *structpb.Struct {
 	original := kf.ExternalMetadataUnmarshal
 	if original == nil || original.Fields[constant.MetadataRequestKey] == nil {
 		return original
@@ -306,7 +327,7 @@ func (kf *KnowledgeBaseFileModel) PublicExternalMetadataUnmarshal() *structpb.St
 }
 
 // UsageMetadataMarshal marshals the UsageMetadata struct to a JSON string
-func (kf *KnowledgeBaseFileModel) UsageMetadataMarshal() error {
+func (kf *FileModel) UsageMetadataMarshal() error {
 	if kf.UsageMetadataUnmarshal == nil {
 		kf.UsageMetadata = "{}"
 		return nil
@@ -320,7 +341,7 @@ func (kf *KnowledgeBaseFileModel) UsageMetadataMarshal() error {
 }
 
 // UsageMetadataUnmarshalFunc unmarshals the UsageMetadata JSON string to a struct
-func (kf *KnowledgeBaseFileModel) UsageMetadataUnmarshalFunc() error {
+func (kf *FileModel) UsageMetadataUnmarshalFunc() error {
 	if kf.UsageMetadata == "" || kf.UsageMetadata == "{}" {
 		kf.UsageMetadataUnmarshal = nil
 		return nil
@@ -334,12 +355,17 @@ func (kf *KnowledgeBaseFileModel) UsageMetadataUnmarshalFunc() error {
 }
 
 // BeforeCreate is a GORM hook that marshals the ExtraMetaData, ExternalMetadata, and UsageMetadata fields
-// and sets default ID if not provided
-func (kf *KnowledgeBaseFileModel) BeforeCreate(tx *gorm.DB) (err error) {
-	// Set default ID if not provided (use UID as default)
+// and sets default ID and Slug if not provided
+func (kf *FileModel) BeforeCreate(tx *gorm.DB) (err error) {
+	// Generate prefixed canonical ID if not provided (AIP standard)
 	if kf.ID == "" {
-		kf.ID = kf.UID.String()
+		kf.ID = utils.GeneratePrefixedResourceID(utils.PrefixFile, uuid.UUID(kf.UID))
 		tx.Statement.SetColumn("ID", kf.ID)
+	}
+	// Generate slug from display name if not provided
+	if kf.Slug == "" && kf.DisplayName != "" {
+		kf.Slug = utils.GenerateSlug(kf.DisplayName)
+		tx.Statement.SetColumn("Slug", kf.Slug)
 	}
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
@@ -351,7 +377,7 @@ func (kf *KnowledgeBaseFileModel) BeforeCreate(tx *gorm.DB) (err error) {
 }
 
 // BeforeSave is a GORM hook that marshals the ExtraMetaData, ExternalMetadata, and UsageMetadata fields
-func (kf *KnowledgeBaseFileModel) BeforeSave(tx *gorm.DB) (err error) {
+func (kf *FileModel) BeforeSave(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
 	}
@@ -362,7 +388,7 @@ func (kf *KnowledgeBaseFileModel) BeforeSave(tx *gorm.DB) (err error) {
 }
 
 // BeforeUpdate is a GORM hook that marshals the ExtraMetaData, ExternalMetadata, and UsageMetadata fields
-func (kf *KnowledgeBaseFileModel) BeforeUpdate(tx *gorm.DB) (err error) {
+func (kf *FileModel) BeforeUpdate(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataMarshal(); err != nil {
 		return err
 	}
@@ -373,7 +399,7 @@ func (kf *KnowledgeBaseFileModel) BeforeUpdate(tx *gorm.DB) (err error) {
 }
 
 // AfterFind is a GORM hook that unmarshals the ExtraMetaData, ExternalMetadata, and UsageMetadata fields
-func (kf *KnowledgeBaseFileModel) AfterFind(tx *gorm.DB) (err error) {
+func (kf *FileModel) AfterFind(tx *gorm.DB) (err error) {
 	if err := kf.ExtraMetaDataUnmarshalFunc(); err != nil {
 		return err
 	}
@@ -383,8 +409,9 @@ func (kf *KnowledgeBaseFileModel) AfterFind(tx *gorm.DB) (err error) {
 	return kf.UsageMetadataUnmarshalFunc()
 }
 
-// CreateKnowledgeBaseFile creates a new knowledge base file
-func (r *repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBaseFileModel, externalServiceCall func(fileUID string) error) (*KnowledgeBaseFileModel, error) {
+// CreateFile creates a new file and associates it with a knowledge base.
+// The file is namespace-scoped, and the KB association is stored in the junction table.
+func (r *repository) CreateFile(ctx context.Context, file FileModel, kbUID types.KnowledgeBaseUIDType, externalServiceCall func(fileUID string) error) (*FileModel, error) {
 	// CRITICAL: Use transaction with row-level locking to prevent race conditions
 	// Without locking, this race can occur:
 	// 1. Check: KB exists ✓
@@ -404,29 +431,38 @@ func (r *repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 		// Lock the KB row with SELECT ... FOR UPDATE to prevent concurrent deletion
 		var existingKB KnowledgeBaseModel
 		whereString := fmt.Sprintf("%v = ? AND %s IS NULL", KnowledgeBaseColumn.UID, KnowledgeBaseColumn.DeleteTime)
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(whereString, kb.KBUID).First(&existingKB).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(whereString, kbUID).First(&existingKB).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				return fmt.Errorf("knowledge base does not exist or has been deleted")
 			}
 			return fmt.Errorf("checking knowledge base existence: %w", err)
 		}
 
-		// Create the knowledge base file
-		if err := tx.Create(&kb).Error; err != nil {
+		// Create the file (namespace-scoped)
+		if err := tx.Create(&file).Error; err != nil {
 			return err
+		}
+
+		// Create the file-KB association in the junction table
+		association := FileKnowledgeBase{
+			FileUID: file.UID,
+			KBUID:   kbUID,
+		}
+		if err := tx.Create(&association).Error; err != nil {
+			return fmt.Errorf("creating file-kb association: %w", err)
 		}
 
 		// Increase knowledge base usage in same transaction
 		// This prevents race conditions and makes the operation atomic with file creation
 		where := fmt.Sprintf("%v = ?", KnowledgeBaseColumn.UID)
 		expr := fmt.Sprintf("%v + ?", KnowledgeBaseColumn.Usage)
-		if err := tx.Model(&KnowledgeBaseModel{}).Where(where, kb.KBUID.String()).Update(KnowledgeBaseColumn.Usage, gorm.Expr(expr, int(kb.Size))).Error; err != nil {
+		if err := tx.Model(&KnowledgeBaseModel{}).Where(where, kbUID.String()).Update(KnowledgeBaseColumn.Usage, gorm.Expr(expr, int(file.Size))).Error; err != nil {
 			return fmt.Errorf("increasing knowledge base usage: %w", err)
 		}
 
 		// Call the external service
 		if externalServiceCall != nil {
-			if err := externalServiceCall(kb.UID.String()); err != nil {
+			if err := externalServiceCall(file.UID.String()); err != nil {
 				return err
 			}
 		}
@@ -438,7 +474,7 @@ func (r *repository) CreateKnowledgeBaseFile(ctx context.Context, kb KnowledgeBa
 		return nil, err
 	}
 
-	return &kb, nil
+	return &file, nil
 }
 
 // KnowledgeBaseFileListParams contains the params to fetch a list of knowledge
@@ -455,21 +491,32 @@ type KnowledgeBaseFileListParams struct {
 	PageToken string
 }
 
-// KnowledgeBaseFileList contains a list of knowledge base files.
-type KnowledgeBaseFileList struct {
-	Files         []KnowledgeBaseFileModel
+// FileList contains a list of files.
+type FileList struct {
+	Files         []FileModel
 	TotalCount    int
 	NextPageToken string
 }
 
-// ListKnowledgeBaseFiles returns a paginated list of files within a knowledge
+// ListFiles returns a paginated list of files within a knowledge
 // base. The list can optionally be filtered by AIP-160 filter expressions.
-func (r *repository) ListKnowledgeBaseFiles(ctx context.Context, params KnowledgeBaseFileListParams) (*KnowledgeBaseFileList, error) {
-	var kbs []KnowledgeBaseFileModel
+// Files are joined with the file_knowledge_base junction table to filter by KB.
+// If KBUID is empty, all files in the namespace are listed without KB filtering.
+func (r *repository) ListFiles(ctx context.Context, params KnowledgeBaseFileListParams) (*FileList, error) {
+	var files []FileModel
 	var totalCount int64
 
-	where := "namespace_uid = ? AND kb_uid = ?"
-	whereArgs := []interface{}{params.OwnerUID, params.KBUID}
+	q := r.db.Model(&FileModel{})
+
+	if params.KBUID != "" {
+		// Join with junction table to filter by KB when KBUID is provided
+		// file.namespace_uid = ? AND file_knowledge_base.kb_uid = ?
+		q = q.Joins("INNER JOIN file_knowledge_base ON file_knowledge_base.file_uid = file.uid").
+			Where("file.namespace_uid = ? AND file_knowledge_base.kb_uid = ?", params.OwnerUID, params.KBUID)
+	} else {
+		// List all files in the namespace without KB filtering
+		q = q.Where("file.namespace_uid = ?", params.OwnerUID)
+	}
 
 	// Apply AIP-160 filter if provided
 	var expr *clause.Expr
@@ -477,8 +524,6 @@ func (r *repository) ListKnowledgeBaseFiles(ctx context.Context, params Knowledg
 	if expr, err = r.TranspileFilter(params.Filter); err != nil {
 		return nil, fmt.Errorf("transpiling filter: %w", err)
 	}
-
-	q := r.db.Model(&KnowledgeBaseFileModel{}).Where(where, whereArgs...)
 
 	if expr != nil {
 		// Apply the filter expression directly using Where with SQL and Vars
@@ -509,7 +554,7 @@ func (r *repository) ListKnowledgeBaseFiles(ctx context.Context, params Knowledg
 		}
 
 		// Next page token is the UID of the first record in the requested page.
-		kbfs, err := r.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{tokenUUID})
+		kbfs, err := r.GetFilesByFileUIDs(ctx, []types.FileUIDType{tokenUUID})
 		if err != nil {
 			return nil, fmt.Errorf("building query from token: %w", err)
 		}
@@ -518,61 +563,64 @@ func (r *repository) ListKnowledgeBaseFiles(ctx context.Context, params Knowledg
 			return nil, fmt.Errorf("invalid next page token")
 		}
 
-		q = q.Where("update_time <= ?", kbfs[0].UpdateTime)
+		q = q.Where("file.update_time <= ?", kbfs[0].UpdateTime)
 	}
 
 	// TODO INS-8162: the repository method (and the upstream handler) should
 	// take an `ordering` parameter so clients can choose the sorting.
-	q = q.Order("update_time DESC")
+	q = q.Order("file.update_time DESC")
 
 	// Fetch the records
-	if err := q.Find(&kbs).Error; err != nil {
+	if err := q.Find(&files).Error; err != nil {
 		return nil, fmt.Errorf("fetching records: %w", err)
 	}
 
-	resp := &KnowledgeBaseFileList{
-		Files:      kbs,
+	resp := &FileList{
+		Files:      files,
 		TotalCount: int(totalCount),
 	}
 
-	if len(kbs) > params.PageSize {
-		resp.NextPageToken = kbs[params.PageSize].UID.String()
-		resp.Files = kbs[:params.PageSize]
+	if len(files) > params.PageSize {
+		resp.NextPageToken = files[params.PageSize].UID.String()
+		resp.Files = files[:params.PageSize]
 	}
 
 	return resp, nil
 }
 
 // delete the file which is to set the delete time
-func (r *repository) DeleteKnowledgeBaseFile(ctx context.Context, fileUID string) error {
+func (r *repository) DeleteFile(ctx context.Context, fileUID string) error {
 	currentTime := time.Now()
-	whereClause := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseFileColumn.UID, KnowledgeBaseFileColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseFileModel{}).
+	whereClause := fmt.Sprintf("%v = ? AND %v is NULL", FileColumn.UID, FileColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Model(&FileModel{}).
 		Where(whereClause, fileUID).
-		Update(KnowledgeBaseFileColumn.DeleteTime, currentTime).Error; err != nil {
+		Update(FileColumn.DeleteTime, currentTime).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
 // hard delete all files in the knowledge base
-func (r *repository) DeleteAllKnowledgeBaseFiles(ctx context.Context, kbUID string) error {
-	whereClause := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.KnowledgeBaseUID)
-	// Use Unscoped() to perform actual hard delete (physical removal), not soft delete
-	if err := r.db.WithContext(ctx).Unscoped().Model(&KnowledgeBaseFileModel{}).
-		Where(whereClause, kbUID).
-		Delete(&KnowledgeBaseFileModel{}).Error; err != nil {
+// Uses the junction table to find files associated with the KB.
+// Junction table entries are CASCADE deleted when files are deleted.
+func (r *repository) DeleteAllFiles(ctx context.Context, kbUID string) error {
+	// Delete files that are associated with this KB via the junction table
+	// Use subquery to find file UIDs associated with the KB
+	subQuery := r.db.Table("file_knowledge_base").Select("file_uid").Where("kb_uid = ?", kbUID)
+	if err := r.db.WithContext(ctx).Unscoped().
+		Where("uid IN (?)", subQuery).
+		Delete(&FileModel{}).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
-// ProcessKnowledgeBaseFiles updates the process status of the files
-func (r *repository) ProcessKnowledgeBaseFiles(
+// ProcessFiles updates the process status of the files
+func (r *repository) ProcessFiles(
 	ctx context.Context,
 	fileUIDs []string,
 	requester types.RequesterUIDType,
-) ([]KnowledgeBaseFileModel, error) {
+) ([]FileModel, error) {
 
 	db := r.db.WithContext(ctx)
 
@@ -584,12 +632,12 @@ func (r *repository) ProcessKnowledgeBaseFiles(
 		"extra_meta_data": gorm.Expr("COALESCE(extra_meta_data, '{}'::jsonb) || ?::jsonb", `{"status_message": ""}`),
 	}
 
-	if err := db.Model(&KnowledgeBaseFileModel{}).Where("uid IN ?", fileUIDs).Updates(updates).Error; err != nil {
+	if err := db.Model(&FileModel{}).Where("uid IN ?", fileUIDs).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("updating records: %w", err)
 	}
 
 	// Retrieve the updated records
-	var files []KnowledgeBaseFileModel
+	var files []FileModel
 	if err := db.Where("uid IN ?", fileUIDs).Find(&files).Error; err != nil {
 		return nil, fmt.Errorf("retrieving updated records: %w", err)
 	}
@@ -597,9 +645,9 @@ func (r *repository) ProcessKnowledgeBaseFiles(
 	return files, nil
 }
 
-// UpdateKnowledgeBaseFile updates the data and retrieves the latest data
-func (r *repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string, updateMap map[string]any) (*KnowledgeBaseFileModel, error) {
-	var updatedFile KnowledgeBaseFileModel
+// UpdateFile updates the data and retrieves the latest data
+func (r *repository) UpdateFile(ctx context.Context, fileUID string, updateMap map[string]any) (*FileModel, error) {
+	var updatedFile FileModel
 
 	// Convert tags if present to TagsArray type for proper PostgreSQL array handling
 	if tags, ok := updateMap["tags"]; ok {
@@ -611,14 +659,14 @@ func (r *repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string
 	// Use a transaction to update and then fetch the latest data
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Update the data
-		if err := tx.Model(&KnowledgeBaseFileModel{}).
-			Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).
+		if err := tx.Model(&FileModel{}).
+			Where(FileColumn.UID+" = ?", fileUID).
 			Updates(updateMap).Error; err != nil {
 			return err
 		}
 
 		// Fetch the latest data
-		if err := tx.Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).First(&updatedFile).Error; err != nil {
+		if err := tx.Where(FileColumn.UID+" = ?", fileUID).First(&updatedFile).Error; err != nil {
 			return err
 		}
 
@@ -636,15 +684,14 @@ func (r *repository) UpdateKnowledgeBaseFile(ctx context.Context, fileUID string
 // Used by synchronization to detect files waiting to start processing.
 // With sequential dual-processing, staging files legitimately stay NOTSTARTED
 // until production completes, so we don't filter by age.
+// Uses the junction table to filter by KB.
 func (r *repository) GetNotStartedFileCount(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
 	var count int64
 
 	err := r.db.WithContext(ctx).
-		Table(KnowledgeBaseFileTableName).
-		Where(fmt.Sprintf("%v = ? AND %v IS NULL AND %v = ?",
-			KnowledgeBaseFileColumn.KnowledgeBaseUID,
-			KnowledgeBaseFileColumn.DeleteTime,
-			KnowledgeBaseFileColumn.ProcessStatus),
+		Table(FileTableName).
+		Joins("INNER JOIN file_knowledge_base ON file_knowledge_base.file_uid = file.uid").
+		Where("file_knowledge_base.kb_uid = ? AND file.delete_time IS NULL AND file.process_status = ?",
 			kbUID,
 			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String()).
 		Count(&count).
@@ -660,21 +707,20 @@ func (r *repository) GetNotStartedFileCount(ctx context.Context, kbUID types.KBU
 // GetNotStartedFileCountExcluding counts files in NOTSTARTED status excluding specific file UIDs
 // This is used during synchronization to exclude files that were just created by reconciliation
 // and haven't been picked up by Temporal yet (avoiding false positives)
+// Uses the junction table to filter by KB.
 func (r *repository) GetNotStartedFileCountExcluding(ctx context.Context, kbUID types.KBUIDType, excludeUIDs []types.FileUIDType) (int64, error) {
 	var count int64
 
 	query := r.db.WithContext(ctx).
-		Table(KnowledgeBaseFileTableName).
-		Where(fmt.Sprintf("%v = ? AND %v IS NULL AND %v = ?",
-			KnowledgeBaseFileColumn.KnowledgeBaseUID,
-			KnowledgeBaseFileColumn.DeleteTime,
-			KnowledgeBaseFileColumn.ProcessStatus),
+		Table(FileTableName).
+		Joins("INNER JOIN file_knowledge_base ON file_knowledge_base.file_uid = file.uid").
+		Where("file_knowledge_base.kb_uid = ? AND file.delete_time IS NULL AND file.process_status = ?",
 			kbUID,
 			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String())
 
 	// Exclude specific file UIDs if provided
 	if len(excludeUIDs) > 0 {
-		query = query.Where(fmt.Sprintf("%v NOT IN ?", KnowledgeBaseFileColumn.UID), excludeUIDs)
+		query = query.Where("file.uid NOT IN ?", excludeUIDs)
 	}
 
 	err := query.Count(&count).Error
@@ -685,14 +731,15 @@ func (r *repository) GetNotStartedFileCountExcluding(ctx context.Context, kbUID 
 	return count, nil
 }
 
+// GetFileCountByKnowledgeBaseUID counts files by KB UID, optionally filtered by process status.
+// Uses the junction table to filter by KB.
 func (r *repository) GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID types.KBUIDType, processStatus string) (int64, error) {
 	var count int64
 
 	query := r.db.WithContext(ctx).
-		Table(KnowledgeBaseFileTableName).
-		Where(fmt.Sprintf("%v = ? AND %v IS NULL",
-			KnowledgeBaseFileColumn.KnowledgeBaseUID,
-			KnowledgeBaseFileColumn.DeleteTime), kbUID)
+		Table(FileTableName).
+		Joins("INNER JOIN file_knowledge_base ON file_knowledge_base.file_uid = file.uid").
+		Where("file_knowledge_base.kb_uid = ? AND file.delete_time IS NULL", kbUID)
 
 	// Add process status filter if specified
 	// Support comma-separated list of statuses for IN clause
@@ -700,10 +747,10 @@ func (r *repository) GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID t
 		statuses := strings.Split(processStatus, ",")
 		if len(statuses) == 1 {
 			// Single status: use exact match
-			query = query.Where(fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.ProcessStatus), processStatus)
+			query = query.Where("file.process_status = ?", processStatus)
 		} else {
 			// Multiple statuses: use IN clause
-			query = query.Where(fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.ProcessStatus), statuses)
+			query = query.Where("file.process_status IN ?", statuses)
 		}
 	}
 
@@ -721,13 +768,15 @@ func (r *repository) GetFileCountByKnowledgeBaseUID(ctx context.Context, kbUID t
 // 1. When KB is deleted, files are CASCADE soft-deleted
 // 2. But file processing workflows continue running (designed to handle soft-deleted files)
 // 3. Cleanup must wait for these workflows to complete before dropping the Milvus collection
+// Uses the junction table to filter by KB.
 func (r *repository) GetFileCountByKnowledgeBaseUIDIncludingDeleted(ctx context.Context, kbUID types.KBUIDType, processStatus string) (int64, error) {
 	var count int64
 
 	// Do NOT filter by delete_time - we need to count soft-deleted files too
 	query := r.db.WithContext(ctx).
-		Table(KnowledgeBaseFileTableName).
-		Where(fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.KnowledgeBaseUID), kbUID)
+		Table(FileTableName).
+		Joins("INNER JOIN file_knowledge_base ON file_knowledge_base.file_uid = file.uid").
+		Where("file_knowledge_base.kb_uid = ?", kbUID)
 
 	// Add process status filter if specified
 	// Support comma-separated list of statuses for IN clause
@@ -735,10 +784,10 @@ func (r *repository) GetFileCountByKnowledgeBaseUIDIncludingDeleted(ctx context.
 		statuses := strings.Split(processStatus, ",")
 		if len(statuses) == 1 {
 			// Single status: use exact match
-			query = query.Where(fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.ProcessStatus), processStatus)
+			query = query.Where("file.process_status = ?", processStatus)
 		} else {
 			// Multiple statuses: use IN clause
-			query = query.Where(fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.ProcessStatus), statuses)
+			query = query.Where("file.process_status IN ?", statuses)
 		}
 	}
 
@@ -751,7 +800,7 @@ func (r *repository) GetFileCountByKnowledgeBaseUIDIncludingDeleted(ctx context.
 }
 
 // GetContentByFileUIDs returns the content converted file source table and uid by file UID list
-func (r *repository) GetContentByFileUIDs(ctx context.Context, files []KnowledgeBaseFileModel) (
+func (r *repository) GetContentByFileUIDs(ctx context.Context, files []FileModel) (
 	map[types.FileUIDType]struct {
 		SourceTable string
 		SourceUID   types.SourceUIDType
@@ -791,19 +840,19 @@ func (r *repository) GetContentByFileUIDs(ctx context.Context, files []Knowledge
 	return result, nil
 }
 
-func (r *repository) GetKnowledgeBaseFilesByFileUIDs(
+func (r *repository) GetFilesByFileUIDs(
 	ctx context.Context,
 	fileUIDs []types.FileUIDType,
 	columns ...string,
-) ([]KnowledgeBaseFileModel, error) {
+) ([]FileModel, error) {
 
-	var files []KnowledgeBaseFileModel
+	var files []FileModel
 	// Convert UUIDs to strings as GORM works with strings in queries
 	var stringUIDs []string
 	for _, uid := range fileUIDs {
 		stringUIDs = append(stringUIDs, uid.String())
 	}
-	where := fmt.Sprintf("%v IN ? AND %v IS NULL", KnowledgeBaseFileColumn.UID, KnowledgeBaseFileColumn.DeleteTime)
+	where := fmt.Sprintf("%v IN ? AND %v IS NULL", FileColumn.UID, FileColumn.DeleteTime)
 	query := r.db.WithContext(ctx)
 	if len(columns) > 0 {
 		query = query.Select(columns)
@@ -812,7 +861,7 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDs(
 	if err := query.Where(where, stringUIDs).Find(&files).Error; err != nil {
 		// If GORM returns ErrRecordNotFound, it's not considered an error in this context
 		if err == gorm.ErrRecordNotFound {
-			return []KnowledgeBaseFileModel{}, nil
+			return []FileModel{}, nil
 		}
 		// Return any other error that might have occurred during the query
 		return nil, err
@@ -822,16 +871,16 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDs(
 	return files, nil
 }
 
-// GetKnowledgeBaseFilesByFileUIDsIncludingDeleted retrieves files by UIDs, INCLUDING soft-deleted files
+// GetFilesByFileUIDsIncludingDeleted retrieves files by UIDs, INCLUDING soft-deleted files
 // This is needed for embedding activities which may run after a file has been soft-deleted during
 // dual deletion. The embeddings must still be generated for existing chunks.
-func (r *repository) GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(
+func (r *repository) GetFilesByFileUIDsIncludingDeleted(
 	ctx context.Context,
 	fileUIDs []types.FileUIDType,
 	columns ...string,
-) ([]KnowledgeBaseFileModel, error) {
+) ([]FileModel, error) {
 
-	var files []KnowledgeBaseFileModel
+	var files []FileModel
 	// Convert UUIDs to strings as GORM works with strings in queries
 	var stringUIDs []string
 	for _, uid := range fileUIDs {
@@ -839,7 +888,7 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(
 	}
 	// CRITICAL: Do NOT filter by delete_time - include soft-deleted files
 	// Use .Unscoped() to bypass gorm.DeletedAt filtering
-	where := fmt.Sprintf("%v IN ?", KnowledgeBaseFileColumn.UID)
+	where := fmt.Sprintf("%v IN ?", FileColumn.UID)
 	query := r.db.WithContext(ctx).Unscoped() // Include soft-deleted files
 	if len(columns) > 0 {
 		query = query.Select(columns)
@@ -848,7 +897,7 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(
 	if err := query.Where(where, stringUIDs).Find(&files).Error; err != nil {
 		// If GORM returns ErrRecordNotFound, it's not considered an error in this context
 		if err == gorm.ErrRecordNotFound {
-			return []KnowledgeBaseFileModel{}, nil
+			return []FileModel{}, nil
 		}
 		// Return any other error that might have occurred during the query
 		return nil, err
@@ -858,22 +907,22 @@ func (r *repository) GetKnowledgeBaseFilesByFileUIDsIncludingDeleted(
 	return files, nil
 }
 
-// GetKnowledgeBaseFilesByFileIDs returns files by their IDs (hash-based slug or UUID).
+// GetFilesByFileIDs returns files by their IDs (hash-based slug or UUID).
 // Supported formats:
 // 1. Hash-based IDs (e.g., 'my-file-abc12345') - preferred format, less prone to LLM hallucination
 // 2. UUID strings (e.g., 'aff8544b-3ccc-4e73-bbe5-8ec922446542') - legacy format, searched by uid column
 // The function also checks aliases for backward compatibility when display_name is renamed.
 // Unlike GetFileByIDOrAlias, this does NOT require a KB UID since file IDs include a unique hash suffix.
-func (r *repository) GetKnowledgeBaseFilesByFileIDs(
+func (r *repository) GetFilesByFileIDs(
 	ctx context.Context,
 	fileIDs []string,
 	columns ...string,
-) ([]KnowledgeBaseFileModel, error) {
+) ([]FileModel, error) {
 	if len(fileIDs) == 0 {
-		return []KnowledgeBaseFileModel{}, nil
+		return []FileModel{}, nil
 	}
 
-	var files []KnowledgeBaseFileModel
+	var files []FileModel
 
 	// Build query: check id, aliases, AND uid (for legacy UUID lookups)
 	// Since file IDs include a unique hash suffix (e.g., 'my-file-abc12345'), they're globally unique
@@ -904,7 +953,7 @@ func (r *repository) GetKnowledgeBaseFilesByFileIDs(
 	whereClause := fmt.Sprintf("(%s) AND delete_time IS NULL", strings.Join(conditions, " OR "))
 	if err := query.Where(whereClause, args...).Find(&files).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return []KnowledgeBaseFileModel{}, nil
+			return []FileModel{}, nil
 		}
 		return nil, fmt.Errorf("failed to get files by IDs: %w", err)
 	}
@@ -914,11 +963,13 @@ func (r *repository) GetKnowledgeBaseFilesByFileIDs(
 
 // GetFileByIDOrAlias looks up a file by its canonical ID or any of its aliases within a KB.
 // Aliases preserve old URLs when display_name is renamed.
-func (r *repository) GetFileByIDOrAlias(ctx context.Context, kbUID types.KBUIDType, id string) (*KnowledgeBaseFileModel, error) {
-	var file KnowledgeBaseFileModel
-	// Query: kb_uid = ? AND delete_time IS NULL AND (id = ? OR ? = ANY(aliases))
+// Uses the junction table to filter by KB.
+func (r *repository) GetFileByIDOrAlias(ctx context.Context, kbUID types.KBUIDType, id string) (*FileModel, error) {
+	var file FileModel
+	// Join with junction table to filter by KB
 	err := r.db.WithContext(ctx).
-		Where("kb_uid = ? AND delete_time IS NULL AND (id = ? OR ? = ANY(aliases))", kbUID, id, id).
+		Joins("INNER JOIN file_knowledge_base ON file_knowledge_base.file_uid = file.uid").
+		Where("file_knowledge_base.kb_uid = ? AND file.delete_time IS NULL AND (file.id = ? OR ? = ANY(file.aliases))", kbUID, id, id).
 		First(&file).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -929,25 +980,24 @@ func (r *repository) GetFileByIDOrAlias(ctx context.Context, kbUID types.KBUIDTy
 	return &file, nil
 }
 
-// GetKnowledgeBaseFilesByName retrieves files by name in a specific KB
+// GetFilesByName retrieves files by name in a specific KB
 // Used for dual deletion to find corresponding files in staging/rollback KB
-func (r *repository) GetKnowledgeBaseFilesByName(
+// Uses the junction table to filter by KB.
+func (r *repository) GetFilesByName(
 	ctx context.Context,
 	kbUID types.KBUIDType,
 	filename string,
-) ([]KnowledgeBaseFileModel, error) {
-	var files []KnowledgeBaseFileModel
+) ([]FileModel, error) {
+	var files []FileModel
 
+	// Join with junction table to filter by KB
 	// GORM's DeletedAt automatically filters out soft-deleted files, so no manual check needed
-	where := fmt.Sprintf("%v = ? AND %v = ?",
-		KnowledgeBaseFileColumn.KnowledgeBaseUID,
-		KnowledgeBaseFileColumn.DisplayName)
-
 	if err := r.db.WithContext(ctx).
-		Where(where, kbUID, filename).
+		Joins("INNER JOIN file_knowledge_base ON file_knowledge_base.file_uid = file.uid").
+		Where("file_knowledge_base.kb_uid = ? AND file.display_name = ?", kbUID, filename).
 		Find(&files).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return []KnowledgeBaseFileModel{}, nil
+			return []FileModel{}, nil
 		}
 		return nil, fmt.Errorf("querying files by name: %w", err)
 	}
@@ -957,12 +1007,12 @@ func (r *repository) GetKnowledgeBaseFilesByName(
 
 // SourceMeta represents the metadata of the source file
 type SourceMeta struct {
-	OriginalFileUID  types.FileUIDType `json:"original_file_uid"`  // OriginalFileUID is the UID of the original file
-	OriginalFileName string            `json:"original_file_name"` // OriginalFileName is the name of the original file
-	KBUID            types.KBUIDType   `json:"kb_uid"`             // KBUID is the UID of the knowledge base
-	Dest             string            `json:"dest"`               // Dest is the destination of the source file
-	CreateTime       time.Time         `json:"create_time"`        // CreateTime is the creation time of the source file
-	UpdateTime       time.Time         `json:"update_time"`        // UpdateTime is the update time of the source file
+	OriginalFileUID  types.FileUIDType          `json:"original_file_uid"`  // OriginalFileUID is the UID of the original file
+	OriginalFileName string                     `json:"original_file_name"` // OriginalFileName is the name of the original file
+	KnowledgeBaseUID types.KnowledgeBaseUIDType `json:"knowledge_base_uid"` // KnowledgeBaseUID is the UID of the knowledge base
+	StoragePath      string                     `json:"storage_path"`       // StoragePath is the path in blob storage
+	CreateTime       time.Time                  `json:"create_time"`        // CreateTime is the creation time of the source file
+	UpdateTime       time.Time                  `json:"update_time"`        // UpdateTime is the update time of the source file
 }
 
 // GetSourceByFileUID returns the content converted file metadata by file UID.
@@ -974,8 +1024,8 @@ func (r *repository) GetSourceByFileUID(ctx context.Context, fileUID types.FileU
 	logger, _ := logx.GetZapLogger(ctx)
 
 	// Get the original file metadata
-	var file KnowledgeBaseFileModel
-	where := fmt.Sprintf("%v = ?", KnowledgeBaseFileColumn.UID)
+	var file FileModel
+	where := fmt.Sprintf("%v = ?", FileColumn.UID)
 	if err := r.db.WithContext(ctx).Where(where, fileUID).First(&file).Error; err != nil {
 		return nil, fmt.Errorf("fetching file: %w", err)
 	}
@@ -1002,25 +1052,25 @@ func (r *repository) GetSourceByFileUID(ctx context.Context, fileUID types.FileU
 	return &SourceMeta{
 		OriginalFileUID:  file.UID,
 		OriginalFileName: file.DisplayName,
-		Dest:             convertedFile.Destination,
+		StoragePath:      convertedFile.StoragePath,
 		CreateTime:       *convertedFile.CreateTime,
 		UpdateTime:       *convertedFile.UpdateTime,
-		KBUID:            convertedFile.KBUID,
+		KnowledgeBaseUID: convertedFile.KnowledgeBaseUID,
 	}, nil
 }
 
-// UpdateKnowledgeFileMetadata updates the metadata fields of a knowledge base file.
+// UpdateFileMetadata updates the metadata fields of a file.
 // Only the nonzero values in the request will be used in the update, keeping
 // the existing values for the rest of the fields.
 // This method performs an update lock in the record to avoid collisions with
 // other requests.
-func (r *repository) UpdateKnowledgeFileMetadata(ctx context.Context, fileUID types.FileUIDType, updates ExtraMetaData) error {
+func (r *repository) UpdateFileMetadata(ctx context.Context, fileUID types.FileUIDType, updates ExtraMetaData) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var file KnowledgeBaseFileModel
+		var file FileModel
 
 		// Lock the row for update within the transaction
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).
+			Where(FileColumn.UID+" = ?", fileUID).
 			First(&file).Error
 
 		if err != nil {
@@ -1075,7 +1125,7 @@ func (r *repository) UpdateKnowledgeFileMetadata(ctx context.Context, fileUID ty
 			return fmt.Errorf("marshalling metadata: %w", err)
 		}
 
-		// Save the updated KnowledgeBaseFileModel within the transaction
+		// Save the updated FileModel within the transaction
 		if err := tx.Save(&file).Error; err != nil {
 			return fmt.Errorf("storing record: %w", err)
 		}
@@ -1086,16 +1136,16 @@ func (r *repository) UpdateKnowledgeFileMetadata(ctx context.Context, fileUID ty
 	return err
 }
 
-// UpdateKnowledgeFileUsageMetadata updates the usage metadata for a file
+// UpdateFileUsageMetadata updates the usage metadata for a file
 // This stores AI usage metadata (token counts) from content and summary processing
 // According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
-func (r *repository) UpdateKnowledgeFileUsageMetadata(ctx context.Context, fileUID types.FileUIDType, usageMetadata UsageMetadata) error {
+func (r *repository) UpdateFileUsageMetadata(ctx context.Context, fileUID types.FileUIDType, usageMetadata UsageMetadata) error {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var file KnowledgeBaseFileModel
+		var file FileModel
 
 		// Lock the row for update within the transaction
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where(KnowledgeBaseFileColumn.UID+" = ?", fileUID).
+			Where(FileColumn.UID+" = ?", fileUID).
 			First(&file).Error
 
 		if err != nil {
@@ -1110,7 +1160,7 @@ func (r *repository) UpdateKnowledgeFileUsageMetadata(ctx context.Context, fileU
 			return fmt.Errorf("marshalling usage metadata: %w", err)
 		}
 
-		// Save the updated KnowledgeBaseFileModel within the transaction
+		// Save the updated FileModel within the transaction
 		if err := tx.Save(&file).Error; err != nil {
 			return fmt.Errorf("storing record: %w", err)
 		}
@@ -1121,44 +1171,148 @@ func (r *repository) UpdateKnowledgeFileUsageMetadata(ctx context.Context, fileU
 	return err
 }
 
-// DeleteKnowledgeBaseFileAndDecreaseUsage delete the knowledge base file and decrease the knowledge base usage
-func (r *repository) DeleteKnowledgeBaseFileAndDecreaseUsage(ctx context.Context, fileUID types.FileUIDType) error {
+// DeleteFileAndDecreaseUsage delete the file and decrease the knowledge base usage
+// Since files can belong to multiple KBs, usage is decreased for ALL associated KBs.
+func (r *repository) DeleteFileAndDecreaseUsage(ctx context.Context, fileUID types.FileUIDType) error {
 	currentTime := time.Now()
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// get the knowledge base file
-		file, err := r.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID}, KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.Size)
+		// get the file
+		file, err := r.GetFilesByFileUIDs(ctx, []types.FileUIDType{fileUID}, FileColumn.Size)
 		if err != nil {
 			return err
 		} else if len(file) == 0 {
 			return fmt.Errorf("file not found by file uid: %v", fileUID)
 		}
-		whereClause := fmt.Sprintf("%v = ? AND %v is NULL", KnowledgeBaseFileColumn.UID, KnowledgeBaseFileColumn.DeleteTime)
-		if err := tx.Model(&KnowledgeBaseFileModel{}).
+
+		// Get all KB associations from junction table
+		var associations []FileKnowledgeBase
+		if err := tx.Where("file_uid = ?", fileUID).Find(&associations).Error; err != nil {
+			return fmt.Errorf("getting file-kb associations: %w", err)
+		}
+
+		whereClause := fmt.Sprintf("%v = ? AND %v is NULL", FileColumn.UID, FileColumn.DeleteTime)
+		if err := tx.Model(&FileModel{}).
 			Where(whereClause, fileUID).
-			Update(KnowledgeBaseFileColumn.DeleteTime, currentTime).Error; err != nil {
+			Update(FileColumn.DeleteTime, currentTime).Error; err != nil {
 			return err
 		}
-		// decrease the knowledge base usage
-		err = r.IncreaseKnowledgeBaseUsage(ctx, tx, file[0].KBUID.String(), int(-file[0].Size))
-		if err != nil {
-			return err
+
+		// Decrease usage for all associated KBs
+		for _, assoc := range associations {
+			err = r.IncreaseKnowledgeBaseUsage(ctx, tx, assoc.KBUID.String(), int(-file[0].Size))
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	})
 }
 
-// GetKnowledgebaseFileByKBUIDAndFileID returns the knowledge base file by
+// GetFileByKBUIDAndFileID returns the file by
 // knowledge base ID and file ID.
 // NOTE: this method is deprecated, files should be accessed by UID.
-func (r *repository) GetKnowledgebaseFileByKBUIDAndFileID(ctx context.Context, kbUID types.KBUIDType, fileID string) (*KnowledgeBaseFileModel, error) {
-	var file KnowledgeBaseFileModel
-	where := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL",
-		KnowledgeBaseFileColumn.KnowledgeBaseUID, KnowledgeBaseFileColumn.DisplayName, KnowledgeBaseFileColumn.DeleteTime)
-	if err := r.db.WithContext(ctx).Where(where, kbUID, fileID).First(&file).Error; err != nil {
+// Uses the junction table to filter by KB.
+func (r *repository) GetFileByKBUIDAndFileID(ctx context.Context, kbUID types.KBUIDType, fileID string) (*FileModel, error) {
+	var file FileModel
+	// Join with junction table to filter by KB
+	if err := r.db.WithContext(ctx).
+		Joins("INNER JOIN file_knowledge_base ON file_knowledge_base.file_uid = file.uid").
+		Where("file_knowledge_base.kb_uid = ? AND file.display_name = ? AND file.delete_time IS NULL", kbUID, fileID).
+		First(&file).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("file not found by knowledge base ID: %v and file ID: %v", kbUID, fileID)
 		}
 		return nil, err
 	}
 	return &file, nil
+}
+
+// GetKnowledgeBaseUIDsForFile returns all KB UIDs associated with a file via the junction table
+// Only returns non-deleted (delete_time IS NULL) KBs to ensure permission checks
+// are performed against valid, accessible knowledge bases.
+// Note: We include staging/rollback KBs (staging=true) because:
+// - Rollback KBs contain valid file data that users can access
+// - Only soft-deleted KBs should be excluded from permission checks
+func (r *repository) GetKnowledgeBaseUIDsForFile(ctx context.Context, fileUID types.FileUIDType) ([]types.KnowledgeBaseUIDType, error) {
+	// Get all file-KB associations
+	var associations []FileKnowledgeBase
+	if err := r.db.WithContext(ctx).Where("file_uid = ?", fileUID).Find(&associations).Error; err != nil {
+		return nil, fmt.Errorf("getting KB associations for file: %w", err)
+	}
+
+	if len(associations) == 0 {
+		return []types.KnowledgeBaseUIDType{}, nil
+	}
+
+	// Extract KB UIDs from associations
+	kbUIDsToCheck := make([]types.KnowledgeBaseUIDType, len(associations))
+	for i, assoc := range associations {
+		kbUIDsToCheck[i] = assoc.KBUID
+	}
+
+	// Filter out soft-deleted KBs by checking which ones still exist and are not deleted
+	// This ensures permission checks are only performed against valid, accessible KBs
+	var validKBs []KnowledgeBaseModel
+	if err := r.db.WithContext(ctx).
+		Where("uid IN ? AND delete_time IS NULL", kbUIDsToCheck).
+		Find(&validKBs).Error; err != nil {
+		return nil, fmt.Errorf("filtering valid KBs: %w", err)
+	}
+
+	// Build result with only valid (non-deleted) KB UIDs
+	result := make([]types.KnowledgeBaseUIDType, len(validKBs))
+	for i, kb := range validKBs {
+		result[i] = types.KnowledgeBaseUIDType(kb.UID)
+	}
+
+	return result, nil
+}
+
+// GetKnowledgeBaseIDsForFiles returns a map of file UID to KB IDs (hash-based IDs like "kb-xxx")
+// for efficient batch lookup when listing files without a KB filter.
+func (r *repository) GetKnowledgeBaseIDsForFiles(ctx context.Context, fileUIDs []types.FileUIDType) (map[types.FileUIDType][]string, error) {
+	if len(fileUIDs) == 0 {
+		return make(map[types.FileUIDType][]string), nil
+	}
+
+	// Query junction table to get file-to-KB UID mappings
+	var associations []FileKnowledgeBase
+	if err := r.db.WithContext(ctx).Where("file_uid IN ?", fileUIDs).Find(&associations).Error; err != nil {
+		return nil, fmt.Errorf("getting KB associations for files: %w", err)
+	}
+
+	// Collect unique KB UIDs
+	kbUIDSet := make(map[types.KnowledgeBaseUIDType]struct{})
+	for _, assoc := range associations {
+		kbUIDSet[assoc.KBUID] = struct{}{}
+	}
+	kbUIDs := make([]types.KnowledgeBaseUIDType, 0, len(kbUIDSet))
+	for uid := range kbUIDSet {
+		kbUIDs = append(kbUIDs, uid)
+	}
+
+	// Batch fetch KBs to get their IDs
+	kbUIDToID := make(map[types.KnowledgeBaseUIDType]string)
+	if len(kbUIDs) > 0 {
+		var kbs []KnowledgeBaseModel
+		if err := r.db.WithContext(ctx).Where("uid IN ?", kbUIDs).Find(&kbs).Error; err != nil {
+			return nil, fmt.Errorf("fetching KBs by UIDs: %w", err)
+		}
+		for _, kb := range kbs {
+			kbUIDToID[kb.UID] = kb.ID
+		}
+	}
+
+	// Build result map: file UID -> []KB IDs
+	result := make(map[types.FileUIDType][]string)
+	for _, fileUID := range fileUIDs {
+		result[fileUID] = []string{}
+	}
+	for _, assoc := range associations {
+		if kbID, ok := kbUIDToID[assoc.KBUID]; ok {
+			result[assoc.FileUID] = append(result[assoc.FileUID], kbID)
+		}
+	}
+
+	return result, nil
 }

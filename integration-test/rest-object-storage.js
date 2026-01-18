@@ -19,6 +19,10 @@ function logUnexpected(res, label) {
   }
 }
 
+// CI mode: run tests sequentially without scenarios (less resource intensive)
+// Non-CI mode: run tests in parallel using scenarios
+const isCI = __ENV.CI === 'true';
+
 export let options = {
   setupTimeout: '300s',
   teardownTimeout: '300s',
@@ -26,51 +30,82 @@ export let options = {
   thresholds: {
     checks: ["rate == 1.0"],
   },
-  // Staggered start times prevent API gateway rate limiting (429 errors)
-  scenarios: {
-    // Object storage provider tests for different views (0-3s stagger)
-    test_01_minio_view_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_01_MinIO_ViewSummary', startTime: '0s' },
-    test_02_minio_view_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_MinIO_ViewContent', startTime: '1s' },
-    test_03_minio_view_standard: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_MinIO_ViewStandardFileType', startTime: '2s' },
-    test_04_minio_view_original: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_MinIO_ViewOriginalFileType', startTime: '3s' },
+  // Only use scenarios in non-CI mode for parallel execution
+  ...(isCI ? { vus: 1, iterations: 1 } : {
+    // Staggered start times prevent API gateway rate limiting (429 errors)
+    scenarios: {
+      // Object storage provider tests for different views (0-3s stagger)
+      test_01_minio_view_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_01_MinIO_ViewSummary', startTime: '0s' },
+      test_02_minio_view_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_02_MinIO_ViewContent', startTime: '1s' },
+      test_03_minio_view_standard: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_03_MinIO_ViewStandardFileType', startTime: '2s' },
+      test_04_minio_view_original: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_04_MinIO_ViewOriginalFileType', startTime: '3s' },
 
-    // GCS tests (4-7s stagger)
-    test_05_gcs_view_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_GCS_ViewSummary', startTime: '4s' },
-    test_06_gcs_view_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_GCS_ViewContent', startTime: '5s' },
-    test_07_gcs_view_standard: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_GCS_ViewStandardFileType', startTime: '6s' },
-    test_08_gcs_view_original: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_GCS_ViewOriginalFileType', startTime: '7s' },
+      // GCS tests (4-7s stagger)
+      test_05_gcs_view_summary: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_05_GCS_ViewSummary', startTime: '4s' },
+      test_06_gcs_view_content: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_06_GCS_ViewContent', startTime: '5s' },
+      test_07_gcs_view_standard: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_07_GCS_ViewStandardFileType', startTime: '6s' },
+      test_08_gcs_view_original: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_08_GCS_ViewOriginalFileType', startTime: '7s' },
 
-    // Storage provider unspecified/default (8s)
-    test_09_unspecified_provider_defaults_to_minio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_UnspecifiedProvider_DefaultsToMinIO', startTime: '8s' },
+      // Storage provider unspecified/default (8s)
+      test_09_unspecified_provider_defaults_to_minio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_09_UnspecifiedProvider_DefaultsToMinIO', startTime: '8s' },
 
-    // Cross-provider consistency tests (9-10s)
-    test_10_url_content_consistency: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_URLContentConsistency', startTime: '9s' },
-    test_11_gcs_cache_behavior: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_GCSCacheBehavior', startTime: '10s' },
+      // Cross-provider consistency tests (9-10s)
+      test_10_url_content_consistency: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_10_URLContentConsistency', startTime: '9s' },
+      test_11_gcs_cache_behavior: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_11_GCSCacheBehavior', startTime: '10s' },
 
-    // Filename and content-type tests (11-12s)
-    test_12_minio_filename_content_type: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_MinIO_FilenameContentType', startTime: '11s' },
-    test_13_gcs_filename_content_type: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_GCS_FilenameContentType', startTime: '12s' },
+      // Filename and content-type tests (11-12s)
+      test_12_minio_filename_content_type: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_12_MinIO_FilenameContentType', startTime: '11s' },
+      test_13_gcs_filename_content_type: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_13_GCS_FilenameContentType', startTime: '12s' },
 
-    // Error handling (13s)
-    test_14_gcs_not_configured: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_GCS_NotConfigured', startTime: '13s' },
+      // Error handling (13s)
+      test_14_gcs_not_configured: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_14_GCS_NotConfigured', startTime: '13s' },
 
-    // Multiple file types with storage providers (14-15s)
-    test_15_multiple_file_types_minio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_MultipleFileTypes_MinIO', startTime: '14s' },
-    test_16_multiple_file_types_gcs: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_MultipleFileTypes_GCS', startTime: '15s' },
+      // Multiple file types with storage providers (14-15s)
+      test_15_multiple_file_types_minio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_15_MultipleFileTypes_MinIO', startTime: '14s' },
+      test_16_multiple_file_types_gcs: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_16_MultipleFileTypes_GCS', startTime: '15s' },
 
-    // Redis cache tests (16-18s)
-    test_17_redis_cache_hit: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_RedisCacheHit', startTime: '16s' },
-    test_18_redis_cache_miss: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_RedisCacheMiss', startTime: '17s' },
-    test_19_redis_cache_performance: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_RedisCachePerformance', startTime: '18s' },
+      // Redis cache tests (16-18s)
+      test_17_redis_cache_hit: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_17_RedisCacheHit', startTime: '16s' },
+      test_18_redis_cache_miss: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_18_RedisCacheMiss', startTime: '17s' },
+      test_19_redis_cache_performance: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_19_RedisCachePerformance', startTime: '18s' },
 
-    // GCS TTL and cleanup tests (19-20s)
-    test_20_gcs_ttl_tracking: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GCSTTLTracking', startTime: '19s' },
-    test_21_gcs_file_expiration: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GCSFileExpiration', startTime: '20s' },
+      // GCS TTL and cleanup tests (19-20s)
+      test_20_gcs_ttl_tracking: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_20_GCSTTLTracking', startTime: '19s' },
+      test_21_gcs_file_expiration: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_21_GCSFileExpiration', startTime: '20s' },
 
-    // View original file type immediate availability tests (21s)
-    test_22_view_original_file_type_immediate_availability: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_ViewOriginalFileType_ImmediateAvailability', startTime: '21s' },
-  },
+      // View original file type immediate availability tests (21s)
+      test_22_view_original_file_type_immediate_availability: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_ViewOriginalFileType_ImmediateAvailability', startTime: '21s' },
+    },
+  }),
 };
+
+// Default function for CI mode - runs all tests sequentially
+export default function (data) {
+  if (!isCI) return; // In non-CI mode, scenarios handle execution
+
+  TEST_01_MinIO_ViewSummary(data);
+  TEST_02_MinIO_ViewContent(data);
+  TEST_03_MinIO_ViewStandardFileType(data);
+  TEST_04_MinIO_ViewOriginalFileType(data);
+  TEST_05_GCS_ViewSummary(data);
+  TEST_06_GCS_ViewContent(data);
+  TEST_07_GCS_ViewStandardFileType(data);
+  TEST_08_GCS_ViewOriginalFileType(data);
+  TEST_09_UnspecifiedProvider_DefaultsToMinIO(data);
+  TEST_10_URLContentConsistency(data);
+  TEST_11_GCSCacheBehavior(data);
+  TEST_12_MinIO_FilenameContentType(data);
+  TEST_13_GCS_FilenameContentType(data);
+  TEST_14_GCS_NotConfigured(data);
+  TEST_15_MultipleFileTypes_MinIO(data);
+  TEST_16_MultipleFileTypes_GCS(data);
+  TEST_17_RedisCacheHit(data);
+  TEST_18_RedisCacheMiss(data);
+  TEST_19_RedisCachePerformance(data);
+  TEST_20_GCSTTLTracking(data);
+  TEST_21_GCSFileExpiration(data);
+  TEST_22_ViewOriginalFileType_ImmediateAvailability(data);
+}
 
 export function setup() {
   check(true, { [constant.banner('Artifact API [Object Storage]: Setup')]: () => true });
@@ -149,10 +184,8 @@ export function teardown(data) {
 // Helper function to create knowledge base
 function createKB(data, displayName, description) {
   const body = {
-    knowledgeBase: {
-      displayName: displayName,
-      description: description || "Test KB for object storage",
-    }
+    displayName: displayName,
+    description: description || "Test KB for object storage",
   };
 
   const res = http.request(
@@ -164,7 +197,21 @@ function createKB(data, displayName, description) {
 
   logUnexpected(res, "Create KB");
   check(res, { "Create KB 200": (r) => r.status === 200 });
-  return res.json().knowledgeBase;
+
+  let json;
+  try {
+    json = res.json();
+  } catch (e) {
+    console.error(`Create KB: Failed to parse response: ${e}, status=${res.status}, body=${res.body}`);
+    return null;
+  }
+
+  if (!json.knowledgeBase) {
+    console.error(`Create KB: No knowledgeBase in response, status=${res.status}, body=${res.body}`);
+    return null;
+  }
+
+  return json.knowledgeBase;
 }
 
 // Helper function to delete knowledge base
@@ -179,6 +226,7 @@ function deleteKB(data, kbId) {
 }
 
 // Helper function to create and upload a file
+// Uses the new flattened URL: POST /namespaces/{ns}/files?knowledgeBaseId={kb}
 function createFile(data, kbId, filename, fileType, content) {
   const body = {
     displayName: filename,
@@ -188,7 +236,7 @@ function createFile(data, kbId, filename, fileType, content) {
 
   const res = http.request(
     "POST",
-    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files`,
+    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${kbId}`,
     JSON.stringify(body),
     data.header
   );
@@ -205,8 +253,9 @@ function createFile(data, kbId, filename, fileType, content) {
 
 // Helper function to check if file is available (exists in storage)
 // This is for VIEW_ORIGINAL_FILE_TYPE which doesn't need processing
-function waitForFileAvailable(data, kbId, fileUid, maxWaitSeconds = 10) {
-  console.log(`Checking file ${fileUid} availability (max ${maxWaitSeconds}s)...`);
+// Uses the new flattened URL: GET /namespaces/{ns}/files/{file}
+function waitForFileAvailable(data, kbId, fileId, maxWaitSeconds = 10) {
+  console.log(`Checking file ${fileId} availability (max ${maxWaitSeconds}s)...`);
 
   const startTime = new Date().getTime();
   const endTime = startTime + (maxWaitSeconds * 1000);
@@ -214,33 +263,34 @@ function waitForFileAvailable(data, kbId, fileUid, maxWaitSeconds = 10) {
   while (new Date().getTime() < endTime) {
     const res = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${fileUid}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`,
       null,
       data.header
     );
 
     if (res.status === 200) {
-      console.log(`File ${fileUid} is available`);
+      console.log(`File ${fileId} is available`);
       return true;
     }
 
     sleep(1);
   }
 
-  console.warn(`File ${fileUid} not available after ${maxWaitSeconds}s`);
+  console.warn(`File ${fileId} not available after ${maxWaitSeconds}s`);
   return false;
 }
 
 // Helper function to get file with specific view and storage provider
-function getFileWithStorage(data, kbId, fileUid, view, storageProvider) {
-  let url = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${fileUid}`;
+// Uses the new flattened URL: GET /namespaces/{ns}/files/{file}
+function getFileWithStorage(data, kbId, fileId, view, storageProvider) {
+  let url = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`;
 
   const params = [];
   if (view) {
     params.push(`view=${view}`);
   }
   if (storageProvider) {
-    params.push(`storage_provider=${storageProvider}`);
+    params.push(`storageProvider=${storageProvider}`);
   }
 
   if (params.length > 0) {
@@ -312,13 +362,13 @@ export function TEST_01_MinIO_ViewSummary(data) {
 
     if (file) {
       // Just check file is available - don't wait for full processing (can take minutes)
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         // Test that API accepts storage_provider parameter and returns MinIO URL
         // Note: Summary may not be ready yet, but we're testing URL format
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_SUMMARY", "STORAGE_PROVIDER_MINIO");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_SUMMARY", "STORAGE_PROVIDER_MINIO");
         logUnexpected(res, "Get file with VIEW_SUMMARY (MinIO)");
 
         check(res, {
@@ -358,12 +408,12 @@ export function TEST_02_MinIO_ViewContent(data) {
 
     if (file) {
       // Just check file is available - don't wait for full processing
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         // Test that API accepts storage_provider parameter and returns MinIO URL
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_CONTENT", "STORAGE_PROVIDER_MINIO");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_CONTENT", "STORAGE_PROVIDER_MINIO");
         logUnexpected(res, "Get file with VIEW_CONTENT (MinIO)");
 
         check(res, {
@@ -403,12 +453,12 @@ export function TEST_03_MinIO_ViewStandardFileType(data) {
 
     if (file) {
       // Just check file is available - don't wait for conversion
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         // Test that API accepts storage_provider parameter
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_STANDARD_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_STANDARD_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
         logUnexpected(res, "Get file with VIEW_STANDARD_FILE_TYPE (MinIO)");
 
         check(res, {
@@ -448,11 +498,11 @@ export function TEST_04_MinIO_ViewOriginalFileType(data) {
 
     if (file) {
       // VIEW_ORIGINAL_FILE_TYPE doesn't need processing - file is available immediately after upload
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
         logUnexpected(res, "Get file with VIEW_ORIGINAL_FILE_TYPE (MinIO)");
 
         check(res, {
@@ -513,12 +563,12 @@ export function TEST_05_GCS_ViewSummary(data) {
 
     if (file) {
       // Just check file is available - don't wait for full processing
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         // Test that API accepts GCS storage_provider parameter
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_SUMMARY", "STORAGE_PROVIDER_GCS");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_SUMMARY", "STORAGE_PROVIDER_GCS");
         logUnexpected(res, "Get file with VIEW_SUMMARY (GCS)");
 
         check(res, {
@@ -558,12 +608,12 @@ export function TEST_06_GCS_ViewContent(data) {
 
     if (file) {
       // Just check file is available - don't wait for full processing
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         // Test that API accepts GCS storage_provider parameter
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         logUnexpected(res, "Get file with VIEW_CONTENT (GCS)");
 
         check(res, {
@@ -603,12 +653,12 @@ export function TEST_07_GCS_ViewStandardFileType(data) {
 
     if (file) {
       // Just check file is available - don't wait for conversion
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         // Test that API accepts GCS storage_provider parameter
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_STANDARD_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_STANDARD_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         logUnexpected(res, "Get file with VIEW_STANDARD_FILE_TYPE (GCS)");
 
         check(res, {
@@ -648,11 +698,11 @@ export function TEST_08_GCS_ViewOriginalFileType(data) {
 
     if (file) {
       // VIEW_ORIGINAL_FILE_TYPE doesn't need processing - file is available immediately after upload
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         logUnexpected(res, "Get file with VIEW_ORIGINAL_FILE_TYPE (GCS)");
 
         check(res, {
@@ -712,12 +762,12 @@ export function TEST_09_UnspecifiedProvider_DefaultsToMinIO(data) {
 
     if (file) {
       // Test with original file type which is available immediately
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         // Get file without specifying storage_provider (should default to MinIO)
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", null);
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", null);
         logUnexpected(res, "Get file without storage_provider");
 
         check(res, {
@@ -741,7 +791,7 @@ export function TEST_09_UnspecifiedProvider_DefaultsToMinIO(data) {
         });
 
         // Compare with explicit STORAGE_PROVIDER_UNSPECIFIED
-        const resUnspecified = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_UNSPECIFIED");
+        const resUnspecified = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_UNSPECIFIED");
         check(resUnspecified, {
           "STORAGE_PROVIDER_UNSPECIFIED also uses MinIO": (r) => {
             try {
@@ -776,12 +826,12 @@ export function TEST_10_URLContentConsistency(data) {
 
     if (file) {
       // Just test URL format, not content - processing takes too long for integration tests
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         // Test MinIO URL format
-        const resMinIO = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
+        const resMinIO = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
         check(resMinIO, {
           "MinIO returns valid URL": (r) => {
             try {
@@ -797,7 +847,7 @@ export function TEST_10_URLContentConsistency(data) {
         });
 
         // Test GCS URL format (if GCS is configured)
-        const resGCS = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const resGCS = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         if (resGCS.status === 200) {
           check(resGCS, {
             "GCS returns valid URL format": (r) => {
@@ -833,13 +883,13 @@ export function TEST_11_GCSCacheBehavior(data) {
 
     if (file) {
       // Just test cache behavior with original file type (available immediately)
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         // First request - should upload to GCS
         const startTime = new Date().getTime();
-        const res1 = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res1 = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         const firstRequestTime = new Date().getTime() - startTime;
 
         check(res1, {
@@ -850,7 +900,7 @@ export function TEST_11_GCSCacheBehavior(data) {
           // Second request - should use cached GCS file
           sleep(1);
           const startTime2 = new Date().getTime();
-          const res2 = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+          const res2 = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
           const secondRequestTime = new Date().getTime() - startTime2;
 
           check(res2, {
@@ -918,11 +968,11 @@ export function TEST_12_MinIO_FilenameContentType(data) {
 
     if (file) {
       // VIEW_ORIGINAL_FILE_TYPE doesn't need processing - file is available immediately
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
 
         if (res.status === 200) {
           try {
@@ -962,11 +1012,11 @@ export function TEST_13_GCS_FilenameContentType(data) {
 
     if (file) {
       // VIEW_ORIGINAL_FILE_TYPE doesn't need processing - file is available immediately
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
 
         if (res.status === 200) {
           try {
@@ -1008,11 +1058,11 @@ export function TEST_14_GCS_NotConfigured(data) {
 
     if (file) {
       // Test error handling - don't wait for processing
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
-        const res = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         logUnexpected(res, "Get file with GCS");
 
         // If GCS is configured, request should succeed
@@ -1079,7 +1129,7 @@ export function TEST_15_MultipleFileTypes_MinIO(data) {
     // Wait for files to be available (not fully processed - just uploaded to storage)
     let allAvailable = true;
     for (const f of files) {
-      const available = waitForFileAvailable(data, kbId, f.file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, f.file.id, 10);
       if (!available) allAvailable = false;
     }
 
@@ -1088,7 +1138,7 @@ export function TEST_15_MultipleFileTypes_MinIO(data) {
     if (allAvailable) {
       // Test each file with MinIO using VIEW_ORIGINAL_FILE_TYPE (no processing needed)
       for (const f of files) {
-        const res = getFileWithStorage(data, kbId, f.file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
+        const res = getFileWithStorage(data, kbId, f.file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
         check(res, {
           [`MinIO ${f.type} - status 200`]: (r) => r.status === 200,
           [`MinIO ${f.type} - has URL`]: (r) => {
@@ -1141,7 +1191,7 @@ export function TEST_16_MultipleFileTypes_GCS(data) {
     // Wait for files to be available (not fully processed - just uploaded to storage)
     let allAvailable = true;
     for (const f of files) {
-      const available = waitForFileAvailable(data, kbId, f.file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, f.file.id, 10);
       if (!available) allAvailable = false;
     }
 
@@ -1150,7 +1200,7 @@ export function TEST_16_MultipleFileTypes_GCS(data) {
     if (allAvailable) {
       // Test each file with GCS using VIEW_ORIGINAL_FILE_TYPE (no processing needed)
       for (const f of files) {
-        const res = getFileWithStorage(data, kbId, f.file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res = getFileWithStorage(data, kbId, f.file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         check(res, {
           [`GCS ${f.type} - status 200`]: (r) => r.status === 200,
           [`GCS ${f.type} - has URL`]: (r) => {
@@ -1194,12 +1244,12 @@ export function TEST_17_RedisCacheHit(data) {
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
 
     if (file) {
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         const startTime1 = new Date().getTime();
-        const res1 = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res1 = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         const firstRequestTime = new Date().getTime() - startTime1;
 
         check(res1, {
@@ -1217,7 +1267,7 @@ export function TEST_17_RedisCacheHit(data) {
         sleep(2);
 
         const startTime2 = new Date().getTime();
-        const res2 = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res2 = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         const secondRequestTime = new Date().getTime() - startTime2;
 
         check(res2, {
@@ -1254,16 +1304,16 @@ export function TEST_18_RedisCacheMiss(data) {
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
 
     if (file) {
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
-        const res1 = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res1 = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         check(res1, { "VIEW_CONTENT request successful": (r) => r.status === 200 });
 
         sleep(2);
 
-        const res2 = getFileWithStorage(data, kbId, file.uid, "VIEW_SUMMARY", "STORAGE_PROVIDER_GCS");
+        const res2 = getFileWithStorage(data, kbId, file.id, "VIEW_SUMMARY", "STORAGE_PROVIDER_GCS");
         check(res2, {
           "VIEW_SUMMARY request successful (different view)": (r) => r.status === 200,
         });
@@ -1287,12 +1337,12 @@ export function TEST_19_RedisCachePerformance(data) {
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
 
     if (file) {
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
         const startTime1 = new Date().getTime();
-        const res1 = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res1 = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         const initialTime = new Date().getTime() - startTime1;
 
         check(res1, { "Initial request successful": (r) => r.status === 200 });
@@ -1301,7 +1351,7 @@ export function TEST_19_RedisCachePerformance(data) {
         for (let i = 0; i < 5; i++) {
           sleep(0.5);
           const startTime = new Date().getTime();
-          const res = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+          const res = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
           cachedTimes.push(new Date().getTime() - startTime);
           check(res, { [`Cached request ${i + 1} successful`]: (r) => r.status === 200 });
         }
@@ -1351,11 +1401,11 @@ export function TEST_20_GCSTTLTracking(data) {
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
 
     if (file) {
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
-        const res1 = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res1 = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         check(res1, {
           "GCS upload successful": (r) => r.status === 200,
           "Response has GCS URL": (r) => {
@@ -1370,7 +1420,7 @@ export function TEST_20_GCSTTLTracking(data) {
 
         sleep(1);
         const startTime = new Date().getTime();
-        const res2 = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res2 = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         const responseTime = new Date().getTime() - startTime;
 
         check(res2, {
@@ -1406,11 +1456,11 @@ export function TEST_21_GCSFileExpiration(data) {
     const file = createFile(data, kbId, filename, "TYPE_TEXT", constant.docSampleTxt);
 
     if (file) {
-      const available = waitForFileAvailable(data, kbId, file.uid, 10);
+      const available = waitForFileAvailable(data, kbId, file.id, 10);
       check({ available }, { "File available in storage": () => available === true });
 
       if (available) {
-        const res1 = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+        const res1 = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
         check(res1, {
           "GCS upload successful": (r) => r.status === 200,
           "Response has GCS URL": (r) => {
@@ -1465,11 +1515,11 @@ export function TEST_22_ViewOriginalFileType_ImmediateAvailability(data) {
     const file = createFile(data, kbId, filename, "TYPE_PDF", constant.docSamplePdf);
 
     if (file) {
-      console.log(`File created: ${file.uid}, testing immediate availability...`);
+      console.log(`File created: ${file.id}, testing immediate availability...`);
 
       // Test MinIO provider - should be available immediately (< 1 second)
       const startTimeMinIO = new Date().getTime();
-      const resMinIO = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
+      const resMinIO = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_MINIO");
       const minioResponseTime = new Date().getTime() - startTimeMinIO;
 
       logUnexpected(resMinIO, "MinIO VIEW_ORIGINAL_FILE_TYPE (immediate)");
@@ -1516,7 +1566,7 @@ export function TEST_22_ViewOriginalFileType_ImmediateAvailability(data) {
       // Test GCS provider - should also be available immediately (< 2 seconds)
       const startTimeGCS = new Date().getTime();
       // Try numeric value (2 = STORAGE_PROVIDER_GCS) as grpc-gateway might expect that
-      const resGCS = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
+      const resGCS = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", "STORAGE_PROVIDER_GCS");
       const gcsResponseTime = new Date().getTime() - startTimeGCS;
 
       logUnexpected(resGCS, "GCS VIEW_ORIGINAL_FILE_TYPE (immediate)");
@@ -1592,7 +1642,7 @@ export function TEST_22_ViewOriginalFileType_ImmediateAvailability(data) {
 
       // Test default provider (should use MinIO and also be fast)
       const startTimeDefault = new Date().getTime();
-      const resDefault = getFileWithStorage(data, kbId, file.uid, "VIEW_ORIGINAL_FILE_TYPE", null);
+      const resDefault = getFileWithStorage(data, kbId, file.id, "VIEW_ORIGINAL_FILE_TYPE", null);
       const defaultResponseTime = new Date().getTime() - startTimeDefault;
 
       console.log(`Default provider response time: ${defaultResponseTime}ms`);

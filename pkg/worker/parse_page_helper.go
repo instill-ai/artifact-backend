@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -126,38 +125,3 @@ func calculatePagePositions(markdown string, pageMatches [][]int, pageTagIndices
 //
 // The markdown must contain [Page: X] tags. This function uses regex to extract
 // the content between tags, eliminating any position calculation bugs.
-//
-// Usage:
-//
-//	content, err := ExtractPageContent(markdownWithTags, 1) // Get page 1
-//	content, err := ExtractPageContent(markdownWithTags, 2) // Get page 2
-func ExtractPageContent(markdown string, pageNum int) (string, error) {
-	if markdown == "" {
-		return "", fmt.Errorf("markdown is empty")
-	}
-
-	if pageNum < 1 {
-		return "", fmt.Errorf("invalid page number %d (must be >= 1)", pageNum)
-	}
-
-	// Pattern to match: [Page: X] followed by content until next [Page: Y] or end of string
-	// (?s) enables dot to match newlines
-	// (.*?) is non-greedy to stop at next tag
-	pattern := fmt.Sprintf(`(?s)\[Page:\s*%d\]\s*\n(.*?)(?:\n\[Page:\s*\d+\]|\z)`, pageNum)
-	re := regexp.MustCompile(pattern)
-
-	matches := re.FindStringSubmatch(markdown)
-	if len(matches) < 2 {
-		// Check if markdown has NO page tags at all
-		if !pageTagPattern.MatchString(markdown) {
-			// Single-page document without tags
-			if pageNum == 1 {
-				return strings.TrimSpace(markdown), nil
-			}
-			return "", fmt.Errorf("page %d not found (single-page document)", pageNum)
-		}
-		return "", fmt.Errorf("page %d not found", pageNum)
-	}
-
-	return strings.TrimSpace(matches[1]), nil
-}

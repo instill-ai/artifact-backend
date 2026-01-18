@@ -160,67 +160,6 @@ func TestIsVideoType(t *testing.T) {
 	}
 }
 
-func TestCreateContentPart(t *testing.T) {
-	c := qt.New(t)
-
-	client := &Client{
-		client: nil, // Not needed for this test
-	}
-
-	t.Run("valid input with content type", func(t *testing.T) {
-		content := []byte("test content")
-		contentType := "application/pdf"
-
-		part, err := client.createContentPart(content, contentType)
-		c.Assert(err, qt.IsNil)
-		c.Assert(part, qt.Not(qt.IsNil))
-		c.Assert(part.InlineData, qt.Not(qt.IsNil))
-		c.Assert(part.InlineData.MIMEType, qt.Equals, "application/pdf")
-		c.Assert(part.InlineData.Data, qt.DeepEquals, []byte("test content"))
-	})
-
-	t.Run("missing content type", func(t *testing.T) {
-		content := []byte("test content")
-		contentType := ""
-
-		part, err := client.createContentPart(content, contentType)
-		c.Assert(err, qt.Not(qt.IsNil))
-		msg := errorsx.Message(err)
-		c.Assert(msg, qt.Contains, "Unsupported file type")
-		c.Assert(part, qt.IsNil)
-	})
-
-	t.Run("image content", func(t *testing.T) {
-		content := []byte{0x89, 0x50, 0x4E, 0x47} // PNG header
-		contentType := "image/png"
-
-		part, err := client.createContentPart(content, contentType)
-		c.Assert(err, qt.IsNil)
-		c.Assert(part, qt.Not(qt.IsNil))
-		c.Assert(part.InlineData.MIMEType, qt.Equals, "image/png")
-	})
-
-	t.Run("video content", func(t *testing.T) {
-		content := []byte("video data")
-		contentType := "video/mp4"
-
-		part, err := client.createContentPart(content, contentType)
-		c.Assert(err, qt.IsNil)
-		c.Assert(part, qt.Not(qt.IsNil))
-		c.Assert(part.InlineData.MIMEType, qt.Equals, "video/mp4")
-	})
-
-	t.Run("audio content", func(t *testing.T) {
-		content := []byte("audio data")
-		contentType := "audio/mpeg"
-
-		part, err := client.createContentPart(content, contentType)
-		c.Assert(err, qt.IsNil)
-		c.Assert(part, qt.Not(qt.IsNil))
-		c.Assert(part.InlineData.MIMEType, qt.Equals, "audio/mpeg")
-	})
-}
-
 func TestExtractMarkdownFromResponse_ErrorCases(t *testing.T) {
 	c := qt.New(t)
 

@@ -10,7 +10,7 @@ import (
 func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_Empty(t *testing.T) {
 	c := qt.New(t)
 
-	kf := KnowledgeBaseFileModel{ExtraMetaData: `{"status_message":"processing complete"}`}
+	kf := FileModel{ExtraMetaData: `{"status_message":"processing complete"}`}
 	err := kf.ExtraMetaDataUnmarshalFunc()
 	c.Check(err, qt.IsNil)
 	c.Check(kf.ExtraMetaDataUnmarshal.StatusMessage, qt.Equals, "processing complete")
@@ -20,7 +20,7 @@ func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_Empty(t *testing.T) {
 func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_EmptyString(t *testing.T) {
 	c := qt.New(t)
 
-	kf := KnowledgeBaseFileModel{ExtraMetaData: ""}
+	kf := FileModel{ExtraMetaData: ""}
 	err := kf.ExtraMetaDataUnmarshalFunc()
 	c.Check(err, qt.IsNil)
 	c.Check(kf.ExtraMetaDataUnmarshal, qt.IsNil)
@@ -30,7 +30,7 @@ func TestKnowledgeBaseFile_ExtraMetaDataUnmarshal_EmptyString(t *testing.T) {
 func TestKnowledgeBaseFile_ExtraMetaDataMarshal_Nil(t *testing.T) {
 	c := qt.New(t)
 
-	kf := KnowledgeBaseFileModel{}
+	kf := FileModel{}
 	err := kf.ExtraMetaDataMarshal()
 	c.Check(err, qt.IsNil)
 	c.Check(kf.ExtraMetaData, qt.Equals, "{}")

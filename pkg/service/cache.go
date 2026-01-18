@@ -13,7 +13,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	filetype "github.com/instill-ai/x/file"
 	logx "github.com/instill-ai/x/log"
@@ -69,14 +69,14 @@ func (s *service) GetOrCreateFileCache(
 	}
 
 	// Check if file has enough tokens for caching
-	files, err := s.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
+	files, err := s.repository.GetFilesByFileUIDs(ctx, []types.FileUIDType{fileUID})
 	if err != nil {
 		logger.Warn("Failed to get file metadata, proceeding with cache creation",
 			zap.Error(err),
 			zap.String("fileUID", fileUID.String()))
 	} else if len(files) > 0 {
 		// Get the actual token count for the file
-		fileModels := []repository.KnowledgeBaseFileModel{files[0]}
+		fileModels := []repository.FileModel{files[0]}
 		sources, err := s.repository.GetContentByFileUIDs(ctx, fileModels)
 		if err != nil {
 			logger.Warn("Failed to get content sources for token count, proceeding with cache creation",
@@ -314,7 +314,7 @@ func (s *service) getContentMarkdownURL(ctx context.Context, kbUID types.KBUIDTy
 	minioURL, err := s.repository.GetMinIOStorage().GetPresignedURLForDownload(
 		ctx,
 		config.Config.Minio.BucketName,
-		convertedFile.Destination,
+		convertedFile.StoragePath,
 		contentFilename,
 		convertedFile.ContentType,
 		gemini.DefaultCacheTTL, // Same TTL as cache operations

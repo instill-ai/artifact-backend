@@ -8,7 +8,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/db/migration/convert"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 const batchSize = 100
@@ -23,7 +23,7 @@ const (
 )
 
 func (c *BumpConversionPipeline) Migrate() error {
-	files := make([]*repository.KnowledgeBaseFileModel, 0, batchSize)
+	files := make([]*repository.FileModel, 0, batchSize)
 	// Use old table name since this migration runs before table rename in 000040
 	q := c.DB.Table("knowledge_base_file").Select("uid").
 		Where("process_status = ?", artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED.String()).

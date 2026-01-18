@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
@@ -37,21 +38,22 @@ import (
 
 // Activity error type constants
 const (
-	deleteOriginalFileActivityError       = "DeleteOriginalFileActivity"
-	deleteConvertedFileActivityError      = "DeleteConvertedFileActivity"
-	deleteTextChunksActivityError         = "DeleteTextChunksFromMinIOActivity"
-	deleteEmbeddingsActivityError         = "DeleteEmbeddingsFromVectorDBActivity"
-	deleteKBFilesActivityError            = "DeleteKBFilesFromMinIOActivity"
-	dropCollectionActivityError           = "DropVectorDBCollectionActivity"
-	deleteKBFileRecordsActivityError      = "DeleteKBFileRecordsActivity"
-	deleteKBConvertedRecordsActivityError = "DeleteKBConvertedFileRecordsActivity"
-	deleteKBTextChunkRecordsActivityError = "DeleteKBTextChunkRecordsActivity"
-	deleteKBEmbeddingRecordsActivityError = "DeleteKBEmbeddingRecordsActivity"
-	purgeKBACLActivityError               = "PurgeKBACLActivity"
-	softDeleteKBRecordActivityError       = "SoftDeleteKBRecordActivity"
-	getInProgressFileCountActivityError   = "GetInProgressFileCountActivity"
-	getKBCollectionUIDActivityError       = "GetKBCollectionUIDActivity"
-	cleanupExpiredGCSFilesActivityError   = "CleanupExpiredGCSFilesActivity"
+	deleteOriginalFileActivityError             = "DeleteOriginalFileActivity"
+	deleteConvertedFileActivityError            = "DeleteConvertedFileActivity"
+	deleteTextChunksActivityError               = "DeleteTextChunksFromMinIOActivity"
+	deleteEmbeddingsActivityError               = "DeleteEmbeddingsFromVectorDBActivity"
+	deleteKBFilesActivityError                  = "DeleteKBFilesFromMinIOActivity"
+	dropCollectionActivityError                 = "DropVectorDBCollectionActivity"
+	deleteKBFileRecordsActivityError            = "DeleteKBFileRecordsActivity"
+	deleteKBConvertedRecordsActivityError       = "DeleteKBConvertedFileRecordsActivity"
+	deleteKBTextChunkRecordsActivityError       = "DeleteKBTextChunkRecordsActivity"
+	deleteKBEmbeddingRecordsActivityError       = "DeleteKBEmbeddingRecordsActivity"
+	purgeKBACLActivityError                     = "PurgeKBACLActivity"
+	softDeleteKBRecordActivityError             = "SoftDeleteKBRecordActivity"
+	getInProgressFileCountActivityError         = "GetInProgressFileCountActivity"
+	getKBCollectionUIDActivityError             = "GetKBCollectionUIDActivity"
+	cleanupExpiredGCSFilesActivityError         = "CleanupExpiredGCSFilesActivity"
+	checkRollbackRetentionExpiredActivityError  = "CheckRollbackRetentionExpiredActivity"
 )
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
@@ -86,7 +88,7 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 		zap.String("fileUID", param.FileUID.String()))
 
 	// Fetch file record to get destination
-	files, err := w.repository.GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
+	files, err := w.repository.GetFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
 	if err != nil || len(files) == 0 {
 		w.log.Info("DeleteOriginalFileActivity: File not found, may have been deleted already",
 			zap.String("fileUID", param.FileUID.String()))
@@ -94,13 +96,13 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 	}
 
 	file := files[0]
-	if file.Destination == "" {
-		w.log.Info("DeleteOriginalFileActivity: File has no destination, skipping",
+	if file.StoragePath == "" {
+		w.log.Info("DeleteOriginalFileActivity: File has no storage path, skipping",
 			zap.String("fileUID", param.FileUID.String()))
 		return nil
 	}
 
-	err = w.deleteFilesSync(ctx, param.Bucket, []string{file.Destination})
+	err = w.deleteFilesSync(ctx, param.Bucket, []string{file.StoragePath})
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete file from storage. Please try again.")
 		return activityError(err, deleteOriginalFileActivityError)
@@ -108,13 +110,13 @@ func (w *Worker) DeleteOriginalFileActivity(ctx context.Context, param *DeleteOr
 
 	// CRITICAL: Also delete the blob object record from the object table
 	// This prevents orphaned records when blob files are deleted from MinIO
-	// The destination format is "ns-{namespaceUID}/obj-{objectUID}"
+	// The storage path format is "ns-{namespaceUID}/obj-{objectUID}"
 	// We need to delete the object record to keep DB and MinIO in sync
-	if err := w.repository.DeleteObjectByDestination(ctx, file.Destination); err != nil {
+	if err := w.repository.DeleteObjectByStoragePath(ctx, file.StoragePath); err != nil {
 		// Log but don't fail - this is cleanup, and the object might already be deleted
 		w.log.Warn("DeleteOriginalFileActivity: Failed to delete object record (may not exist)",
 			zap.String("fileUID", param.FileUID.String()),
-			zap.String("destination", file.Destination),
+			zap.String("storagePath", file.StoragePath),
 			zap.Error(err))
 	}
 
@@ -150,7 +152,7 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 	// Delete all converted files from MinIO and DB
 	for _, convertedFile := range convertedFiles {
 		// Delete from MinIO using KB UID from the converted file record
-		err = w.deleteConvertedFileByFileUIDSync(ctx, convertedFile.KBUID, param.FileUID)
+		err = w.deleteConvertedFileByFileUIDSync(ctx, convertedFile.KnowledgeBaseUID, param.FileUID)
 		if err != nil {
 			w.log.Error("DeleteConvertedFileActivity: Failed to delete converted file from MinIO",
 				zap.String("convertedFileUID", convertedFile.UID.String()),
@@ -161,7 +163,7 @@ func (w *Worker) DeleteConvertedFileActivity(ctx context.Context, param *DeleteC
 
 		w.log.Info("DeleteConvertedFileActivity: Deleted from MinIO",
 			zap.String("convertedFileUID", convertedFile.UID.String()),
-			zap.String("kbUID", convertedFile.KBUID.String()),
+			zap.String("kbUID", convertedFile.KnowledgeBaseUID.String()),
 			zap.String("convertedType", convertedFile.ConvertedType))
 	}
 
@@ -193,7 +195,7 @@ func (w *Worker) DeleteTextChunksFromMinIOActivity(ctx context.Context, param *D
 	}
 
 	// Get KB UID from the first text chunk (all text chunks have the same KB UID)
-	kbUID := textChunks[0].KBUID
+	kbUID := textChunks[0].KnowledgeBaseUID
 
 	// Delete from MinIO using KB UID from the text chunk records
 	err = w.deleteTextChunksByFileUIDSync(ctx, kbUID, param.FileUID)
@@ -231,7 +233,7 @@ func (w *Worker) DeleteEmbeddingsFromVectorDBActivity(ctx context.Context, param
 	}
 
 	// Get KB UID from the first embedding (all embeddings have the same KB UID)
-	kbUID := embeddings[0].KBUID
+	kbUID := embeddings[0].KnowledgeBaseUID
 
 	// CRITICAL: Query KB to get active_collection_uid (not kbUID) for the Milvus collection
 	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, kbUID)
@@ -440,7 +442,7 @@ func (w *Worker) DeleteKBFileRecordsActivity(ctx context.Context, param *DeleteK
 	w.log.Info("DeleteKBFileRecordsActivity: Deleting file records",
 		zap.String("kbUID", param.KBUID.String()))
 
-	err := w.repository.DeleteAllKnowledgeBaseFiles(ctx, param.KBUID.String())
+	err := w.repository.DeleteAllFiles(ctx, param.KBUID.String())
 	if err != nil {
 		err = errorsx.AddMessage(err, "Unable to delete file records. Please try again.")
 		return activityError(err, deleteKBFileRecordsActivityError)
@@ -515,7 +517,7 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 	w.log.Info("SoftDeleteKBRecordActivity: Soft-deleting KB record",
 		zap.String("kbUID", param.KBUID.String()))
 
-	// Get KB to retrieve owner and KBID
+	// Get KB to retrieve owner and ID
 	kb, err := w.repository.GetKnowledgeBaseByUID(ctx, param.KBUID)
 	if err != nil {
 		w.log.Info("SoftDeleteKBRecordActivity: KB not found, may have been deleted already",
@@ -531,7 +533,7 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 			zap.String("kbUID", param.KBUID.String()),
 			zap.String("previousUpdateStatus", kb.UpdateStatus))
 
-		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.KBID, kb.NamespaceUID, map[string]interface{}{
+		err = w.repository.UpdateKnowledgeBaseWithMap(ctx, kb.ID, kb.NamespaceUID, map[string]interface{}{
 			"update_status":      "",
 			"update_workflow_id": "",
 		})
@@ -542,13 +544,13 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 	}
 
 	// Soft delete the KB record
-	_, err = w.repository.DeleteKnowledgeBase(ctx, kb.NamespaceUID, kb.KBID)
+	_, err = w.repository.DeleteKnowledgeBase(ctx, kb.NamespaceUID, kb.ID)
 	if err != nil {
 		// Check if KB was already deleted (record not found means it was already soft-deleted)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			w.log.Info("SoftDeleteKBRecordActivity: KB already soft-deleted",
 				zap.String("kbUID", param.KBUID.String()),
-				zap.String("kbID", kb.KBID))
+				zap.String("kbID", kb.ID))
 			return nil
 		}
 
@@ -558,7 +560,7 @@ func (w *Worker) SoftDeleteKBRecordActivity(ctx context.Context, param *SoftDele
 
 	w.log.Info("SoftDeleteKBRecordActivity: KB record soft-deleted successfully",
 		zap.String("kbUID", param.KBUID.String()),
-		zap.String("kbID", kb.KBID))
+		zap.String("kbID", kb.ID))
 
 	return nil
 }
@@ -621,7 +623,7 @@ func (w *Worker) getActiveWorkflowCount(ctx context.Context, kbUID types.KBUIDTy
 	}
 
 	// Get all files for this KB (including COMPLETED ones, since their workflows might still be running)
-	files, err := w.repository.ListKnowledgeBaseFiles(ctx, repository.KnowledgeBaseFileListParams{
+	files, err := w.repository.ListFiles(ctx, repository.KnowledgeBaseFileListParams{
 		OwnerUID: kb.NamespaceUID,
 		KBUID:    kbUID.String(),
 	})
@@ -733,7 +735,7 @@ func (w *Worker) ClearProductionKBRetentionActivity(ctx context.Context, param *
 	// Check if this is a rollback KB (has parent_kb_uid set)
 	if rollbackKB.ParentKBUID == nil {
 		w.log.Info("ClearProductionKBRetentionActivity: Not a rollback KB (no parent_kb_uid), skipping",
-			zap.String("kbID", rollbackKB.KBID))
+			zap.String("kbID", rollbackKB.ID))
 		return nil
 	}
 
@@ -753,22 +755,103 @@ func (w *Worker) ClearProductionKBRetentionActivity(ctx context.Context, param *
 	}
 
 	// Clear the retention field
-	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.KBID, productionKB.NamespaceUID, map[string]any{
+	err = w.repository.UpdateKnowledgeBaseWithMap(ctx, productionKB.ID, productionKB.NamespaceUID, map[string]any{
 		"rollback_retention_until": nil,
 	})
 	if err != nil {
 		w.log.Error("ClearProductionKBRetentionActivity: Failed to clear retention field",
-			zap.String("productionKBID", productionKB.KBID),
+			zap.String("productionID", productionKB.ID),
 			zap.Error(err))
 		// Non-fatal - don't fail the workflow
 		return nil
 	}
 
 	w.log.Info("ClearProductionKBRetentionActivity: Cleared retention field successfully",
-		zap.String("productionKBID", productionKB.KBID),
-		zap.String("rollbackKBID", rollbackKB.KBID))
+		zap.String("productionID", productionKB.ID),
+		zap.String("rollbackID", rollbackKB.ID))
 
 	return nil
+}
+
+// CheckRollbackRetentionExpiredActivityParam defines parameters for checking retention expiry
+type CheckRollbackRetentionExpiredActivityParam struct {
+	RollbackKBUID types.KBUIDType
+}
+
+// CheckRollbackRetentionExpiredActivityResult contains the result of retention check
+type CheckRollbackRetentionExpiredActivityResult struct {
+	// Expired is true if the retention period has expired and cleanup should proceed
+	Expired bool
+	// KBDeleted is true if the rollback KB has been deleted (should proceed with cleanup)
+	KBDeleted bool
+	// ProductionKBDeleted is true if the production KB no longer exists (should abort cleanup)
+	ProductionKBDeleted bool
+}
+
+// CheckRollbackRetentionExpiredActivity checks if the rollback retention period has expired
+// by querying the rollback KB's own rollback_retention_until field.
+// This activity is used by CleanupKnowledgeBaseWorkflow to poll for retention expiry
+// instead of doing one long sleep, allowing dynamic retention changes via SetRollbackRetentionAdmin.
+// Note: SetRollbackRetentionAdmin updates this field directly on the rollback KB.
+func (w *Worker) CheckRollbackRetentionExpiredActivity(ctx context.Context, param *CheckRollbackRetentionExpiredActivityParam) (*CheckRollbackRetentionExpiredActivityResult, error) {
+	w.log.Debug("CheckRollbackRetentionExpiredActivity: Checking retention",
+		zap.String("rollbackKBUID", param.RollbackKBUID.String()))
+
+	result := &CheckRollbackRetentionExpiredActivityResult{}
+
+	// Get the rollback KB to find its parent (production KB)
+	// Use IncludingDeleted since we need to handle soft-deleted KBs
+	rollbackKB, err := w.repository.GetKnowledgeBaseByUIDIncludingDeleted(ctx, param.RollbackKBUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Rollback KB already hard-deleted - cleanup not needed
+			w.log.Info("CheckRollbackRetentionExpiredActivity: Rollback KB not found (hard deleted)",
+				zap.String("rollbackKBUID", param.RollbackKBUID.String()))
+			result.KBDeleted = true
+			result.Expired = true // Signal to proceed with cleanup termination
+			return result, nil
+		}
+		return nil, activityErrorWithMessage("Failed to get rollback KB", checkRollbackRetentionExpiredActivityError, err)
+	}
+
+	// Check if this is actually a rollback KB (has parent_kb_uid set)
+	if rollbackKB.ParentKBUID == nil {
+		// Not a rollback KB - should not have reached this point, but proceed with cleanup
+		w.log.Warn("CheckRollbackRetentionExpiredActivity: KB has no parent (not a rollback KB), proceeding",
+			zap.String("kbUID", param.RollbackKBUID.String()))
+		result.Expired = true
+		return result, nil
+	}
+
+	// Check if retention has expired using the ROLLBACK KB's own RollbackRetentionUntil field
+	// SetRollbackRetentionAdmin updates this field directly on the rollback KB, so we should check it here
+	// rather than looking at the production KB
+	if rollbackKB.RollbackRetentionUntil == nil {
+		// No retention set - proceed with cleanup
+		w.log.Info("CheckRollbackRetentionExpiredActivity: No retention set on rollback KB, proceeding",
+			zap.String("rollbackKBUID", param.RollbackKBUID.String()))
+		result.Expired = true
+		return result, nil
+	}
+
+	now := time.Now()
+	if now.After(*rollbackKB.RollbackRetentionUntil) {
+		w.log.Info("CheckRollbackRetentionExpiredActivity: Retention expired, proceeding",
+			zap.String("rollbackKBUID", param.RollbackKBUID.String()),
+			zap.Time("retentionUntil", *rollbackKB.RollbackRetentionUntil),
+			zap.Time("now", now))
+		result.Expired = true
+		return result, nil
+	}
+
+	w.log.Debug("CheckRollbackRetentionExpiredActivity: Retention not yet expired",
+		zap.String("rollbackKBUID", param.RollbackKBUID.String()),
+		zap.Time("retentionUntil", *rollbackKB.RollbackRetentionUntil),
+		zap.Time("now", now),
+		zap.Duration("remaining", rollbackKB.RollbackRetentionUntil.Sub(now)))
+
+	result.Expired = false
+	return result, nil
 }
 
 // CleanupExpiredGCSFilesActivityParam defines parameters for cleaning up expired GCS files

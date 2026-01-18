@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -14,18 +15,48 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
 )
 
+// parseChunkFromName parses a resource name of format "namespaces/{namespace}/files/{file}/chunks/{chunk}"
+// and returns the namespace_id, file_id, and chunk_id
+func parseChunkFromName(name string) (namespaceID, fileID, chunkID string, err error) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 6 || parts[0] != "namespaces" || parts[2] != "files" || parts[4] != "chunks" {
+		return "", "", "", fmt.Errorf("invalid chunk name format, expected namespaces/{namespace}/files/{file}/chunks/{chunk}")
+	}
+	return parts[1], parts[3], parts[5], nil
+}
+
+// parseFileFromParent parses a parent resource name of format "namespaces/{namespace}/files/{file}"
+// and returns the namespace_id and file_id
+func parseFileFromParent(parent string) (namespaceID, fileID string, err error) {
+	parts := strings.Split(parent, "/")
+	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "files" {
+		return "", "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}/files/{file}")
+	}
+	return parts[1], parts[3], nil
+}
+
+// parseNamespaceFromParent parses a parent resource name of format "namespaces/{namespace}"
+// and returns the namespace_id
+func parseNamespaceFromParent(parent string) (namespaceID string, err error) {
+	parts := strings.Split(parent, "/")
+	if len(parts) != 2 || parts[0] != "namespaces" {
+		return "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}")
+	}
+	return parts[1], nil
+}
+
 // convertToProtoChunk converts a TextChunkModel to a protobuf Chunk
-// namespaceId, kbId, and fileId are used to construct the resource name
-func convertToProtoChunk(textChunk repository.TextChunkModel, namespaceID, kbID, fileID string) *artifactpb.Chunk {
+// namespaceID and fileID are used to construct the resource name
+func convertToProtoChunk(chunk repository.ChunkModel, namespaceID, fileID string) *artifactpb.Chunk {
 	var chunkType artifactpb.Chunk_Type
 
 	// Convert database string to protobuf enum
-	switch textChunk.ChunkType {
+	switch chunk.ChunkType {
 	case "TYPE_CONTENT":
 		chunkType = artifactpb.Chunk_TYPE_CONTENT
 	case "TYPE_SUMMARY":
@@ -36,18 +67,16 @@ func convertToProtoChunk(textChunk repository.TextChunkModel, namespaceID, kbID,
 		chunkType = artifactpb.Chunk_TYPE_CONTENT // Default to content
 	}
 
-	chunkID := textChunk.UID.String()
-	resourceName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s/chunks/%s",
-		namespaceID, kbID, fileID, chunkID)
+	resourceName := fmt.Sprintf("namespaces/%s/files/%s/chunks/%s",
+		namespaceID, fileID, chunk.ID)
 
 	pbChunk := &artifactpb.Chunk{
-		Uid:            chunkID,
-		Id:             chunkID,
 		Name:           resourceName,
-		Retrievable:    textChunk.Retrievable,
-		Tokens:         uint32(textChunk.Tokens),
-		CreateTime:     timestamppb.New(*textChunk.CreateTime),
-		OriginalFileId: textChunk.FileUID.String(),
+		Id:             chunk.ID,
+		Retrievable:    chunk.Retrievable,
+		Tokens:         uint32(chunk.Tokens),
+		CreateTime:     timestamppb.New(*chunk.CreateTime),
+		OriginalFileId: chunk.FileUID.String(),
 		Type:           chunkType,
 	}
 
@@ -55,27 +84,27 @@ func convertToProtoChunk(textChunk repository.TextChunkModel, namespaceID, kbID,
 	pbChunk.MarkdownReference = &artifactpb.Chunk_Reference{
 		Start: &artifactpb.File_Position{
 			Unit:        artifactpb.File_Position_UNIT_CHARACTER,
-			Coordinates: []uint32{uint32(textChunk.StartPos)},
+			Coordinates: []uint32{uint32(chunk.StartPos)},
 		},
 		End: &artifactpb.File_Position{
 			Unit:        artifactpb.File_Position_UNIT_CHARACTER,
-			Coordinates: []uint32{uint32(textChunk.EndPos)},
+			Coordinates: []uint32{uint32(chunk.EndPos)},
 		},
 	}
 
 	// Add page reference if available
-	if textChunk.Reference != nil && textChunk.Reference.PageRange[0] != 0 && textChunk.Reference.PageRange[1] != 0 {
+	if chunk.Reference != nil && chunk.Reference.PageRange[0] != 0 && chunk.Reference.PageRange[1] != 0 {
 		// We only extract one kind of reference for now. When more file
 		// types are supported, we'll need to inspect the reference object
 		// to build the response correctly.
 		pbChunk.Reference = &artifactpb.Chunk_Reference{
 			Start: &artifactpb.File_Position{
 				Unit:        artifactpb.File_Position_UNIT_PAGE,
-				Coordinates: []uint32{textChunk.Reference.PageRange[0]},
+				Coordinates: []uint32{chunk.Reference.PageRange[0]},
 			},
 			End: &artifactpb.File_Position{
 				Unit:        artifactpb.File_Position_UNIT_PAGE,
-				Coordinates: []uint32{textChunk.Reference.PageRange[1]},
+				Coordinates: []uint32{chunk.Reference.PageRange[1]},
 			},
 		}
 	}
@@ -93,31 +122,60 @@ func convertToProtoChunk(textChunk repository.TextChunkModel, namespaceID, kbID,
 func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkRequest) (*artifactpb.GetChunkResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Get namespace
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	// Parse resource name to get namespace_id, file_id, and chunk_id
+	namespaceID, fileID, chunkID, err := parseChunkFromName(req.GetName())
 	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing chunk name: %w", err),
+			"Invalid chunk name format. Expected: namespaces/{namespace}/files/{file}/chunks/{chunk}",
+		)
+	}
+
+	// Validate namespace exists
+	if _, err := ph.service.GetNamespaceByNsID(ctx, namespaceID); err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("fetching namespace: %w", err),
 			"Unable to access the specified namespace. Please check the namespace ID and try again.",
 		)
 	}
 
-	// Get knowledge base
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, req.GetKnowledgeBaseId())
+	// Get file to get knowledge base UID for ACL check
+	kbfs, err := ph.service.Repository().GetFilesByFileIDs(ctx, []string{fileID})
+	if err != nil || len(kbfs) == 0 {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("fetching file: %w", err),
+			"Unable to access the specified file. Please check the file ID and try again.",
+		)
+	}
+	kbf := &kbfs[0]
+
+	// ACL - check user has access to any of the knowledge bases associated with this file
+	kbUIDs, err := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, kbf.UID)
 	if err != nil {
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("fetching knowledge base: %w", err),
-			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
+			fmt.Errorf("getting file KB associations: %w", err),
+			"Unable to verify file ownership. Please try again.",
+		)
+	}
+	if len(kbUIDs) == 0 {
+		return nil, errorsx.AddMessage(
+			errorsx.ErrNotFound,
+			"File is not associated with any knowledge base.",
 		)
 	}
 
-	// ACL - check user has access to the knowledge base
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("checking permissions: %w", err),
-			"Unable to verify access permissions. Please try again.",
-		)
+	// Check permission on any associated KB
+	granted := false
+	for _, kbUID := range kbUIDs {
+		hasPermission, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbUID, "reader")
+		if err != nil {
+			logger.Warn("failed to check permission for KB", zap.Error(err), zap.String("kbUID", kbUID.String()))
+			continue
+		}
+		if hasPermission {
+			granted = true
+			break
+		}
 	}
 	if !granted {
 		return nil, errorsx.AddMessage(
@@ -127,7 +185,7 @@ func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkR
 	}
 
 	// Get chunk metadata from repository
-	chunkUUID, err := uuid.FromString(req.GetChunkId())
+	chunkUUID, err := uuid.FromString(chunkID)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("invalid chunk ID: %w", err),
@@ -135,9 +193,9 @@ func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkR
 		)
 	}
 
-	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, []types.TextChunkUIDType{types.TextChunkUIDType(chunkUUID)})
+	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, []types.ChunkUIDType{types.ChunkUIDType(chunkUUID)})
 	if err != nil || len(chunks) == 0 {
-		logger.Error("chunk not found", zap.Error(err), zap.String("chunkID", req.GetChunkId()))
+		logger.Error("chunk not found", zap.Error(err), zap.String("chunkID", chunkID))
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("chunk not found: %w", errorsx.ErrNotFound),
 			"Chunk not found. Please check the chunk ID and try again.",
@@ -164,8 +222,8 @@ func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkR
 		}
 	}
 
-	// Convert to protobuf format
-	pbChunk := convertToProtoChunk(chunk, req.GetNamespaceId(), req.GetKnowledgeBaseId(), req.GetFileId())
+	// Convert to protobuf format - use namespace ID from name parsing
+	pbChunk := convertToProtoChunk(chunk, namespaceID, fileID)
 
 	return &artifactpb.GetChunkResponse{
 		Chunk: pbChunk,
@@ -181,24 +239,50 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 		return nil, err
 	}
 
+	// Parse parent to get namespace_id and file_id
+	namespaceID, fileID, err := parseFileFromParent(req.GetParent())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing parent: %w", err),
+			"Invalid parent format. Expected: namespaces/{namespace}/files/{file}",
+		)
+	}
+
 	// Look up file by hash-based ID (also supports UUID lookup internally)
-	kbfs, err := ph.service.Repository().GetKnowledgeBaseFilesByFileIDs(ctx, []string{req.FileId})
+	kbfs, err := ph.service.Repository().GetFilesByFileIDs(ctx, []string{fileID})
 	if err != nil {
 		logger.Error("failed to get knowledge base files by file ids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get knowledge base files: %w", err)
 	}
 	if len(kbfs) == 0 {
-		logger.Error("no files found for the given file id", zap.String("fileId", req.FileId))
-		return nil, fmt.Errorf("file not found: %s. err: %w", req.FileId, errorsx.ErrNotFound)
+		logger.Error("no files found for the given file id", zap.String("fileId", fileID))
+		return nil, fmt.Errorf("file not found: %s. err: %w", fileID, errorsx.ErrNotFound)
 	}
 
 	kbf := &kbfs[0]
 	fileUID := uuid.UUID(kbf.UID)
-	// ACL - check user's permission to read knowledge base
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbf.KBUID, "reader")
+	_ = namespaceID // namespaceID can be used for validation if needed
+
+	// ACL - check user's permission to read any of the knowledge bases associated with this file
+	kbUIDs, err := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, kbf.UID)
 	if err != nil {
-		logger.Error("failed to check permission", zap.Error(err))
-		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
+		logger.Error("failed to get KB associations for file", zap.Error(err))
+		return nil, fmt.Errorf("getting file KB associations: %w", err)
+	}
+	if len(kbUIDs) == 0 {
+		return nil, fmt.Errorf("%w: file not associated with any knowledge base", errorsx.ErrNotFound)
+	}
+	granted := false
+	for _, kbUID := range kbUIDs {
+		hasPermission, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbUID, "reader")
+		if err != nil {
+			logger.Warn("failed to check permission for KB", zap.Error(err), zap.String("kbUID", kbUID.String()))
+			continue
+		}
+		if hasPermission {
+			granted = true
+			break
+		}
 	}
 	if !granted {
 		return nil, fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized)
@@ -243,7 +327,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 
 	res := make([]*artifactpb.Chunk, 0, len(chunks))
 	for _, chunk := range chunks {
-		res = append(res, convertToProtoChunk(chunk, req.NamespaceId, req.KnowledgeBaseId, req.FileId))
+		res = append(res, convertToProtoChunk(chunk, namespaceID, fileID))
 	}
 
 	return &artifactpb.ListChunksResponse{
@@ -255,18 +339,27 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.UpdateChunkRequest) (*artifactpb.UpdateChunkResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, []types.TextChunkUIDType{types.TextChunkUIDType(uuid.FromStringOrNil(req.ChunkId))})
+	// Parse resource name to get namespace_id, file_id, and chunk_id
+	namespaceID, fileID, chunkID, err := parseChunkFromName(req.GetName())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing chunk name: %w", err),
+			"Invalid chunk name format. Expected: namespaces/{namespace}/files/{file}/chunks/{chunk}",
+		)
+	}
+
+	chunks, err := ph.service.Repository().GetTextChunksByUIDs(ctx, []types.ChunkUIDType{types.ChunkUIDType(uuid.FromStringOrNil(chunkID))})
 	if err != nil {
 		logger.Error("failed to get chunks by uids", zap.Error(err))
 		return nil, fmt.Errorf("failed to get chunks by uids: %w", err)
 	}
 	if len(chunks) == 0 {
 		logger.Error("no chunks found for the given chunk uids")
-		return nil, fmt.Errorf("no chunks found for the given chunk uids: %v. err: %w", req.ChunkId, errorsx.ErrNotFound)
+		return nil, fmt.Errorf("no chunks found for the given chunk uids: %v. err: %w", chunkID, errorsx.ErrNotFound)
 	}
 	chunk := &chunks[0]
 	// ACL - check user's permission to write knowledge base of chunks
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", chunk.KBUID, "writer")
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", chunk.KnowledgeBaseUID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
 		return nil, fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err)
@@ -280,25 +373,14 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 		repository.TextChunkColumn.Retrievable: retrievable,
 	}
 
-	chunk, err = ph.service.Repository().UpdateTextChunk(ctx, req.ChunkId, update)
+	chunk, err = ph.service.Repository().UpdateTextChunk(ctx, chunkID, update)
 	if err != nil {
 		logger.Error("failed to update text chunk", zap.Error(err))
 		return nil, fmt.Errorf("failed to update text chunk: %w", err)
 	}
 
-	// Get file to retrieve file ID for resource name
-	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(ctx, []types.FileUIDType{chunk.FileUID})
-	if err != nil || len(files) == 0 {
-		logger.Error("failed to get file for chunk", zap.Error(err))
-		// Fallback to using FileUID as file ID
-		return &artifactpb.UpdateChunkResponse{
-			Chunk: convertToProtoChunk(*chunk, req.NamespaceId, req.KnowledgeBaseId, chunk.FileUID.String()),
-		}, nil
-	}
-
 	return &artifactpb.UpdateChunkResponse{
-		// Populate the response fields appropriately
-		Chunk: convertToProtoChunk(*chunk, req.NamespaceId, req.KnowledgeBaseId, files[0].UID.String()),
+		Chunk: convertToProtoChunk(*chunk, namespaceID, fileID),
 	}, nil
 }
 
@@ -309,13 +391,23 @@ func (ph *PublicHandler) SearchChunks(
 	req *artifactpb.SearchChunksRequest,
 ) (*artifactpb.SearchChunksResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
+
+	// Parse parent to get namespace_id
+	namespaceID, err := parseNamespaceFromParent(req.GetParent())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing parent: %w", err),
+			"Invalid parent format. Expected: namespaces/{namespace}",
+		)
+	}
+
 	logger = logger.With(
-		zap.String("namespace", req.GetNamespaceId()),
+		zap.String("namespace", namespaceID),
 		zap.String("knowledge_base", req.GetKnowledgeBaseId()),
 	)
 
 	// Get namespace
-	ns, err := ph.service.GetNamespaceByNsID(ctx, req.GetNamespaceId())
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("fetching namespace: %w", err),
@@ -325,7 +417,7 @@ func (ph *PublicHandler) SearchChunks(
 
 	// Get knowledge base
 	ownerUID := ns.NsUID
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KnowledgeBaseId)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.GetKnowledgeBaseId())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("fetching knowledge base: %w", err),
@@ -381,7 +473,7 @@ func (ph *PublicHandler) SearchChunks(
 	}
 
 	// Extract chunk UIDs
-	var chunkUIDs []types.TextChunkUIDType
+	var chunkUIDs []types.ChunkUIDType
 	for _, simChunk := range simChunksScores {
 		chunkUIDs = append(chunkUIDs, simChunk.ChunkUID)
 	}
@@ -399,7 +491,7 @@ func (ph *PublicHandler) SearchChunks(
 	// Get chunk contents from MinIO
 	chunkFilePaths := make([]string, 0, len(chunks))
 	for _, chunk := range chunks {
-		chunkFilePaths = append(chunkFilePaths, chunk.ContentDest)
+		chunkFilePaths = append(chunkFilePaths, chunk.StoragePath)
 	}
 
 	chunkContents, err := ph.service.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
@@ -421,11 +513,11 @@ func (ph *PublicHandler) SearchChunks(
 		fileUids = append(fileUids, fileUID)
 	}
 
-	files, err := ph.service.Repository().GetKnowledgeBaseFilesByFileUIDs(
+	files, err := ph.service.Repository().GetFilesByFileUIDs(
 		ctx,
 		fileUids,
-		repository.KnowledgeBaseFileColumn.UID,
-		repository.KnowledgeBaseFileColumn.DisplayName,
+		repository.FileColumn.UID,
+		repository.FileColumn.DisplayName,
 	)
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -447,11 +539,11 @@ func (ph *PublicHandler) SearchChunks(
 		}
 
 		pbChunk := &artifactpb.SimilarityChunk{
-			ChunkId:         chunk.UID.String(), // Use ChunkId (new field name)
+			ChunkId:         chunk.ID,
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
 			SourceFile:      fileUIDMapDisplayName[chunk.FileUID],
-			ChunkMetadata:   convertToProtoChunk(chunk, req.GetNamespaceId(), req.GetKnowledgeBaseId(), chunk.FileUID.String()),
+			ChunkMetadata:   convertToProtoChunk(chunk, namespaceID, chunk.FileUID.String()),
 		}
 		simChunks = append(simChunks, pbChunk)
 	}

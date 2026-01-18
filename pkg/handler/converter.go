@@ -11,8 +11,8 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 
-	artifactpb "github.com/instill-ai/protogen-go/artifact/artifact/v1alpha"
-	mgmtpb "github.com/instill-ai/protogen-go/core/mgmt/v1beta"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
+	mgmtpb "github.com/instill-ai/protogen-go/mgmt/v1beta"
 	filetype "github.com/instill-ai/x/file"
 )
 
@@ -55,18 +55,20 @@ func extractCollectionUIDs(tags []string) []string {
 // Following the pattern from pipeline/model/mgmt backends, the `name` field
 // is computed dynamically rather than stored in the database.
 func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namespace, owner *mgmtpb.Owner, creator *mgmtpb.User) *artifactpb.KnowledgeBase {
+	// ownerName is the full namespace reference (e.g., "users/admin" or "organizations/org-id")
 	ownerName := ns.Name()
+	// namespaceID is just the ID part (e.g., "admin")
+	namespaceID := ns.NsID
 
 	knowledgeBase := &artifactpb.KnowledgeBase{
-		Uid:         kb.UID.String(),
-		Id:          kb.KBID,                                                  // Database field KBID maps to protobuf id
-		Name:        fmt.Sprintf("%s/knowledge-bases/%s", ownerName, kb.KBID), // Computed dynamically!
+		Id:          kb.ID,                                                          // Database field ID maps to protobuf id
+		Slug:        kb.Slug,                                                        // URL-friendly slug without prefix
+		Name:        fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID), // Computed: namespaces/{namespace}/knowledge-bases/{id}
 		DisplayName: kb.DisplayName,
 		Description: kb.Description,
 		CreateTime:  timestamppb.New(*kb.CreateTime),
 		UpdateTime:  timestamppb.New(*kb.UpdateTime),
 		OwnerName:   ownerName,
-		OwnerUid:    kb.NamespaceUID,
 		Owner:       owner,
 		Creator:     creator,
 		Tags:        kb.Tags,
@@ -88,32 +90,32 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 	return knowledgeBase
 }
 
-// convertKBFileToPB converts database KnowledgeBaseFile to protobuf File.
+// convertKBFileToPB converts database FileModel to protobuf File.
 // The `name` field is computed dynamically following other backends' patterns.
-func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Namespace, kb *repository.KnowledgeBaseModel, owner *mgmtpb.Owner, creator *mgmtpb.User) *artifactpb.File {
+func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *repository.KnowledgeBaseModel, owner *mgmtpb.Owner, creator *mgmtpb.User) *artifactpb.File {
+	// ownerName is the full namespace reference (e.g., "users/admin" or "organizations/org-id")
 	ownerName := ns.Name()
-	fileUIDStr := kbf.UID.String()
+	// namespaceID is just the ID part (e.g., "admin")
+	namespaceID := ns.NsID
 	// Use ID if set, otherwise fallback to UID
 	fileID := kbf.ID
 	if fileID == "" {
-		fileID = fileUIDStr
+		fileID = kbf.UID.String()
 	}
 
 	file := &artifactpb.File{
-		Uid:              fileUIDStr,
 		Id:               fileID,
-		Name:             fmt.Sprintf("%s/knowledge-bases/%s/files/%s", ownerName, kb.KBID, fileID), // Computed!
+		Slug:             kbf.Slug,                                                 // URL-friendly slug without prefix
+		Name:             fmt.Sprintf("namespaces/%s/files/%s", namespaceID, fileID), // Computed: namespaces/{namespace}/files/{file}
 		DisplayName:      kbf.DisplayName,
 		Description:      kbf.Description,
 		Type:             convertFileType(kbf.FileType),
 		CreateTime:       timestamppb.New(*kbf.CreateTime),
 		UpdateTime:       timestamppb.New(*kbf.UpdateTime),
-		OwnerUid:         kbf.NamespaceUID.String(),
 		OwnerName:        ownerName,
 		Owner:            owner,
-		CreatorUid:       kbf.CreatorUID.String(),
 		Creator:          creator,
-		KnowledgeBaseId: kbf.KBUID.String(),
+		KnowledgeBaseIds: []string{kb.ID}, // File associated with this KB
 		Size:             kbf.Size,
 		ProcessStatus:    convertFileProcessStatus(kbf.ProcessStatus),
 		Aliases:          kbf.Aliases,
@@ -127,7 +129,7 @@ func convertKBFileToPB(kbf *repository.KnowledgeBaseFileModel, ns *resource.Name
 	if len(kbf.Tags) > 0 {
 		file.Tags = kbf.Tags
 		// Extract collection UIDs from tags with prefix "agent:collection:"
-		file.CollectionUids = extractCollectionUIDs(kbf.Tags)
+		file.CollectionIds = extractCollectionUIDs(kbf.Tags)
 	}
 
 	if kbf.ExternalMetadataUnmarshal != nil {
