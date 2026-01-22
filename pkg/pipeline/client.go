@@ -27,11 +27,13 @@ func GenerateContentPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 		},
 	}
 
+	// Build full resource name: namespaces/{namespace}/pipelines/{pipeline}/releases/{release}
+	name := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
+		GenerateContentPipeline.Namespace, GenerateContentPipeline.Slug(), GenerateContentPipeline.Version)
+
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: GenerateContentPipeline.Namespace,
-		PipelineId:  GenerateContentPipeline.Slug(),
-		ReleaseId:   GenerateContentPipeline.Version,
-		Inputs:      []*structpb.Struct{input},
+		Name:   name,
+		Inputs: []*structpb.Struct{input},
 	}
 
 	resp, err := pipelineClient.TriggerNamespacePipelineRelease(ctx, req)
@@ -54,10 +56,12 @@ func GenerateSummaryPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
 
+	// Build full resource name: namespaces/{namespace}/pipelines/{pipeline}/releases/{release}
+	summaryName := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
+		GenerateSummaryPipeline.Namespace, GenerateSummaryPipeline.Slug(), GenerateSummaryPipeline.Version)
+
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: GenerateSummaryPipeline.Namespace,
-		PipelineId:  GenerateSummaryPipeline.Slug(),
-		ReleaseId:   GenerateSummaryPipeline.Version,
+		Name: summaryName,
 		Data: []*pipelinepb.TriggerData{
 			{
 				Variable: &structpb.Struct{
@@ -101,10 +105,12 @@ func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 	base64Content := base64.StdEncoding.EncodeToString(content)
 	dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Content)
 
+	// Build full resource name: namespaces/{namespace}/pipelines/{pipeline}/releases/{release}
+	convertName := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
+		ConvertFileTypePipeline.Namespace, ConvertFileTypePipeline.Slug(), ConvertFileTypePipeline.Version)
+
 	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-		NamespaceId: ConvertFileTypePipeline.Namespace,
-		PipelineId:  ConvertFileTypePipeline.Slug(),
-		ReleaseId:   ConvertFileTypePipeline.Version,
+		Name: convertName,
 		Inputs: []*structpb.Struct{
 			{
 				Fields: map[string]*structpb.Value{
@@ -316,11 +322,13 @@ func EmbedPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServ
 			}
 		}
 
+		// Build full resource name: namespaces/{namespace}/pipelines/{pipeline}/releases/{release}
+		embedName := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
+			EmbedPipeline.Namespace, EmbedPipeline.Slug(), EmbedPipeline.Version)
+
 		req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
-			NamespaceId: EmbedPipeline.Namespace,
-			PipelineId:  EmbedPipeline.Slug(),
-			ReleaseId:   EmbedPipeline.Version,
-			Inputs:      inputs,
+			Name:   embedName,
+			Inputs: inputs,
 		}
 
 		resp, err := pipelineClient.TriggerNamespacePipelineRelease(ctx, req)

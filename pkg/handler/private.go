@@ -340,7 +340,15 @@ func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.Up
 
 // GetObjectAdmin retrieves the information of an object (admin only).
 func (h *PrivateHandler) GetObjectAdmin(ctx context.Context, req *artifactpb.GetObjectAdminRequest) (*artifactpb.GetObjectAdminResponse, error) {
-	objectUID, err := uuid.FromString(req.GetObjectUid())
+	// Parse object UID from full resource name: objects/{object}
+	name := req.GetName()
+	parts := strings.Split(name, "/")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid object resource name: %s", name)
+	}
+	objectUIDStr := parts[len(parts)-1]
+
+	objectUID, err := uuid.FromString(objectUIDStr)
 	if err != nil {
 		h.logger.Error("GetObjectAdmin", zap.Error(err))
 		return nil, err
@@ -363,7 +371,15 @@ func (h *PrivateHandler) GetObjectAdmin(ctx context.Context, req *artifactpb.Get
 
 // UpdateObjectAdmin updates the information of an object (admin only).
 func (h *PrivateHandler) UpdateObjectAdmin(ctx context.Context, req *artifactpb.UpdateObjectAdminRequest) (*artifactpb.UpdateObjectAdminResponse, error) {
-	objectUID, err := uuid.FromString(req.GetObjectUid())
+	// Parse object UID from full resource name: objects/{object}
+	name := req.GetName()
+	parts := strings.Split(name, "/")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid object resource name: %s", name)
+	}
+	objectUIDStr := parts[len(parts)-1]
+
+	objectUID, err := uuid.FromString(objectUIDStr)
 	if err != nil {
 		h.logger.Error("UpdateObjectAdmin", zap.Error(err))
 		return nil, fmt.Errorf("invalid object UID: %w", err)

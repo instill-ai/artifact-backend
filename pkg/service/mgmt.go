@@ -142,8 +142,9 @@ func (s *service) FetchOwnerByNamespace(ctx context.Context, ns *resource.Namesp
 		}
 		owner = &pb.Owner{Owner: &pb.Owner_User{User: resp.GetUser()}}
 	case resource.Organization:
+		// Use full resource name: organizations/{organization}
 		resp, err := s.mgmtPrv.LookUpOrganizationAdmin(ctx, &pb.LookUpOrganizationAdminRequest{
-			OrganizationUid: ns.NsUID.String(),
+			Name: fmt.Sprintf("organizations/%s", ns.NsUID.String()),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("LookUpOrganizationAdmin error: %w", err)

@@ -128,6 +128,24 @@ func (s *service) GetUploadURL(
 	}, nil
 }
 
+// GetObject retrieves an object by its ID within a namespace
+func (s *service) GetObject(
+	ctx context.Context,
+	namespaceUID types.NamespaceUIDType,
+	objectID string,
+) (*artifactpb.Object, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Get the object from database using the hash-based ID
+	obj, err := s.repository.GetObjectByID(ctx, namespaceUID, types.ObjectIDType(objectID))
+	if err != nil {
+		logger.Error("failed to get object", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)
+	}
+
+	return repository.TurnObjectInDBToObjectInProto(obj), nil
+}
+
 // GetDownloadURL gets the download url of the object
 // this function will create a new object_url record in the database for downloading
 func (s *service) GetDownloadURL(

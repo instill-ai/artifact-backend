@@ -446,7 +446,6 @@ func (g *gcsStorage) GetGCSURI(objectPath string) string {
 	return fmt.Sprintf("gs://%s/%s", g.bucket, objectPath)
 }
 
-
 // GetBucket returns the default GCS bucket name
 func (g *gcsStorage) GetBucket() string {
 	return g.bucket

@@ -303,16 +303,16 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 				}
 
 				vectors[j] = repository.VectorEmbedding{
-					SourceTable:  emb.SourceTable,
-					SourceUID:    emb.SourceUID.String(),
-					EmbeddingUID: emb.UID.String(),
-					Vector:       emb.Vector,
-					FileUID:      emb.FileUID,
+					SourceTable:     emb.SourceTable,
+					SourceUID:       emb.SourceUID.String(),
+					EmbeddingUID:    emb.UID.String(),
+					Vector:          emb.Vector,
+					FileUID:         emb.FileUID,
 					FileDisplayName: file.DisplayName,
-					ContentType:  emb.ContentType,
-					ChunkType:    emb.ChunkType,
-					Tags:         emb.Tags,
-					Text:         chunkText, // Add text for BM25 sparse vector generation
+					ContentType:     emb.ContentType,
+					ChunkType:       emb.ChunkType,
+					Tags:            emb.Tags,
+					Text:            chunkText, // Add text for BM25 sparse vector generation
 				}
 			}
 			if err := w.repository.InsertVectorsInCollection(ctx, collection, vectors); err != nil {

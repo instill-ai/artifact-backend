@@ -538,11 +538,15 @@ func (ph *PublicHandler) SearchChunks(
 			continue
 		}
 
+		// Build full resource names for chunk and file
+		chunkName := fmt.Sprintf("namespaces/%s/files/%s/chunks/%s", namespaceID, chunk.FileUID.String(), chunk.ID)
+		fileName := fmt.Sprintf("namespaces/%s/files/%s", namespaceID, chunk.FileUID.String())
+
 		pbChunk := &artifactpb.SimilarityChunk{
-			ChunkId:         chunk.ID,
+			Chunk:           chunkName,
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
-			SourceFile:      fileUIDMapDisplayName[chunk.FileUID],
+			File:            fileName,
 			ChunkMetadata:   convertToProtoChunk(chunk, namespaceID, chunk.FileUID.String()),
 		}
 		simChunks = append(simChunks, pbChunk)

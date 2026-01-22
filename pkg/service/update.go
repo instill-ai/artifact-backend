@@ -488,7 +488,7 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 		}
 
 		knowledgeBaseStatuses = append(knowledgeBaseStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
-			KnowledgeBaseId: kb.ID,
+			KnowledgeBaseId:  kb.ID,
 			Status:           statusEnum,
 			WorkflowId:       kb.UpdateWorkflowID,
 			StartedAt:        formatTime(kb.UpdateStartedAt),

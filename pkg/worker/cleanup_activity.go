@@ -38,22 +38,22 @@ import (
 
 // Activity error type constants
 const (
-	deleteOriginalFileActivityError             = "DeleteOriginalFileActivity"
-	deleteConvertedFileActivityError            = "DeleteConvertedFileActivity"
-	deleteTextChunksActivityError               = "DeleteTextChunksFromMinIOActivity"
-	deleteEmbeddingsActivityError               = "DeleteEmbeddingsFromVectorDBActivity"
-	deleteKBFilesActivityError                  = "DeleteKBFilesFromMinIOActivity"
-	dropCollectionActivityError                 = "DropVectorDBCollectionActivity"
-	deleteKBFileRecordsActivityError            = "DeleteKBFileRecordsActivity"
-	deleteKBConvertedRecordsActivityError       = "DeleteKBConvertedFileRecordsActivity"
-	deleteKBTextChunkRecordsActivityError       = "DeleteKBTextChunkRecordsActivity"
-	deleteKBEmbeddingRecordsActivityError       = "DeleteKBEmbeddingRecordsActivity"
-	purgeKBACLActivityError                     = "PurgeKBACLActivity"
-	softDeleteKBRecordActivityError             = "SoftDeleteKBRecordActivity"
-	getInProgressFileCountActivityError         = "GetInProgressFileCountActivity"
-	getKBCollectionUIDActivityError             = "GetKBCollectionUIDActivity"
-	cleanupExpiredGCSFilesActivityError         = "CleanupExpiredGCSFilesActivity"
-	checkRollbackRetentionExpiredActivityError  = "CheckRollbackRetentionExpiredActivity"
+	deleteOriginalFileActivityError            = "DeleteOriginalFileActivity"
+	deleteConvertedFileActivityError           = "DeleteConvertedFileActivity"
+	deleteTextChunksActivityError              = "DeleteTextChunksFromMinIOActivity"
+	deleteEmbeddingsActivityError              = "DeleteEmbeddingsFromVectorDBActivity"
+	deleteKBFilesActivityError                 = "DeleteKBFilesFromMinIOActivity"
+	dropCollectionActivityError                = "DropVectorDBCollectionActivity"
+	deleteKBFileRecordsActivityError           = "DeleteKBFileRecordsActivity"
+	deleteKBConvertedRecordsActivityError      = "DeleteKBConvertedFileRecordsActivity"
+	deleteKBTextChunkRecordsActivityError      = "DeleteKBTextChunkRecordsActivity"
+	deleteKBEmbeddingRecordsActivityError      = "DeleteKBEmbeddingRecordsActivity"
+	purgeKBACLActivityError                    = "PurgeKBACLActivity"
+	softDeleteKBRecordActivityError            = "SoftDeleteKBRecordActivity"
+	getInProgressFileCountActivityError        = "GetInProgressFileCountActivity"
+	getKBCollectionUIDActivityError            = "GetKBCollectionUIDActivity"
+	cleanupExpiredGCSFilesActivityError        = "CleanupExpiredGCSFilesActivity"
+	checkRollbackRetentionExpiredActivityError = "CheckRollbackRetentionExpiredActivity"
 )
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
