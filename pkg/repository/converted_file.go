@@ -33,7 +33,7 @@ type ConvertedFile interface {
 
 // ConvertedFileModel is the model for the converted file
 type ConvertedFileModel struct {
-	UID   types.ConvertedFileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
+	UID              types.ConvertedFileUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	KnowledgeBaseUID types.KnowledgeBaseUIDType `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
 	// FileUID is the original file UID in knowledge base file table
 	FileUID types.FileUIDType `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`

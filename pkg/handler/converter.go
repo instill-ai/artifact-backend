@@ -61,8 +61,8 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 	namespaceID := ns.NsID
 
 	knowledgeBase := &artifactpb.KnowledgeBase{
-		Id:          kb.ID,                                                          // Database field ID maps to protobuf id
-		Slug:        kb.Slug,                                                        // URL-friendly slug without prefix
+		Id:          kb.ID,                                                               // Database field ID maps to protobuf id
+		Slug:        kb.Slug,                                                             // URL-friendly slug without prefix
 		Name:        fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID), // Computed: namespaces/{namespace}/knowledge-bases/{id}
 		DisplayName: kb.DisplayName,
 		Description: kb.Description,
@@ -77,8 +77,8 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 
 	// Handle nullable creator UID (nil for system-created KBs like instill-agent)
 	if kb.CreatorUID != nil {
-		creatorUIDStr := kb.CreatorUID.String()
-		knowledgeBase.CreatorUid = &creatorUIDStr
+		creatorName := fmt.Sprintf("users/%s", kb.CreatorUID.String())
+		knowledgeBase.CreatorName = &creatorName
 	}
 
 	// Handle optional fields
@@ -105,7 +105,7 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 
 	file := &artifactpb.File{
 		Id:               fileID,
-		Slug:             kbf.Slug,                                                 // URL-friendly slug without prefix
+		Slug:             kbf.Slug,                                                   // URL-friendly slug without prefix
 		Name:             fmt.Sprintf("namespaces/%s/files/%s", namespaceID, fileID), // Computed: namespaces/{namespace}/files/{file}
 		DisplayName:      kbf.DisplayName,
 		Description:      kbf.Description,

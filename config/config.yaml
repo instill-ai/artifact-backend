@@ -80,6 +80,9 @@ registry:
 openfga:
   host: openfga
   port: 8081
+  cache:
+    enabled: false
+    ttl: 60  # Permission cache TTL in seconds
 minio:
   host: minio
   port: 9000

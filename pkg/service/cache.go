@@ -115,8 +115,8 @@ func (s *service) GetOrCreateFileCache(
 
 	cacheResult, err := s.aiClient.CreateCache(ctx, []ai.FileContent{
 		{
-			Content:  content,
-			FileType: fileType,
+			Content:         content,
+			FileType:        fileType,
 			FileDisplayName: filename,
 		},
 	}, gemini.DefaultCacheTTL)

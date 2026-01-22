@@ -89,6 +89,68 @@ func (ph *PublicHandler) GetObjectUploadURL(ctx context.Context, req *artifactpb
 	return response, nil
 }
 
+// GetObject returns the details of an object.
+func (ph *PublicHandler) GetObject(ctx context.Context, req *artifactpb.GetObjectRequest) (*artifactpb.GetObjectResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get user id from header: %v: %w", err, errorsx.ErrUnauthenticated),
+			"Authentication failed. Please log in and try again.",
+		)
+	}
+
+	// Parse the AIP-compliant name field (format: namespaces/{namespace}/objects/{object})
+	namespaceID, objectID, err := parseObjectFromName(req.GetName())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("invalid name format: %w", err),
+			"Invalid object name format. Expected format: namespaces/{namespace}/objects/{object}",
+		)
+	}
+
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
+	if err != nil {
+		logger.Error(
+			"failed to get namespace",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", namespaceID),
+			zap.String("auth_uid", authUID))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
+	}
+
+	// ACL - check user's permission to access objects in the namespace
+	err = ph.service.CheckNamespacePermission(ctx, ns)
+	if err != nil {
+		logger.Error(
+			"failed to check namespace permission",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", namespaceID),
+			zap.String("auth_uid", authUID))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check namespace permission: %w", err),
+			"You don't have permission to access this namespace. Please contact the owner for access.",
+		)
+	}
+
+	// Call the service to get the object
+	obj, err := ph.service.GetObject(ctx, ns.NsUID, objectID)
+	if err != nil {
+		logger.Error("failed to get object", zap.Error(err), zap.String("object_id", objectID))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get object: %w", err),
+			"Unable to find the object. Please check the object ID and try again.",
+		)
+	}
+
+	return &artifactpb.GetObjectResponse{
+		Object: obj,
+	}, nil
+}
+
 // GetObjectDownloadURL returns the download URL for an object.
 func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifactpb.GetObjectDownloadURLRequest) (*artifactpb.GetObjectDownloadURLResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)

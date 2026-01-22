@@ -35,13 +35,13 @@ type EmbeddingModel struct {
 	UID types.EmbeddingUIDType `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	// SourceUID is the UID of the source entity that the embedding is associated with. i.e. the UID of the chunk, file, etc.
 	// And SourceTable is the table name of the source entity.
-	SourceTable string              `gorm:"column:source_table;size:255;not null" json:"source_table"`
-	SourceUID   types.SourceUIDType `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
-	Vector      Vector              `gorm:"column:vector;type:jsonb;not null" json:"vector"`
-	CreateTime  *time.Time          `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
-	UpdateTime  *time.Time          `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
+	SourceTable      string                     `gorm:"column:source_table;size:255;not null" json:"source_table"`
+	SourceUID        types.SourceUIDType        `gorm:"column:source_uid;type:uuid;not null" json:"source_uid"`
+	Vector           Vector                     `gorm:"column:vector;type:jsonb;not null" json:"vector"`
+	CreateTime       *time.Time                 `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
+	UpdateTime       *time.Time                 `gorm:"column:update_time;not null;default:CURRENT_TIMESTAMP" json:"update_time"`
 	KnowledgeBaseUID types.KnowledgeBaseUIDType `gorm:"column:kb_uid;type:uuid;not null" json:"kb_uid"`
-	FileUID     types.FileUIDType   `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
+	FileUID          types.FileUIDType          `gorm:"column:file_uid;type:uuid;not null" json:"file_uid"`
 	// ContentType stores the MIME type (e.g., "text/markdown", "application/pdf")
 	ContentType string `gorm:"column:content_type;size:255;not null" json:"content_type"`
 	// ChunkType stores the chunk classification ("content", "summary", "augmented")

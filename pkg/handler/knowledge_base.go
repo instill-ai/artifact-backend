@@ -204,7 +204,6 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		Tags:               dbData.Tags,
 		OwnerName:          ns.Name(),
 		Owner:              owner,
-		CreatorUid:         &authUID,
 		Creator:            creator,
 		CreateTime:         timestamppb.New(*dbData.CreateTime),
 		UpdateTime:         timestamppb.New(*dbData.UpdateTime),
@@ -302,10 +301,8 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 
 		// Fetch creator object if creator_uid is set
 		var creator *mgmtpb.User
-		var creatorUIDStr *string
 		if kb.CreatorUID != nil {
 			uid := kb.CreatorUID.String()
-			creatorUIDStr = &uid
 			creator, _ = ph.service.FetchUserByUID(ctx, uid)
 		}
 
@@ -326,7 +323,6 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			UpdateTime:         timestamppb.New(*kb.UpdateTime),
 			OwnerName:          ns.Name(),
 			Owner:              owner,
-			CreatorUid:         creatorUIDStr,
 			Creator:            creator,
 			DownstreamApps:     []string{},
 			TotalFiles:         uint32(fileCounts[kb.UID]),
@@ -500,10 +496,8 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 	// Fetch owner and creator objects
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
 	var creator *mgmtpb.User
-	var creatorUIDStr *string
 	if kb.CreatorUID != nil {
 		uid := kb.CreatorUID.String()
-		creatorUIDStr = &uid
 		creator, _ = ph.service.FetchUserByUID(ctx, uid)
 	}
 
@@ -520,7 +514,6 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 		UpdateTime:     timestamppb.New(*kb.UpdateTime),
 		OwnerName:      ns.Name(),
 		Owner:          owner,
-		CreatorUid:     creatorUIDStr,
 		Creator:        creator,
 		DownstreamApps: []string{},
 		TotalFiles:     uint32(fileCounts[kb.UID]),

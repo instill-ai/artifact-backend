@@ -126,8 +126,8 @@ func TestCreateCache_Validation(t *testing.T) {
 			context.Background(),
 			[]ai.FileContent{
 				{
-					Content:  []byte{},
-					FileType: artifactpb.File_TYPE_PDF,
+					Content:         []byte{},
+					FileType:        artifactpb.File_TYPE_PDF,
 					FileDisplayName: "test.pdf",
 				},
 			},
@@ -144,13 +144,13 @@ func TestCreateCache_Validation(t *testing.T) {
 			context.Background(),
 			[]ai.FileContent{
 				{
-					Content:  []byte("valid content"),
-					FileType: artifactpb.File_TYPE_PDF,
+					Content:         []byte("valid content"),
+					FileType:        artifactpb.File_TYPE_PDF,
 					FileDisplayName: "test1.pdf",
 				},
 				{
-					Content:  []byte{}, // empty content
-					FileType: artifactpb.File_TYPE_PDF,
+					Content:         []byte{}, // empty content
+					FileType:        artifactpb.File_TYPE_PDF,
 					FileDisplayName: "test2.pdf",
 				},
 			},
@@ -169,8 +169,8 @@ func TestCreateCache_DisplayName(t *testing.T) {
 	t.Run("single file uses filename in display name", func(t *testing.T) {
 		files := []ai.FileContent{
 			{
-				Content:  []byte("test content"),
-				FileType: artifactpb.File_TYPE_PDF,
+				Content:         []byte("test content"),
+				FileType:        artifactpb.File_TYPE_PDF,
 				FileDisplayName: "my-document.pdf",
 			},
 		}
@@ -210,13 +210,13 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 	t.Run("validates all files have content", func(t *testing.T) {
 		files := []ai.FileContent{
 			{
-				Content:  []byte("valid"),
-				FileType: artifactpb.File_TYPE_PDF,
+				Content:         []byte("valid"),
+				FileType:        artifactpb.File_TYPE_PDF,
 				FileDisplayName: "test1.pdf",
 			},
 			{
-				Content:  []byte{}, // empty
-				FileType: artifactpb.File_TYPE_PDF,
+				Content:         []byte{}, // empty
+				FileType:        artifactpb.File_TYPE_PDF,
 				FileDisplayName: "test2.pdf",
 			},
 		}
@@ -229,8 +229,8 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 	t.Run("uses default model when not specified", func(t *testing.T) {
 		files := []ai.FileContent{
 			{
-				Content:  []byte("test"),
-				FileType: artifactpb.File_TYPE_PDF,
+				Content:         []byte("test"),
+				FileType:        artifactpb.File_TYPE_PDF,
 				FileDisplayName: "test.pdf",
 			},
 		}
@@ -243,8 +243,8 @@ func TestCreateBatchCache_Validation(t *testing.T) {
 	t.Run("uses default TTL when zero", func(t *testing.T) {
 		files := []ai.FileContent{
 			{
-				Content:  []byte("test"),
-				FileType: artifactpb.File_TYPE_PDF,
+				Content:         []byte("test"),
+				FileType:        artifactpb.File_TYPE_PDF,
 				FileDisplayName: "test.pdf",
 			},
 		}

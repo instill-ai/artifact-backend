@@ -33,6 +33,7 @@ type Service interface {
 	GetTextChunkFilePathsByFileUID(context.Context, types.KBUIDType, types.FileUIDType) ([]string, error)
 	// Repository tag methods removed - tag.proto was removed from protobuf definitions
 	GetUploadURL(context.Context, *artifactpb.GetObjectUploadURLRequest, types.NamespaceUIDType, string, types.CreatorUIDType) (*artifactpb.GetObjectUploadURLResponse, error)
+	GetObject(context.Context, types.NamespaceUIDType, string) (*artifactpb.Object, error)
 	GetDownloadURL(context.Context, string, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
 	GetDownloadURLByObjectUID(context.Context, types.ObjectUIDType, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
 	CheckCatalogUserPermission(context.Context, string, string, string) (*resource.Namespace, *repository.KnowledgeBaseModel, error)
