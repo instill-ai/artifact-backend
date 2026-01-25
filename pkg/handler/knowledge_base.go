@@ -109,11 +109,11 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	// RAG configurations including AI model family, embedding vector dimensionality,
 	// chunking method, and other RAG-related settings
 	var system *repository.SystemModel
-	if kb.GetSystemId() != "" {
+	if kb.GetSystem() != "" {
 		// Use the specified system - accepts both ID (sys-xxx) and slug (openai, gemini)
-		system, err = ph.service.Repository().GetSystemByIDOrSlug(ctx, kb.GetSystemId())
+		system, err = ph.service.Repository().GetSystemByIDOrSlug(ctx, kb.GetSystem())
 		if err != nil {
-			return nil, fmt.Errorf("getting system by ID %q: %w", kb.GetSystemId(), err)
+			return nil, fmt.Errorf("getting system by ID %q: %w", kb.GetSystem(), err)
 		}
 	} else {
 		// Fall back to default system
@@ -183,7 +183,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
-	activeCollectionUID := dbData.ActiveCollectionUID.String()
+	activeCollection := fmt.Sprintf("namespaces/%s/knowledgeBases/%s/collections/%s", namespaceID, dbData.ID, dbData.ActiveCollectionUID.String())
 
 	// Fetch owner and creator objects
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
@@ -196,22 +196,22 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 	}
 
 	knowledgeBase := &artifactpb.KnowledgeBase{
-		Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, dbData.ID),
-		Id:                 dbData.ID,
-		Slug:               dbData.Slug,
-		DisplayName:        displayName,
-		Description:        dbData.Description,
-		Tags:               dbData.Tags,
-		OwnerName:          ns.Name(),
-		Owner:              owner,
-		Creator:            creator,
-		CreateTime:         timestamppb.New(*dbData.CreateTime),
-		UpdateTime:         timestamppb.New(*dbData.UpdateTime),
-		DownstreamApps:     []string{},
-		TotalFiles:         0,
-		TotalTokens:        0,
-		UsedStorage:        0,
-		ActiveCollectionId: activeCollectionUID,
+		Name:             fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, dbData.ID),
+		Id:               dbData.ID,
+		Slug:             dbData.Slug,
+		DisplayName:      displayName,
+		Description:      dbData.Description,
+		Tags:             dbData.Tags,
+		OwnerName:        ns.Name(),
+		Owner:            owner,
+		Creator:          creator,
+		CreateTime:       timestamppb.New(*dbData.CreateTime),
+		UpdateTime:       timestamppb.New(*dbData.UpdateTime),
+		DownstreamApps:   []string{},
+		TotalFiles:       0,
+		TotalTokens:      0,
+		UsedStorage:      0,
+		ActiveCollection: activeCollection,
 		EmbeddingConfig: &artifactpb.KnowledgeBase_EmbeddingConfig{
 			ModelFamily:    systemConfig.RAG.Embedding.ModelFamily,
 			Dimensionality: systemConfig.RAG.Embedding.Dimensionality,
@@ -297,7 +297,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 
 	kbs := make([]*artifactpb.KnowledgeBase, len(dbData))
 	for i, kb := range dbData {
-		activeCollectionUID := kb.ActiveCollectionUID.String()
+		activeCollection := fmt.Sprintf("namespaces/%s/knowledgeBases/%s/collections/%s", namespaceID, kb.ID, kb.ActiveCollectionUID.String())
 
 		// Fetch creator object if creator_uid is set
 		var creator *mgmtpb.User
@@ -313,22 +313,22 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 		}
 
 		kbs[i] = &artifactpb.KnowledgeBase{
-			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID),
-			Id:                 kb.ID,
-			Slug:               kb.Slug,
-			DisplayName:        kbDisplayName,
-			Description:        kb.Description,
-			Tags:               kb.Tags,
-			CreateTime:         timestamppb.New(*kb.CreateTime),
-			UpdateTime:         timestamppb.New(*kb.UpdateTime),
-			OwnerName:          ns.Name(),
-			Owner:              owner,
-			Creator:            creator,
-			DownstreamApps:     []string{},
-			TotalFiles:         uint32(fileCounts[kb.UID]),
-			TotalTokens:        uint32(tokenCounts[kb.UID]),
-			UsedStorage:        uint64(kb.Usage),
-			ActiveCollectionId: activeCollectionUID,
+			Name:             fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID),
+			Id:               kb.ID,
+			Slug:             kb.Slug,
+			DisplayName:      kbDisplayName,
+			Description:      kb.Description,
+			Tags:             kb.Tags,
+			CreateTime:       timestamppb.New(*kb.CreateTime),
+			UpdateTime:       timestamppb.New(*kb.UpdateTime),
+			OwnerName:        ns.Name(),
+			Owner:            owner,
+			Creator:          creator,
+			DownstreamApps:   []string{},
+			TotalFiles:       uint32(fileCounts[kb.UID]),
+			TotalTokens:      uint32(tokenCounts[kb.UID]),
+			UsedStorage:      uint64(kb.Usage),
+			ActiveCollection: activeCollection,
 			EmbeddingConfig: &artifactpb.KnowledgeBase_EmbeddingConfig{
 				ModelFamily:    kb.SystemConfig.RAG.Embedding.ModelFamily,
 				Dimensionality: kb.SystemConfig.RAG.Embedding.Dimensionality,

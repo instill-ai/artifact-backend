@@ -121,6 +121,9 @@ type FileModel struct {
 	FileType string `gorm:"column:file_type;not null" json:"file_type"`
 	// StoragePath is the path in the MinIO bucket
 	StoragePath string `gorm:"column:storage_path;size:255;not null" json:"storage_path"`
+	// ObjectUID is the foreign key reference to the object table.
+	// Populated when file is created from a blob storage upload via object_uid.
+	ObjectUID *types.ObjectUIDType `gorm:"column:object_uid;type:uuid" json:"object_uid"`
 	// Process status is defined in the grpc proto file
 	ProcessStatus string `gorm:"column:process_status;size:100;not null" json:"process_status"`
 	// Note: use ExtraMetaDataMarshal method to marshal and unmarshal. do not populate this field directly

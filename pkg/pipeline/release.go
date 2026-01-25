@@ -187,14 +187,14 @@ func (u *ReleaseUpserter) Upsert(ctx context.Context, pr Release) error {
 	// Try to get existing pipeline by slug
 	var pipelineID string
 	pipelineName := fmt.Sprintf("namespaces/%s/pipelines/%s", pr.Namespace, slug)
-	getResp, err := u.PipelinePublicServiceClient.GetNamespacePipeline(ctx, &pipelinepb.GetNamespacePipelineRequest{
+	getResp, err := u.PipelinePublicServiceClient.GetPipeline(ctx, &pipelinepb.GetPipelineRequest{
 		Name: pipelineName, // Look up by AIP-compliant name
 	})
 
 	if err != nil {
 		// Pipeline doesn't exist, create it
 		parentName := fmt.Sprintf("namespaces/%s", pr.Namespace)
-		createResp, err := u.PipelinePublicServiceClient.CreateNamespacePipeline(ctx, &pipelinepb.CreateNamespacePipelineRequest{
+		createResp, err := u.PipelinePublicServiceClient.CreatePipeline(ctx, &pipelinepb.CreatePipelineRequest{
 			Parent:   parentName,
 			Pipeline: p,
 		})
@@ -208,7 +208,7 @@ func (u *ReleaseUpserter) Upsert(ctx context.Context, pr Release) error {
 		pipelineID = getResp.Pipeline.Id
 		// Set the pipeline name for update (AIP-134 requires name in resource)
 		p.Name = fmt.Sprintf("namespaces/%s/pipelines/%s", pr.Namespace, pipelineID)
-		_, err = u.PipelinePublicServiceClient.UpdateNamespacePipeline(ctx, &pipelinepb.UpdateNamespacePipelineRequest{
+		_, err = u.PipelinePublicServiceClient.UpdatePipeline(ctx, &pipelinepb.UpdatePipelineRequest{
 			Pipeline:   p,
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"description", "readme", "sharing", "raw_recipe"}},
 		})
@@ -232,7 +232,7 @@ func (u *ReleaseUpserter) Upsert(ctx context.Context, pr Release) error {
 	// Look up existing releases by listing and filtering by display_name
 	// since the ID is auto-generated (rel-xxx format)
 	pipelineParent := fmt.Sprintf("namespaces/%s/pipelines/%s", pr.Namespace, pipelineID)
-	listResp, err := u.PipelinePublicServiceClient.ListNamespacePipelineReleases(ctx, &pipelinepb.ListNamespacePipelineReleasesRequest{
+	listResp, err := u.PipelinePublicServiceClient.ListPipelineReleases(ctx, &pipelinepb.ListPipelineReleasesRequest{
 		Parent: pipelineParent,
 	})
 	if err != nil {
@@ -250,7 +250,7 @@ func (u *ReleaseUpserter) Upsert(ctx context.Context, pr Release) error {
 
 	if existingRelease == nil {
 		// Create new release
-		_, err = u.PipelinePublicServiceClient.CreateNamespacePipelineRelease(ctx, &pipelinepb.CreateNamespacePipelineReleaseRequest{
+		_, err = u.PipelinePublicServiceClient.CreatePipelineRelease(ctx, &pipelinepb.CreatePipelineReleaseRequest{
 			Parent:  pipelineParent,
 			Release: r,
 		})
@@ -260,7 +260,7 @@ func (u *ReleaseUpserter) Upsert(ctx context.Context, pr Release) error {
 	} else {
 		// Update existing release (AIP-134 requires name in resource)
 		r.Name = existingRelease.GetName()
-		_, err = u.PipelinePublicServiceClient.UpdateNamespacePipelineRelease(ctx, &pipelinepb.UpdateNamespacePipelineReleaseRequest{
+		_, err = u.PipelinePublicServiceClient.UpdatePipelineRelease(ctx, &pipelinepb.UpdatePipelineReleaseRequest{
 			Release:    r,
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"raw_recipe", "readme", "description"}},
 		})

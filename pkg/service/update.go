@@ -279,10 +279,10 @@ func (s *service) PurgeRollbackAdmin(ctx context.Context, ownerUID types.OwnerUI
 		zap.Int32("fileCount", fileCount))
 
 	return &artifactpb.PurgeRollbackAdminResponse{
-		Success:               true,
-		PurgedKnowledgeBaseId: rollbackKB.UID.String(),
-		DeletedFiles:          fileCount,
-		Message:               "Rollback knowledge base purged successfully",
+		Success:             true,
+		PurgedKnowledgeBase: rollbackKB.UID.String(),
+		DeletedFiles:        fileCount,
+		Message:             "Rollback knowledge base purged successfully",
 	}, nil
 }
 
@@ -488,16 +488,16 @@ func (s *service) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context) (*artif
 		}
 
 		knowledgeBaseStatuses = append(knowledgeBaseStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
-			KnowledgeBaseId:  kb.ID,
-			Status:           statusEnum,
-			WorkflowId:       kb.UpdateWorkflowID,
-			StartedAt:        formatTime(kb.UpdateStartedAt),
-			CompletedAt:      formatTime(kb.UpdateCompletedAt),
-			FilesProcessed:   filesProcessed,
-			TotalFiles:       totalFiles,
-			ErrorMessage:     kb.UpdateErrorMessage, // Populated only for FAILED status
-			CurrentSystemId:  currentSystemID,       // Current system (staging during UPDATING, production otherwise)
-			PreviousSystemId: previousSystemID,      // System before update started (for audit trail)
+			KnowledgeBase:  kb.ID,
+			Status:         statusEnum,
+			WorkflowId:     kb.UpdateWorkflowID,
+			StartedAt:      formatTime(kb.UpdateStartedAt),
+			CompletedAt:    formatTime(kb.UpdateCompletedAt),
+			FilesProcessed: filesProcessed,
+			TotalFiles:     totalFiles,
+			ErrorMessage:   kb.UpdateErrorMessage, // Populated only for FAILED status
+			CurrentSystem:  currentSystemID,       // Current system (staging during UPDATING, production otherwise)
+			PreviousSystem: previousSystemID,      // System before update started (for audit trail)
 		})
 	}
 
@@ -521,9 +521,9 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 
 	// Get target KBs (filtering already excludes KBs with update_status="updating")
 	var kbs []repository.KnowledgeBaseModel
-	if len(req.KnowledgeBaseIds) > 0 {
+	if len(req.KnowledgeBases) > 0 {
 		// Update specific knowledge bases
-		for _, knowledgeBaseID := range req.KnowledgeBaseIds {
+		for _, knowledgeBaseID := range req.KnowledgeBases {
 			kb, err := s.repository.GetKnowledgeBaseByID(ctx, knowledgeBaseID)
 			if err != nil {
 				logger.Error("ExecuteKnowledgeBaseUpdate: Failed to get knowledge base", zap.String("knowledgeBaseID", knowledgeBaseID), zap.Error(err))
@@ -563,8 +563,8 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 	// Execute knowledge base update via worker
 	// Pass system_id to worker (empty string if not specified)
 	systemID := ""
-	if req.SystemId != nil {
-		systemID = *req.SystemId
+	if req.System != nil {
+		systemID = *req.System
 	}
 
 	result, err := s.worker.ExecuteKnowledgeBaseUpdate(ctx, knowledgeBaseIDs, systemID)
@@ -581,10 +581,10 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 // AbortKnowledgeBaseUpdateAdmin aborts ongoing KB update workflows
 func (s *service) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (*artifactpb.AbortKnowledgeBaseUpdateAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger.Info("AbortKnowledgeBaseUpdateAdmin called", zap.Int("knowledgeBaseCount", len(req.KnowledgeBaseIds)), zap.Strings("knowledgeBaseIds", req.KnowledgeBaseIds))
+	logger.Info("AbortKnowledgeBaseUpdateAdmin called", zap.Int("knowledgeBaseCount", len(req.KnowledgeBases)), zap.Strings("knowledgeBaseIds", req.KnowledgeBases))
 
 	// Execute abort via worker
-	result, err := s.worker.AbortKnowledgeBaseUpdate(ctx, req.KnowledgeBaseIds)
+	result, err := s.worker.AbortKnowledgeBaseUpdate(ctx, req.KnowledgeBases)
 	if err != nil {
 		logger.Error("AbortKnowledgeBaseUpdateAdmin failed", zap.Error(err))
 		return nil, fmt.Errorf("failed to abort knowledge base update: %w", err)
@@ -601,9 +601,9 @@ func (s *service) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifa
 		}
 
 		knowledgeBaseStatuses = append(knowledgeBaseStatuses, &artifactpb.KnowledgeBaseUpdateDetails{
-			KnowledgeBaseId: status.KnowledgeBaseUID,
-			Status:          statusEnum,
-			WorkflowId:      status.WorkflowID,
+			KnowledgeBase: status.KnowledgeBaseUID,
+			Status:        statusEnum,
+			WorkflowId:    status.WorkflowID,
 		})
 	}
 

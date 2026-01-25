@@ -84,7 +84,7 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 	// Handle optional fields
 	// Check if ActiveCollectionUID is not zero (nil UUID)
 	if kb.ActiveCollectionUID.String() != "00000000-0000-0000-0000-000000000000" {
-		knowledgeBase.ActiveCollectionId = kb.ActiveCollectionUID.String()
+		knowledgeBase.ActiveCollection = fmt.Sprintf("namespaces/%s/knowledgeBases/%s/collections/%s", namespaceID, kb.ID, kb.ActiveCollectionUID.String())
 	}
 
 	return knowledgeBase
@@ -92,7 +92,8 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 
 // convertKBFileToPB converts database FileModel to protobuf File.
 // The `name` field is computed dynamically following other backends' patterns.
-func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *repository.KnowledgeBaseModel, owner *mgmtpb.Owner, creator *mgmtpb.User) *artifactpb.File {
+// The objectID parameter is the hash-based object ID (e.g., "obj-abc123") for AIP-122 compliant resource references.
+func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *repository.KnowledgeBaseModel, owner *mgmtpb.Owner, creator *mgmtpb.User, objectID string) *artifactpb.File {
 	// ownerName is the full namespace reference (e.g., "users/admin" or "organizations/org-id")
 	ownerName := ns.Name()
 	// namespaceID is just the ID part (e.g., "admin")
@@ -115,7 +116,7 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 		OwnerName:        ownerName,
 		Owner:            owner,
 		Creator:          creator,
-		KnowledgeBaseIds: []string{kb.ID}, // File associated with this KB
+		KnowledgeBases: []string{fmt.Sprintf("namespaces/%s/knowledgeBases/%s", namespaceID, kb.ID)}, // File associated with this KB
 		Size:             kbf.Size,
 		ProcessStatus:    convertFileProcessStatus(kbf.ProcessStatus),
 		Aliases:          kbf.Aliases,
@@ -129,11 +130,16 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 	if len(kbf.Tags) > 0 {
 		file.Tags = kbf.Tags
 		// Extract collection UIDs from tags with prefix "agent:collection:"
-		file.CollectionIds = extractCollectionUIDs(kbf.Tags)
+		file.Collections = extractCollectionUIDs(kbf.Tags)
 	}
 
 	if kbf.ExternalMetadataUnmarshal != nil {
 		file.ExternalMetadata = kbf.ExternalMetadataUnmarshal
+	}
+
+	// Populate object resource name if file has associated object (AIP-122 compliant)
+	if objectID != "" {
+		file.Object = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
 	}
 
 	// Note: TotalChunks and TotalTokens are computed aggregates, not stored directly in the file model

@@ -18,6 +18,7 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
+	"github.com/instill-ai/x/resource"
 )
 
 // parseChunkFromName parses a resource name of format "namespaces/{namespace}/files/{file}/chunks/{chunk}"
@@ -72,12 +73,12 @@ func convertToProtoChunk(chunk repository.ChunkModel, namespaceID, fileID string
 
 	pbChunk := &artifactpb.Chunk{
 		Name:           resourceName,
-		Id:             chunk.ID,
-		Retrievable:    chunk.Retrievable,
-		Tokens:         uint32(chunk.Tokens),
-		CreateTime:     timestamppb.New(*chunk.CreateTime),
-		OriginalFileId: chunk.FileUID.String(),
-		Type:           chunkType,
+		Id:           chunk.ID,
+		Retrievable:  chunk.Retrievable,
+		Tokens:       uint32(chunk.Tokens),
+		CreateTime:   timestamppb.New(*chunk.CreateTime),
+		OriginalFile: fmt.Sprintf("namespaces/%s/files/%s", namespaceID, chunk.FileUID.String()),
+		Type:         chunkType,
 	}
 
 	// Set markdown reference for all chunk types (content, summary, augmented)
@@ -401,9 +402,11 @@ func (ph *PublicHandler) SearchChunks(
 		)
 	}
 
+	// Extract KB ID from resource name: namespaces/{namespace}/knowledge-bases/{kb}
+	kbID := resource.ExtractResourceID(req.GetKnowledgeBase())
 	logger = logger.With(
 		zap.String("namespace", namespaceID),
-		zap.String("knowledge_base", req.GetKnowledgeBaseId()),
+		zap.String("knowledge_base", kbID),
 	)
 
 	// Get namespace
@@ -417,7 +420,7 @@ func (ph *PublicHandler) SearchChunks(
 
 	// Get knowledge base
 	ownerUID := ns.NsUID
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.GetKnowledgeBaseId())
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, kbID)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("fetching knowledge base: %w", err),

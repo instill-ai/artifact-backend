@@ -19,6 +19,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/x/checkfield"
+	"github.com/instill-ai/x/resource"
 
 	artifact "github.com/instill-ai/artifact-backend/pkg/service"
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
@@ -330,11 +331,20 @@ func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.Up
 		creator, _ = h.service.FetchUserByUID(ctx, updatedFile.CreatorUID.String())
 	}
 
+	// Get object ID if file has an associated object (for AIP-122 compliant resource reference)
+	objectID := ""
+	if updatedFile.ObjectUID != nil {
+		obj, err := h.service.Repository().GetObjectByUID(ctx, *updatedFile.ObjectUID)
+		if err == nil && obj != nil {
+			objectID = string(obj.ID)
+		}
+	}
+
 	logger.Info("UpdateFileAdmin completed",
 		zap.String("file_uid", updatedFile.UID.String()))
 
 	return &artifactpb.UpdateFileAdminResponse{
-		File: convertKBFileToPB(updatedFile, ns, kb, owner, creator),
+		File: convertKBFileToPB(updatedFile, ns, kb, owner, creator, objectID),
 	}, nil
 }
 
@@ -417,12 +427,15 @@ func (h *PrivateHandler) UpdateObjectAdmin(ctx context.Context, req *artifactpb.
 // DeleteFileAdmin deletes a file from a knowledge base (admin only).
 // This is a private gRPC-only method for internal operations like integration tests.
 func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.DeleteFileAdminRequest) (*artifactpb.DeleteFileAdminResponse, error) {
+	// Extract file ID from resource name: namespaces/{namespace}/files/{file}
+	fileID := resource.ExtractResourceID(req.GetName())
 	h.logger.Info("DeleteFileAdmin CALLED",
-		zap.String("file_id_from_request", req.GetFileId()))
+		zap.String("name", req.GetName()),
+		zap.String("file_id", fileID))
 
-	// For the admin endpoint, we only receive file_id, so we need to look up the namespace and knowledge base
+	// For the admin endpoint, we receive the resource name, so we need to look up the namespace and knowledge base
 	// from the file's KB to construct the full request for the public handler
-	files, err := h.service.Repository().GetFilesByFileIDs(ctx, []string{req.GetFileId()})
+	files, err := h.service.Repository().GetFilesByFileIDs(ctx, []string{fileID})
 	if err != nil || len(files) == 0 {
 		h.logger.Error("DeleteFileAdmin: failed to get file", zap.Error(err))
 		return nil, fmt.Errorf("file not found: %w", err)
@@ -481,10 +494,10 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 	}
 
 	h.logger.Info("DeleteFileAdmin: file deleted successfully",
-		zap.String("file_id", req.GetFileId()))
+		zap.String("name", req.GetName()))
 
 	return &artifactpb.DeleteFileAdminResponse{
-		FileId: resp.FileId,
+		Name: resp.Name,
 	}, nil
 }
 
@@ -574,7 +587,7 @@ func (h *PrivateHandler) SetRollbackRetentionAdmin(ctx context.Context, req *art
 // ExecuteKnowledgeBaseUpdateAdmin executes the prepared knowledge base update (admin only)
 func (h *PrivateHandler) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifactpb.ExecuteKnowledgeBaseUpdateAdminRequest) (*artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger.Info("ExecuteKnowledgeBaseUpdateAdmin handler called", zap.Int("knowledgeBaseCount", len(req.KnowledgeBaseIds)), zap.Strings("knowledgeBaseIds", req.KnowledgeBaseIds))
+	logger.Info("ExecuteKnowledgeBaseUpdateAdmin handler called", zap.Int("knowledgeBaseCount", len(req.KnowledgeBases)), zap.Strings("knowledgeBaseIds", req.KnowledgeBases))
 
 	// Call service - pass Admin request directly
 	resp, err := h.service.ExecuteKnowledgeBaseUpdateAdmin(ctx, req)
@@ -590,7 +603,7 @@ func (h *PrivateHandler) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, re
 // AbortKnowledgeBaseUpdateAdmin aborts ongoing KB update workflows (admin only)
 func (h *PrivateHandler) AbortKnowledgeBaseUpdateAdmin(ctx context.Context, req *artifactpb.AbortKnowledgeBaseUpdateAdminRequest) (*artifactpb.AbortKnowledgeBaseUpdateAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
-	logger.Info("AbortKnowledgeBaseUpdateAdmin handler called", zap.Int("knowledgeBaseCount", len(req.KnowledgeBaseIds)), zap.Strings("knowledgeBaseIds", req.KnowledgeBaseIds))
+	logger.Info("AbortKnowledgeBaseUpdateAdmin handler called", zap.Int("knowledgeBaseCount", len(req.KnowledgeBases)), zap.Strings("knowledgeBaseIds", req.KnowledgeBases))
 
 	// Call service
 	resp, err := h.service.AbortKnowledgeBaseUpdateAdmin(ctx, req)
@@ -616,13 +629,15 @@ func (h *PrivateHandler) GetKnowledgeBaseUpdateStatusAdmin(ctx context.Context, 
 
 // GetSystemAdmin retrieves a system configuration (admin only)
 func (h *PrivateHandler) GetSystemAdmin(ctx context.Context, req *artifactpb.GetSystemAdminRequest) (*artifactpb.GetSystemAdminResponse, error) {
+	// Extract system ID from resource name: systems/{system}
+	systemID := resource.ExtractResourceID(req.GetName())
 	// Call service
-	resp, err := h.service.GetSystemAdmin(ctx, req.GetSystemId())
+	resp, err := h.service.GetSystemAdmin(ctx, systemID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get system: %v", err)
 	}
 
-	h.logger.Info("GetSystemAdmin", zap.String("id", req.GetSystemId()))
+	h.logger.Info("GetSystemAdmin", zap.String("name", req.GetName()))
 	return resp, nil
 }
 
@@ -728,13 +743,15 @@ func (h *PrivateHandler) ListSystemsAdmin(ctx context.Context, req *artifactpb.L
 
 // DeleteSystemAdmin deletes a system configuration (admin only)
 func (h *PrivateHandler) DeleteSystemAdmin(ctx context.Context, req *artifactpb.DeleteSystemAdminRequest) (*artifactpb.DeleteSystemAdminResponse, error) {
+	// Extract system ID from resource name: systems/{system}
+	systemID := resource.ExtractResourceID(req.GetName())
 	// Call service
-	resp, err := h.service.DeleteSystemAdmin(ctx, req.GetSystemId())
+	resp, err := h.service.DeleteSystemAdmin(ctx, systemID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete system: %v", err)
 	}
 
-	h.logger.Info("DeleteSystemAdmin", zap.String("id", req.GetSystemId()), zap.Bool("success", resp.Success))
+	h.logger.Info("DeleteSystemAdmin", zap.String("name", req.GetName()), zap.Bool("success", resp.Success))
 	return resp, nil
 }
 
@@ -746,7 +763,7 @@ func (h *PrivateHandler) RenameSystemAdmin(ctx context.Context, req *artifactpb.
 		return nil, status.Errorf(codes.Internal, "failed to rename system: %v", err)
 	}
 
-	h.logger.Info("RenameSystemAdmin", zap.String("old_id", req.GetSystemId()), zap.String("new_display_name", req.GetNewDisplayName()))
+	h.logger.Info("RenameSystemAdmin", zap.String("name", req.GetName()), zap.String("new_display_name", req.GetNewDisplayName()))
 	return resp, nil
 }
 
@@ -758,7 +775,7 @@ func (h *PrivateHandler) SetDefaultSystemAdmin(ctx context.Context, req *artifac
 		return nil, status.Errorf(codes.Internal, "failed to set default system: %v", err)
 	}
 
-	h.logger.Info("SetDefaultSystemAdmin", zap.String("id", req.GetSystemId()), zap.Bool("is_default", resp.System.IsDefault))
+	h.logger.Info("SetDefaultSystemAdmin", zap.String("name", req.GetName()), zap.Bool("is_default", resp.System.IsDefault))
 	return resp, nil
 }
 
