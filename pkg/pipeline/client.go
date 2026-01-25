@@ -7,18 +7,74 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/v1beta"
 )
 
+// pipelineIDCache caches pipeline IDs to avoid repeated lookups.
+// Key: "namespace/slug", Value: pipeline ID
+var (
+	pipelineIDCache   = make(map[string]string)
+	pipelineIDCacheMu sync.RWMutex
+)
+
+// withServiceHeader adds the Instill-Service header to the context.
+// This is required for inter-service communication to access preset pipelines.
+func withServiceHeader(ctx context.Context) context.Context {
+	return metadata.AppendToOutgoingContext(ctx, "Instill-Service", "instill")
+}
+
+// getPipelineIDBySlug looks up a pipeline by its slug and returns the pipeline ID.
+// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug.
+// The result is cached to avoid repeated lookups.
+func getPipelineIDBySlug(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, release Release) (string, error) {
+	cacheKey := fmt.Sprintf("%s/%s", release.Namespace, release.Slug())
+
+	// Check cache first
+	pipelineIDCacheMu.RLock()
+	if id, ok := pipelineIDCache[cacheKey]; ok {
+		pipelineIDCacheMu.RUnlock()
+		return id, nil
+	}
+	pipelineIDCacheMu.RUnlock()
+
+	// Add service header to access preset pipelines
+	// This is required for inter-service communication to access public preset pipelines
+	ctx = metadata.AppendToOutgoingContext(ctx, "Instill-Service", "instill")
+
+	// Look up pipeline by slug
+	pipelineName := fmt.Sprintf("namespaces/%s/pipelines/%s", release.Namespace, release.Slug())
+	getResp, err := pipelineClient.GetPipeline(ctx, &pipelinepb.GetPipelineRequest{
+		Name: pipelineName,
+	})
+	if err != nil {
+		return "", fmt.Errorf("looking up pipeline %s: %w", pipelineName, err)
+	}
+
+	pipelineID := getResp.Pipeline.GetId()
+	if pipelineID == "" {
+		return "", fmt.Errorf("pipeline %s has no ID", pipelineName)
+	}
+
+	// Cache the result
+	pipelineIDCacheMu.Lock()
+	pipelineIDCache[cacheKey] = pipelineID
+	pipelineIDCacheMu.Unlock()
+
+	return pipelineID, nil
+}
+
 // GenerateContentPipe converts a file to Markdown using OpenAI pipeline
 func GenerateContentPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, params GenerateContentParams) (*GenerateContentResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
+	ctx = withServiceHeader(ctx)
 
 	prefix := GetFileTypePrefix(params.Type)
 	input := &structpb.Struct{
@@ -27,16 +83,23 @@ func GenerateContentPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 		},
 	}
 
-	// Build full resource name: namespaces/{namespace}/pipelines/{pipeline}/releases/{release}
-	name := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
-		GenerateContentPipeline.Namespace, GenerateContentPipeline.Slug(), GenerateContentPipeline.Version)
+	// Look up pipeline by slug to get the pipeline ID
+	// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, GenerateContentPipeline)
+	if err != nil {
+		return nil, fmt.Errorf("looking up pipeline ID: %w", err)
+	}
 
-	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+	// Build full resource name using pipeline ID: namespaces/{namespace}/pipelines/{pipeline_id}/releases/{release}
+	name := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
+		GenerateContentPipeline.Namespace, pipelineID, GenerateContentPipeline.Version)
+
+	req := &pipelinepb.TriggerPipelineReleaseRequest{
 		Name:   name,
 		Inputs: []*structpb.Struct{input},
 	}
 
-	resp, err := pipelineClient.TriggerNamespacePipelineRelease(ctx, req)
+	resp, err := pipelineClient.TriggerPipelineRelease(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("triggering pipeline: %w", err)
 	}
@@ -55,12 +118,20 @@ func GenerateContentPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 func GenerateSummaryPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, content string, fileType artifactpb.File_Type) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
+	ctx = withServiceHeader(ctx)
 
-	// Build full resource name: namespaces/{namespace}/pipelines/{pipeline}/releases/{release}
+	// Look up pipeline by slug to get the pipeline ID
+	// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, GenerateSummaryPipeline)
+	if err != nil {
+		return "", fmt.Errorf("looking up pipeline ID: %w", err)
+	}
+
+	// Build full resource name using pipeline ID: namespaces/{namespace}/pipelines/{pipeline_id}/releases/{release}
 	summaryName := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
-		GenerateSummaryPipeline.Namespace, GenerateSummaryPipeline.Slug(), GenerateSummaryPipeline.Version)
+		GenerateSummaryPipeline.Namespace, pipelineID, GenerateSummaryPipeline.Version)
 
-	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+	req := &pipelinepb.TriggerPipelineReleaseRequest{
 		Name: summaryName,
 		Data: []*pipelinepb.TriggerData{
 			{
@@ -75,7 +146,7 @@ func GenerateSummaryPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 		},
 	}
 
-	resp, err := pipelineClient.TriggerNamespacePipelineRelease(ctx, req)
+	resp, err := pipelineClient.TriggerPipelineRelease(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("triggering pipeline: %w", err)
 	}
@@ -94,6 +165,7 @@ func GenerateSummaryPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, content []byte, sourceType artifactpb.File_Type, mimeType string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
+	ctx = withServiceHeader(ctx)
 
 	// Determine input variable name based on source type
 	inputVarName := getInputVariableName(sourceType)
@@ -105,11 +177,18 @@ func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 	base64Content := base64.StdEncoding.EncodeToString(content)
 	dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Content)
 
-	// Build full resource name: namespaces/{namespace}/pipelines/{pipeline}/releases/{release}
-	convertName := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
-		ConvertFileTypePipeline.Namespace, ConvertFileTypePipeline.Slug(), ConvertFileTypePipeline.Version)
+	// Look up pipeline by slug to get the pipeline ID
+	// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, ConvertFileTypePipeline)
+	if err != nil {
+		return nil, fmt.Errorf("looking up pipeline ID: %w", err)
+	}
 
-	req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+	// Build full resource name using pipeline ID: namespaces/{namespace}/pipelines/{pipeline_id}/releases/{release}
+	convertName := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
+		ConvertFileTypePipeline.Namespace, pipelineID, ConvertFileTypePipeline.Version)
+
+	req := &pipelinepb.TriggerPipelineReleaseRequest{
 		Name: convertName,
 		Inputs: []*structpb.Struct{
 			{
@@ -120,7 +199,7 @@ func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 		},
 	}
 
-	resp, err := pipelineClient.TriggerNamespacePipelineRelease(ctx, req)
+	resp, err := pipelineClient.TriggerPipelineRelease(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("triggering file type conversion pipeline: %w", err)
 	}
@@ -294,6 +373,7 @@ func decodeBlobURL(blobURL string) (string, error) {
 func EmbedPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, texts []string) ([][]float32, error) {
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
+	ctx = withServiceHeader(ctx)
 
 	if len(texts) == 0 {
 		return [][]float32{}, nil
@@ -303,6 +383,17 @@ func EmbedPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServ
 	const maxBatchSize = 32
 
 	var allEmbeddings [][]float32
+
+	// Look up pipeline by slug to get the pipeline ID (do this once before the loop)
+	// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, EmbedPipeline)
+	if err != nil {
+		return nil, fmt.Errorf("looking up pipeline ID: %w", err)
+	}
+
+	// Build full resource name using pipeline ID: namespaces/{namespace}/pipelines/{pipeline_id}/releases/{release}
+	embedName := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
+		EmbedPipeline.Namespace, pipelineID, EmbedPipeline.Version)
 
 	// Process texts in batches of 32
 	for i := 0; i < len(texts); i += maxBatchSize {
@@ -322,16 +413,12 @@ func EmbedPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServ
 			}
 		}
 
-		// Build full resource name: namespaces/{namespace}/pipelines/{pipeline}/releases/{release}
-		embedName := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
-			EmbedPipeline.Namespace, EmbedPipeline.Slug(), EmbedPipeline.Version)
-
-		req := &pipelinepb.TriggerNamespacePipelineReleaseRequest{
+		req := &pipelinepb.TriggerPipelineReleaseRequest{
 			Name:   embedName,
 			Inputs: inputs,
 		}
 
-		resp, err := pipelineClient.TriggerNamespacePipelineRelease(ctx, req)
+		resp, err := pipelineClient.TriggerPipelineRelease(ctx, req)
 		if err != nil {
 			return nil, fmt.Errorf("triggering embedding pipeline (batch %d-%d): %w", i, end, err)
 		}

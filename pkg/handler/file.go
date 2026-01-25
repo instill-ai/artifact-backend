@@ -30,6 +30,7 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 	filetype "github.com/instill-ai/x/file"
 	logx "github.com/instill-ai/x/log"
+	"github.com/instill-ai/x/resource"
 )
 
 // filterRequestWrapper implements filtering.Request interface to pass a custom filter string
@@ -61,6 +62,16 @@ func parseFileFromName(name string) (namespaceID, fileID string, err error) {
 		return "", "", fmt.Errorf("invalid file name format, expected namespaces/{namespace}/files/{file}")
 	}
 	return parts[1], parts[3], nil
+}
+
+// parseObjectIDFromResourceName parses an object resource name of format "namespaces/{namespace}/objects/{object_id}"
+// and returns the object_id
+func parseObjectIDFromResourceName(name string) (objectID string, err error) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "objects" {
+		return "", fmt.Errorf("invalid object resource name format, expected namespaces/{namespace}/objects/{object_id}")
+	}
+	return parts[3], nil
 }
 
 // CreateFile adds a file to a knowledge base (AIP-compliant version of UploadKnowledgeBaseFile).
@@ -101,8 +112,11 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		)
 	}
 	// ACL - check user's permission to write knowledge base
-	kbID := req.GetKnowledgeBaseId()
+	// Parse knowledge_base resource name: namespaces/{namespace}/knowledgeBases/{kb}
+	kbResourceName := req.GetKnowledgeBase()
+	kbID := resource.ExtractResourceID(kbResourceName)
 	logger.Debug("CreateFile: looking up KB",
+		zap.String("knowledge_base", kbResourceName),
 		zap.String("knowledge_base_id", kbID),
 		zap.String("namespace_uid", ns.NsUID.String()),
 		zap.String("namespace_id", ns.NsID))
@@ -282,13 +296,27 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 
 		kbFile.CreatorUID = creatorUID
 		kbFile.StoragePath = destination
+		// Store the object FK for the new AIP-compliant object reference
+		objUID := types.ObjectUIDType(objectUID)
+		kbFile.ObjectUID = &objUID
 
 		fileSize, _ := getFileSize(req.File.Content)
 		kbFile.Size = fileSize
 	} else {
-		obj, err := ph.service.Repository().GetObjectByUID(ctx, uuid.FromStringOrNil(req.GetFile().GetObjectUid()))
+		// Parse object resource name: namespaces/{namespace}/objects/{object_id}
+		objectResourceName := req.GetFile().GetObject()
+		objectID, err := parseObjectIDFromResourceName(objectResourceName)
 		if err != nil {
-			logger.Error("failed to get knowledge base object with provided UID", zap.Error(err))
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("parsing object resource name: %w", err),
+				"Invalid object resource name. Expected format: namespaces/{namespace}/objects/{object_id}",
+			)
+		}
+
+		// Get object by hash-based ID
+		obj, err := ph.service.Repository().GetObjectByID(ctx, ns.NsUID, types.ObjectIDType(objectID))
+		if err != nil {
+			logger.Error("failed to get object by ID", zap.Error(err), zap.String("object_id", objectID))
 			return nil, err
 		}
 
@@ -324,6 +352,8 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		kbFile.CreatorUID = obj.CreatorUID
 		kbFile.StoragePath = obj.StoragePath
 		kbFile.Size = obj.Size
+		// Store the object FK for the new AIP-compliant object reference
+		kbFile.ObjectUID = &obj.UID
 
 		req.File.Type = determineFileType(obj.DisplayName)
 
@@ -555,6 +585,15 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
 	creator, _ := ph.service.FetchUserByUID(ctx, res.CreatorUID.String())
 
+	// Get object ID for AIP-122 compliant resource name
+	objectResourceName := ""
+	if res.ObjectUID != nil {
+		obj, err := ph.service.Repository().GetObjectByUID(ctx, *res.ObjectUID)
+		if err == nil && obj != nil {
+			objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, obj.ID)
+		}
+	}
+
 	return &artifactpb.CreateFileResponse{
 		File: &artifactpb.File{
 			Id:                 res.ID,
@@ -562,7 +601,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			OwnerName:          ns.Name(),
 			Owner:              owner,
 			Creator:            creator,
-			KnowledgeBaseIds:   []string{kb.ID}, // Initial KB association
+			KnowledgeBases:   []string{fmt.Sprintf("namespaces/%s/knowledgeBases/%s", namespaceID, kb.ID)}, // Initial KB association
 			Name:               fmt.Sprintf("namespaces/%s/files/%s", namespaceID, res.ID),
 			DisplayName:        res.DisplayName,
 			Type:               req.File.Type,
@@ -573,10 +612,10 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			TotalChunks:        0,
 			TotalTokens:        0,
 			ExternalMetadata:   res.PublicExternalMetadataUnmarshal(),
-			ObjectUid:          req.File.ObjectUid,
+			Object:             objectResourceName,
 			ConvertingPipeline: res.ConvertingPipeline(),
 			Tags:               res.Tags,
-			CollectionIds:      extractCollectionUIDs(res.Tags),
+			Collections:      extractCollectionUIDs(res.Tags),
 		},
 	}, nil
 }
@@ -906,13 +945,31 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			knowledgeBaseIDs = fileToKBIDs[kbFile.UID]
 		}
 
+		// Get object ID for AIP-122 compliant resource name
+		objectID := ""
+		objectResourceName := ""
+		if kbFile.ObjectUID != nil {
+			obj, err := ph.service.Repository().GetObjectByUID(ctx, *kbFile.ObjectUID)
+			if err == nil && obj != nil {
+				objectID = string(obj.ID)
+				objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
+			}
+		} else if objectUID != uuid.Nil {
+			// Fallback: try to get object by UID parsed from storage path
+			obj, err := ph.service.Repository().GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
+			if err == nil && obj != nil {
+				objectID = string(obj.ID)
+				objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
+			}
+		}
+
 		file := &artifactpb.File{
 			Id:                 fileID,
 			Slug:               kbFile.Slug,
 			OwnerName:          ns.Name(),
 			Owner:              owner,
 			Creator:            creator,
-			KnowledgeBaseIds:   knowledgeBaseIDs,
+			KnowledgeBases:   knowledgeBaseIDs,
 			Name:               fmt.Sprintf("namespaces/%s/files/%s", namespaceID, fileID),
 			DisplayName:        kbFile.DisplayName,
 			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
@@ -923,11 +980,11 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			ExternalMetadata:   kbFile.PublicExternalMetadataUnmarshal(),
 			TotalChunks:        int32(totalChunks[kbFile.UID]),
 			TotalTokens:        int32(totalTokens[kbFile.UID]),
-			ObjectUid:          objectUID.String(),
+			Object:             objectResourceName,
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
 			Tags:               []string(kbFile.Tags),
-			CollectionIds:      extractCollectionUIDs(kbFile.Tags),
+			Collections:      extractCollectionUIDs(kbFile.Tags),
 		}
 
 		// Include status message (error or success message)
@@ -1478,7 +1535,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	logger, _ := logx.GetZapLogger(ctx)
 
 	// Parse resource name to get namespace_id and file_id
-	_, fileID, err := parseFileFromName(req.GetName())
+	namespaceID, fileID, err := parseFileFromName(req.GetName())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing file name: %w", err),
@@ -1772,7 +1829,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	}
 
 	return &artifactpb.DeleteFileResponse{
-		FileId: fUID.String(),
+		Name: fmt.Sprintf("namespaces/%s/files/%s", namespaceID, fUID.String()),
 	}, nil
 
 }
@@ -1952,8 +2009,17 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
 	creator, _ := ph.service.FetchUserByUID(ctx, updatedFile.CreatorUID.String())
 
+	// Get object ID if file has an associated object (for AIP-122 compliant resource reference)
+	objectID := ""
+	if updatedFile.ObjectUID != nil {
+		obj, err := ph.service.Repository().GetObjectByUID(ctx, *updatedFile.ObjectUID)
+		if err == nil && obj != nil {
+			objectID = string(obj.ID)
+		}
+	}
+
 	// Convert to protobuf
-	pbFile := convertKBFileToPB(updatedFile, ns, kb, owner, creator)
+	pbFile := convertKBFileToPB(updatedFile, ns, kb, owner, creator, objectID)
 
 	return &artifactpb.UpdateFileResponse{
 		File: pbFile,
@@ -2117,8 +2183,17 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
 	creator, _ := ph.service.FetchUserByUID(ctx, updatedFile.CreatorUID.String())
 
+	// Get object ID if file has an associated object (for AIP-122 compliant resource reference)
+	objectID := ""
+	if updatedFile.ObjectUID != nil {
+		obj, err := ph.service.Repository().GetObjectByUID(ctx, *updatedFile.ObjectUID)
+		if err == nil && obj != nil {
+			objectID = string(obj.ID)
+		}
+	}
+
 	// Convert to protobuf response with updated file status
-	pbFile := convertKBFileToPB(&updatedFile, ns, kb, owner, creator)
+	pbFile := convertKBFileToPB(&updatedFile, ns, kb, owner, creator, objectID)
 
 	return &artifactpb.ReprocessFileResponse{
 		File:    pbFile,
@@ -2261,13 +2336,13 @@ func getPositionUnit(fileType artifactpb.File_Type) artifactpb.File_Position_Uni
 	return artifactpb.File_Position_UNIT_UNSPECIFIED
 }
 
-// Check if objectUID is provided, and all other required fields if not
+// Check if object is provided, and all other required fields if not
 func checkUploadKnowledgeBaseFileRequest(req *artifactpb.CreateFileRequest) (hasObject bool, _ error) {
 	if req.GetParent() == "" {
 		return false, fmt.Errorf("%w: parent is required", errorsx.ErrInvalidArgument)
 	}
 
-	if req.GetFile().GetObjectUid() == "" {
+	if req.GetFile().GetObject() == "" {
 		// File upload doesn't reference object, so request must contain the
 		// file contents.
 		if req.GetFile().GetDisplayName() == "" {

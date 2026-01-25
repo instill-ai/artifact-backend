@@ -12,6 +12,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
+	"github.com/instill-ai/x/resource"
 )
 
 // GetSystemAdmin retrieves a system configuration by ID or slug
@@ -214,8 +215,10 @@ func (s *service) DeleteSystemAdmin(ctx context.Context, id string) (*artifactpb
 // RenameSystemAdmin renames a system configuration (updates display_name and slug)
 // Note: The canonical ID (sys-xxx) is immutable. Only display_name and slug change.
 func (s *service) RenameSystemAdmin(ctx context.Context, req *artifactpb.RenameSystemAdminRequest) (*artifactpb.RenameSystemAdminResponse, error) {
-	if req.GetSystemId() == "" {
-		return nil, fmt.Errorf("system id is required")
+	// Extract system ID from resource name: systems/{system}
+	systemID := resource.ExtractResourceID(req.GetName())
+	if systemID == "" {
+		return nil, fmt.Errorf("system name is required")
 	}
 
 	if req.GetNewDisplayName() == "" {
@@ -223,13 +226,13 @@ func (s *service) RenameSystemAdmin(ctx context.Context, req *artifactpb.RenameS
 	}
 
 	// Rename system in repository (updates display_name and regenerates slug)
-	err := s.repository.RenameSystemByID(ctx, req.GetSystemId(), req.GetNewDisplayName())
+	err := s.repository.RenameSystemByID(ctx, systemID, req.GetNewDisplayName())
 	if err != nil {
 		return nil, fmt.Errorf("failed to rename system: %w", err)
 	}
 
 	// Retrieve the renamed system
-	system, err := s.repository.GetSystem(ctx, req.GetSystemId())
+	system, err := s.repository.GetSystem(ctx, systemID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve renamed system: %w", err)
 	}
@@ -250,18 +253,20 @@ func (s *service) RenameSystemAdmin(ctx context.Context, req *artifactpb.RenameS
 
 // SetDefaultSystemAdmin sets a system as the default
 func (s *service) SetDefaultSystemAdmin(ctx context.Context, req *artifactpb.SetDefaultSystemAdminRequest) (*artifactpb.SetDefaultSystemAdminResponse, error) {
-	if req.GetSystemId() == "" {
-		return nil, fmt.Errorf("system id is required")
+	// Extract system ID from resource name: systems/{system}
+	systemID := resource.ExtractResourceID(req.GetName())
+	if systemID == "" {
+		return nil, fmt.Errorf("system name is required")
 	}
 
 	// Set as default in repository
-	err := s.repository.SetDefaultSystem(ctx, req.GetSystemId())
+	err := s.repository.SetDefaultSystem(ctx, systemID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to set default system: %w", err)
 	}
 
 	// Retrieve the updated system to return
-	system, err := s.repository.GetSystem(ctx, req.GetSystemId())
+	system, err := s.repository.GetSystem(ctx, systemID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve updated system: %w", err)
 	}

@@ -12,6 +12,8 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
+	"github.com/instill-ai/x/resource"
+
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
@@ -26,7 +28,9 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 		return nil, fmt.Errorf("empty text prompt")
 	}
 
-	kb, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, req.KnowledgeBaseId)
+	// Extract KB ID from resource name: namespaces/{namespace}/knowledge-bases/{kb}
+	kbID := resource.ExtractResourceID(req.GetKnowledgeBase())
+	kb, err := s.repository.GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, kbID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching knowledge base: %w", err)
 	}
@@ -64,11 +68,16 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 	}
 
 	// Resolve file IDs to file UIDs
-	// file_ids can be either:
-	// 1. UUID strings (e.g., "aff8544b-3ccc-4e73-bbe5-8ec922446542") - legacy format
-	// 2. Hash-based IDs (e.g., "2412-15115v1-pdf-abc12345") - preferred format, less prone to LLM hallucination
+	// files can be resource names: namespaces/{namespace}/files/{file}
+	// Extract file IDs from resource names
 	// All IDs are validated against the database to prevent hallucinated UUIDs from causing empty results
-	allFileIDs := append([]string{}, req.GetFileIds()...)
+	var allFileIDs []string
+	for _, fileResourceName := range req.GetFiles() {
+		fileID := resource.ExtractResourceID(fileResourceName)
+		if fileID != "" {
+			allFileIDs = append(allFileIDs, fileID)
+		}
+	}
 
 	// Resolve ALL file IDs (both UUIDs and hash-based) through the database
 	// This ensures hallucinated UUIDs are caught and reported

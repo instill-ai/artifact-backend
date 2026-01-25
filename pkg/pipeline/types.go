@@ -93,7 +93,7 @@ func ConvertPagesToTaggedMarkdown(pages []string) string {
 }
 
 // convertResultParser extracts markdown content from pipeline response
-func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (*GenerateContentResult, error) {
+func convertResultParser(resp *pipelinepb.TriggerPipelineReleaseResponse) (*GenerateContentResult, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		traceErrors := extractPipelineTraceErrors(resp)
 		if traceErrors != "" {
@@ -155,7 +155,7 @@ func convertResultParser(resp *pipelinepb.TriggerNamespacePipelineReleaseRespons
 }
 
 // getGenerateSummaryResult extracts summary text from pipeline response
-func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) (string, error) {
+func getGenerateSummaryResult(resp *pipelinepb.TriggerPipelineReleaseResponse) (string, error) {
 	if resp == nil || len(resp.Outputs) == 0 {
 		traceErrors := extractPipelineTraceErrors(resp)
 		if traceErrors != "" {
@@ -194,7 +194,7 @@ func getGenerateSummaryResult(resp *pipelinepb.TriggerNamespacePipelineReleaseRe
 }
 
 // extractPipelineTraceErrors extracts error messages from pipeline traces
-func extractPipelineTraceErrors(resp *pipelinepb.TriggerNamespacePipelineReleaseResponse) string {
+func extractPipelineTraceErrors(resp *pipelinepb.TriggerPipelineReleaseResponse) string {
 	if resp == nil || resp.Metadata == nil {
 		return ""
 	}
@@ -225,7 +225,7 @@ func extractPipelineTraceErrors(resp *pipelinepb.TriggerNamespacePipelineRelease
 // enhanceErrorWithPipelineMetadata enhances error messages with pipeline execution metadata
 // This adds component trace information and other debugging details to help trace pipeline failures
 // If pipelineRelease is provided, it adds the pipeline identity to help locate the execution
-func enhanceErrorWithPipelineMetadata(err error, resp *pipelinepb.TriggerNamespacePipelineReleaseResponse, pipelineRelease *Release) error {
+func enhanceErrorWithPipelineMetadata(err error, resp *pipelinepb.TriggerPipelineReleaseResponse, pipelineRelease *Release) error {
 	if err == nil {
 		return nil
 	}
