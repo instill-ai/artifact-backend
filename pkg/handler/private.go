@@ -242,14 +242,16 @@ func (h *PrivateHandler) UpdateKnowledgeBaseAdmin(ctx context.Context, req *arti
 func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.UpdateFileAdminRequest) (*artifactpb.UpdateFileAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Parse namespace and file ID from file.name (AIP-134)
-	namespaceID, fileID, err := parseFileFromName(req.GetFile().GetName())
+	// Parse namespace, KB, and file ID from file.name (AIP-134)
+	// Format: namespaces/{namespace}/knowledgeBases/{kb}/files/{file}
+	namespaceID, kbID, fileID, err := parseFileFromName(req.GetFile().GetName())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid file.name format: %v", err)
 	}
 
 	logger.Info("UpdateFileAdmin called",
 		zap.String("namespace_id", namespaceID),
+		zap.String("kb_id", kbID),
 		zap.String("file_id", fileID))
 
 	// Get namespace

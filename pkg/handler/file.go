@@ -30,7 +30,6 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 	filetype "github.com/instill-ai/x/file"
 	logx "github.com/instill-ai/x/log"
-	"github.com/instill-ai/x/resource"
 )
 
 // filterRequestWrapper implements filtering.Request interface to pass a custom filter string
@@ -44,24 +43,24 @@ func (r filterRequestWrapper) GetFilter() string {
 	return r.filter
 }
 
-// parseNamespaceFromParentFile parses a parent resource name of format "namespaces/{namespace}"
-// and returns the namespace_id
-func parseNamespaceFromParentFile(parent string) (namespaceID string, err error) {
+// parseKnowledgeBaseFromParent parses a parent resource name of format "namespaces/{namespace}/knowledgeBases/{kb}"
+// and returns the namespace_id and knowledge_base_id
+func parseKnowledgeBaseFromParent(parent string) (namespaceID, kbID string, err error) {
 	parts := strings.Split(parent, "/")
-	if len(parts) != 2 || parts[0] != "namespaces" {
-		return "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}")
-	}
-	return parts[1], nil
-}
-
-// parseFileFromName parses a resource name of format "namespaces/{namespace}/files/{file}"
-// and returns the namespace_id and file_id
-func parseFileFromName(name string) (namespaceID, fileID string, err error) {
-	parts := strings.Split(name, "/")
-	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "files" {
-		return "", "", fmt.Errorf("invalid file name format, expected namespaces/{namespace}/files/{file}")
+	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "knowledgeBases" {
+		return "", "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}/knowledgeBases/{knowledge_base}")
 	}
 	return parts[1], parts[3], nil
+}
+
+// parseFileFromName parses a resource name of format "namespaces/{namespace}/knowledgeBases/{kb}/files/{file}"
+// and returns the namespace_id, knowledge_base_id, and file_id
+func parseFileFromName(name string) (namespaceID, kbID, fileID string, err error) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 6 || parts[0] != "namespaces" || parts[2] != "knowledgeBases" || parts[4] != "files" {
+		return "", "", "", fmt.Errorf("invalid file name format, expected namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}")
+	}
+	return parts[1], parts[3], parts[5], nil
 }
 
 // parseObjectIDFromResourceName parses an object resource name of format "namespaces/{namespace}/objects/{object_id}"
@@ -90,12 +89,13 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		return nil, err
 	}
 
-	// Parse namespace from parent
-	namespaceID, err := parseNamespaceFromParentFile(req.GetParent())
+	// Parse namespace and knowledge base from parent
+	// Format: namespaces/{namespace}/knowledgeBases/{knowledge_base}
+	namespaceID, kbID, err := parseKnowledgeBaseFromParent(req.GetParent())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing parent: %w", err),
-			"Invalid parent format. Expected: namespaces/{namespace}",
+			"Invalid parent format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}",
 		)
 	}
 
@@ -112,11 +112,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		)
 	}
 	// ACL - check user's permission to write knowledge base
-	// Parse knowledge_base resource name: namespaces/{namespace}/knowledgeBases/{kb}
-	kbResourceName := req.GetKnowledgeBase()
-	kbID := resource.ExtractResourceID(kbResourceName)
 	logger.Debug("CreateFile: looking up KB",
-		zap.String("knowledge_base", kbResourceName),
 		zap.String("knowledge_base_id", kbID),
 		zap.String("namespace_uid", ns.NsUID.String()),
 		zap.String("namespace_id", ns.NsID))
@@ -601,8 +597,8 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			OwnerName:          ns.Name(),
 			Owner:              owner,
 			Creator:            creator,
-			KnowledgeBases:   []string{fmt.Sprintf("namespaces/%s/knowledgeBases/%s", namespaceID, kb.ID)}, // Initial KB association
-			Name:               fmt.Sprintf("namespaces/%s/files/%s", namespaceID, res.ID),
+			KnowledgeBases:     []string{fmt.Sprintf("namespaces/%s/knowledgeBases/%s", namespaceID, kb.ID)}, // Initial KB association
+			Name:               fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", namespaceID, kb.ID, res.ID),
 			DisplayName:        res.DisplayName,
 			Type:               req.File.Type,
 			CreateTime:         timestamppb.New(*res.CreateTime),
@@ -615,12 +611,12 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			Object:             objectResourceName,
 			ConvertingPipeline: res.ConvertingPipeline(),
 			Tags:               res.Tags,
-			Collections:      extractCollectionUIDs(res.Tags),
+			Collections:        extractCollectionUIDs(res.Tags),
 		},
 	}, nil
 }
 
-// ListFiles lists files in a namespace with pagination and filtering (AIP-compliant version of ListKnowledgeBaseFiles).
+// ListFiles lists files in a knowledge base with pagination and filtering (AIP-compliant version of ListKnowledgeBaseFiles).
 // Supports filtering by file IDs and process status, with token/chunk count enrichment.
 func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFilesRequest) (*artifactpb.ListFilesResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
@@ -631,12 +627,13 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		return nil, err
 	}
 
-	// Parse namespace from parent
-	namespaceID, err := parseNamespaceFromParentFile(req.GetParent())
+	// Parse namespace and knowledge base from parent
+	// Format: namespaces/{namespace}/knowledgeBases/{knowledge_base}
+	namespaceID, kbID, err := parseKnowledgeBaseFromParent(req.GetParent())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing parent: %w", err),
-			"Invalid parent format. Expected: namespaces/{namespace}",
+			"Invalid parent format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}",
 		)
 	}
 
@@ -668,128 +665,39 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		)
 	}
 
-	// Extract knowledge_base_id from filter if provided (AIP-160 uses snake_case with spaces)
-	// If KB filter is specified, we'll also check KB-level permissions
-	kbID := ""
-	filter := req.GetFilter()
-	if filter != "" {
-		// Try to extract knowledge_base_id from filter
-		// Note: This is a simplified approach; proper AIP-160 filter parsing should be used
-		// AIP-160 format: knowledge_base_id = "value" (with spaces around =)
-		if strings.Contains(filter, "knowledge_base_id") {
-			// Remove spaces around = for easier parsing: knowledge_base_id = "value" -> knowledge_base_id="value"
-			normalizedFilter := strings.ReplaceAll(filter, " = ", "=")
-			normalizedFilter = strings.ReplaceAll(normalizedFilter, "= ", "=")
-			normalizedFilter = strings.ReplaceAll(normalizedFilter, " =", "=")
-			if strings.Contains(normalizedFilter, "knowledge_base_id=") {
-				parts := strings.Split(normalizedFilter, "knowledge_base_id=")
-				if len(parts) > 1 {
-					// Extract value, handling potential AND/OR operators
-					value := strings.Split(parts[1], " ")[0]
-					kbID = strings.Trim(value, "\"'")
-				}
-			}
-		}
+	// Get knowledge base and check permissions
+	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, kbID)
+	if err != nil {
+		logger.Error("failed to get knowledge base", zap.Error(err), zap.String("kbID", kbID))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
+			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
+		)
+	}
+	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+	if err != nil {
+		logger.Error("failed to check permission", zap.Error(err))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
+			"Unable to verify access permissions. Please try again.",
+		)
+	}
+	if !granted {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized),
+			"You don't have permission to view this knowledge base. Please contact the owner for access.",
+		)
 	}
 
-	// Strip knowledge_base_id from filter for AIP-160 parsing since we handle it manually above.
-	// The file table doesn't have a knowledge_base_id column - it's in the junction table.
-	// We use the manually extracted kbID to join with the junction table.
-	strippedFilter := filter
-	if filter != "" && strings.Contains(filter, "knowledge_base_id") {
-		// Remove the knowledge_base_id clause from the filter
-		// Handle formats like: "knowledge_base_id = \"value\"", "knowledge_base_id=\"value\""
-		// Also handle AND/OR operators
-		normalizedFilter := strings.ReplaceAll(filter, " = ", "=")
-		normalizedFilter = strings.ReplaceAll(normalizedFilter, "= ", "=")
-		normalizedFilter = strings.ReplaceAll(normalizedFilter, " =", "=")
+	// Use filter directly - no need to strip knowledge_base_id since it's now in the path
+	strippedFilter := req.GetFilter()
 
-		// Find and remove knowledge_base_id clause
-		if strings.Contains(normalizedFilter, "knowledge_base_id=") {
-			parts := strings.SplitN(normalizedFilter, "knowledge_base_id=", 2)
-			if len(parts) > 1 {
-				// Find the end of the value (look for next AND/OR or end of string)
-				valuePart := parts[1]
-				// Skip the quoted value
-				if len(valuePart) > 0 && (valuePart[0] == '"' || valuePart[0] == '\'') {
-					quote := string(valuePart[0])
-					endIdx := strings.Index(valuePart[1:], quote)
-					if endIdx != -1 {
-						remainingAfterValue := valuePart[endIdx+2:]
-						// Remove leading AND/OR operators
-						remainingAfterValue = strings.TrimSpace(remainingAfterValue)
-						if strings.HasPrefix(strings.ToUpper(remainingAfterValue), "AND ") {
-							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "AND ")
-							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "and ")
-						} else if strings.HasPrefix(strings.ToUpper(remainingAfterValue), "OR ") {
-							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "OR ")
-							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "or ")
-						}
-						strippedFilter = strings.TrimSpace(parts[0] + remainingAfterValue)
-					}
-				} else {
-					// Unquoted value - find the next space or end
-					endIdx := strings.IndexAny(valuePart, " \t")
-					if endIdx == -1 {
-						strippedFilter = strings.TrimSpace(parts[0])
-					} else {
-						remainingAfterValue := strings.TrimSpace(valuePart[endIdx:])
-						if strings.HasPrefix(strings.ToUpper(remainingAfterValue), "AND ") {
-							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "AND ")
-							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "and ")
-						} else if strings.HasPrefix(strings.ToUpper(remainingAfterValue), "OR ") {
-							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "OR ")
-							remainingAfterValue = strings.TrimPrefix(remainingAfterValue, "or ")
-						}
-						strippedFilter = strings.TrimSpace(parts[0] + remainingAfterValue)
-					}
-				}
-			}
-		}
-		// Handle trailing AND/OR from removal
-		strippedFilter = strings.TrimSuffix(strings.TrimSpace(strippedFilter), "AND")
-		strippedFilter = strings.TrimSuffix(strings.TrimSpace(strippedFilter), "and")
-		strippedFilter = strings.TrimSuffix(strings.TrimSpace(strippedFilter), "OR")
-		strippedFilter = strings.TrimSuffix(strings.TrimSpace(strippedFilter), "or")
-		strippedFilter = strings.TrimSpace(strippedFilter)
-	}
-
-	var kb *repository.KnowledgeBaseModel
-	if kbID != "" {
-		kb, err = ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, kbID)
-		if err != nil {
-			logger.Error("failed to get knowledge base", zap.Error(err), zap.String("kbID", kbID))
-			return nil, errorsx.AddMessage(
-				fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
-				"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
-			)
-		}
-		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
-		if err != nil {
-			logger.Error("failed to check permission", zap.Error(err))
-			return nil, errorsx.AddMessage(
-				fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
-				"Unable to verify access permissions. Please try again.",
-			)
-		}
-		if !granted {
-			return nil, errorsx.AddMessage(
-				fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized),
-				"You don't have permission to view this knowledge base. Please contact the owner for access.",
-			)
-		}
-	}
-
-	// Parse AIP-160 filter expression (without knowledge_base_id which is handled separately)
+	// Parse AIP-160 filter expression
 	declarations, err := filtering.NewDeclarations([]filtering.DeclarationOption{
 		filtering.DeclareStandardFunctions(),
 		filtering.DeclareIdent("uid", filtering.TypeString),
 		filtering.DeclareIdent("id", filtering.TypeString),
 		filtering.DeclareIdent("process_status", filtering.TypeString),
-		// Note: knowledge_base_id is NOT declared here because:
-		// 1. We handle it manually above for KB lookup and junction table join
-		// 2. The file table doesn't have a knowledge_base_id column
-		// 3. We strip it from the filter before passing to the AIP-160 parser
 	}...)
 	if err != nil {
 		logger.Error("failed to create filter declarations", zap.Error(err))
@@ -799,7 +707,6 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		)
 	}
 
-	// Use filterRequestWrapper to pass the stripped filter (without knowledge_base_id) to the parser
 	parsedFilter, err := filtering.ParseFilter(filterRequestWrapper{filter: strippedFilter}, declarations)
 	if err != nil {
 		logger.Error("failed to parse filter", zap.Error(err), zap.String("strippedFilter", strippedFilter))
@@ -809,15 +716,9 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		)
 	}
 
-	// Determine KBUID for the query - empty string if kb is nil (list all files in namespace)
-	kbUIDStr := ""
-	if kb != nil {
-		kbUIDStr = kb.UID.String()
-	}
-
 	kbFileList, err := ph.service.Repository().ListFiles(ctx, repository.KnowledgeBaseFileListParams{
 		OwnerUID:  ns.NsUID.String(),
-		KBUID:     kbUIDStr,
+		KBUID:     kb.UID.String(),
 		PageSize:  int(req.GetPageSize()),
 		PageToken: req.GetPageToken(),
 		Filter:    parsedFilter,
@@ -856,21 +757,6 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 
 	// Fetch owner once (same for all files in this KB)
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
-
-	// Fetch KB IDs for all files in batch (needed when kb filter is not provided)
-	var fileToKBIDs map[types.FileUIDType][]string
-	if kb == nil {
-		fileUIDs := make([]types.FileUIDType, len(kbFileList.Files))
-		for i, f := range kbFileList.Files {
-			fileUIDs[i] = f.UID
-		}
-		fileToKBIDs, err = ph.service.Repository().GetKnowledgeBaseIDsForFiles(ctx, fileUIDs)
-		if err != nil {
-			logger.Warn("failed to fetch KB IDs for files", zap.Error(err))
-			// Continue with empty KB IDs rather than failing
-			fileToKBIDs = make(map[types.FileUIDType][]string)
-		}
-	}
 
 	files := make([]*artifactpb.File, 0, len(kbFileList.Files))
 	for _, kbFile := range kbFileList.Files {
@@ -937,13 +823,8 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		if fileID == "" {
 			fileID = kbFile.UID.String()
 		}
-		// Determine KnowledgeBaseIds - use KB from filter if provided, otherwise use batch lookup
-		var knowledgeBaseIDs []string
-		if kb != nil {
-			knowledgeBaseIDs = []string{kb.ID}
-		} else if fileToKBIDs != nil {
-			knowledgeBaseIDs = fileToKBIDs[kbFile.UID]
-		}
+		// Knowledge base ID is always known from the parent path
+		knowledgeBaseIDs := []string{kb.ID}
 
 		// Get object ID for AIP-122 compliant resource name
 		objectID := ""
@@ -969,8 +850,8 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			OwnerName:          ns.Name(),
 			Owner:              owner,
 			Creator:            creator,
-			KnowledgeBases:   knowledgeBaseIDs,
-			Name:               fmt.Sprintf("namespaces/%s/files/%s", namespaceID, fileID),
+			KnowledgeBases:     knowledgeBaseIDs,
+			Name:               fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", namespaceID, kb.ID, fileID),
 			DisplayName:        kbFile.DisplayName,
 			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
 			CreateTime:         timestamppb.New(*kbFile.CreateTime),
@@ -984,7 +865,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			DownloadUrl:        downloadURL,
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
 			Tags:               []string(kbFile.Tags),
-			Collections:      extractCollectionUIDs(kbFile.Tags),
+			Collections:        extractCollectionUIDs(kbFile.Tags),
 		}
 
 		// Include status message (error or success message)
@@ -1016,12 +897,12 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileRequest) (*artifactpb.GetFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Parse resource name to get namespace_id and file_id
-	namespaceID, fileID, err := parseFileFromName(req.GetName())
+	// Parse resource name to get namespace_id, kb_id, and file_id
+	namespaceID, kbID, fileID, err := parseFileFromName(req.GetName())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing file name: %w", err),
-			"Invalid file name format. Expected: namespaces/{namespace}/files/{file}",
+			"Invalid file name format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}",
 		)
 	}
 
@@ -1029,7 +910,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 	filterExpr := fmt.Sprintf(`id = "%s"`, fileID)
 	pageSize := int32(1)
 	files, err := ph.ListFiles(ctx, &artifactpb.ListFilesRequest{
-		Parent:   fmt.Sprintf("namespaces/%s", namespaceID),
+		Parent:   fmt.Sprintf("namespaces/%s/knowledgeBases/%s", namespaceID, kbID),
 		PageSize: &pageSize,
 		Filter:   &filterExpr,
 	})
@@ -1534,14 +1415,15 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteFileRequest) (*artifactpb.DeleteFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Parse resource name to get namespace_id and file_id
-	namespaceID, fileID, err := parseFileFromName(req.GetName())
+	// Parse resource name to get namespace_id, kb_id, and file_id
+	namespaceID, kbID, fileID, err := parseFileFromName(req.GetName())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing file name: %w", err),
-			"Invalid file name format. Expected: namespaces/{namespace}/files/{file}",
+			"Invalid file name format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}",
 		)
 	}
+	_ = kbID // KB ID is now in the path but we already get it from the file record
 
 	// Get authenticated user UID for ACL checks
 	_, err = getUserUIDFromContext(ctx)
@@ -1829,7 +1711,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	}
 
 	return &artifactpb.DeleteFileResponse{
-		Name: fmt.Sprintf("namespaces/%s/files/%s", namespaceID, fUID.String()),
+		Name: fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", namespaceID, kbID, fUID.String()),
 	}, nil
 
 }
@@ -1840,11 +1722,11 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 	logger, _ := logx.GetZapLogger(ctx)
 
 	// Parse resource name from file.name
-	_, fileID, err := parseFileFromName(req.GetFile().GetName())
+	_, _, fileID, err := parseFileFromName(req.GetFile().GetName())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing file name: %w", err),
-			"Invalid file name format. Expected: namespaces/{namespace}/files/{file}",
+			"Invalid file name format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}",
 		)
 	}
 
@@ -1901,7 +1783,7 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 	}
 
 	// Parse namespace ID from the file name
-	namespaceID, _, _ := parseFileFromName(req.GetFile().GetName())
+	namespaceID, _, _, _ := parseFileFromName(req.GetFile().GetName())
 
 	// Get namespace for owner lookup
 	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
@@ -2032,11 +1914,11 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 	logger, _ := logx.GetZapLogger(ctx)
 
 	// Parse resource name to get file_id
-	_, fileID, err := parseFileFromName(req.GetName())
+	_, _, fileID, err := parseFileFromName(req.GetName())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing file name: %w", err),
-			"Invalid file name format. Expected: namespaces/{namespace}/files/{file}",
+			"Invalid file name format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}",
 		)
 	}
 
@@ -2106,7 +1988,7 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 	file := files[0]
 
 	// Parse namespace ID from the file name for namespace lookup
-	namespaceID, _, _ := parseFileFromName(req.GetName())
+	namespaceID, _, _, _ := parseFileFromName(req.GetName())
 	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Warn("failed to get namespace", zap.Error(err))
