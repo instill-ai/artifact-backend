@@ -106,8 +106,8 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 
 	file := &artifactpb.File{
 		Id:               fileID,
-		Slug:             kbf.Slug,                                                   // URL-friendly slug without prefix
-		Name:             fmt.Sprintf("namespaces/%s/files/%s", namespaceID, fileID), // Computed: namespaces/{namespace}/files/{file}
+		Slug:             kbf.Slug,                                                                             // URL-friendly slug without prefix
+		Name:             fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", namespaceID, kb.ID, fileID), // Computed: namespaces/{namespace}/knowledgeBases/{kb}/files/{file}
 		DisplayName:      kbf.DisplayName,
 		Description:      kbf.Description,
 		Type:             convertFileType(kbf.FileType),
