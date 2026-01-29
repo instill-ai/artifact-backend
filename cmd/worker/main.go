@@ -411,7 +411,15 @@ func newClients(ctx context.Context, logger *zap.Logger) (
 	logger.Info("MinIO client initialized successfully", zap.String("bucket", config.Config.Minio.BucketName))
 
 	// Initialize Milvus client (for vector database - embedding storage and similarity search)
-	vectorDB, vclose, err := repository.NewVectorDatabase(ctx, config.Config.Milvus.Host, config.Config.Milvus.Port)
+	// Supports both self-hosted Milvus (CE) and Zilliz Cloud (EE) with authentication
+	vectorDB, vclose, err := repository.NewVectorDatabase(ctx, repository.MilvusConfig{
+		Host:      config.Config.Milvus.Host,
+		Port:      config.Config.Milvus.Port,
+		APIKey:    config.Config.Milvus.APIKey,
+		Username:  config.Config.Milvus.Username,
+		Password:  config.Config.Milvus.Password,
+		EnableTLS: config.Config.Milvus.EnableTLS,
+	})
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("failed to create milvus client: %v", err))
 	}

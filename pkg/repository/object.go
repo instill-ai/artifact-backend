@@ -28,11 +28,15 @@ type Object interface {
 }
 
 // ObjectModel represents an object in the database
-// Field ordering follows AIP standard: name (derived), id, display_name, uid, namespace, etc.
+// Field ordering follows AIP standard: name (derived), id, display_name, slug, aliases, etc.
 type ObjectModel struct {
 	UID          types.ObjectUIDType    `gorm:"column:uid;type:uuid;default:gen_random_uuid();primaryKey" json:"uid"`
 	ID           types.ObjectIDType     `gorm:"column:id;size:255;not null" json:"id"`
 	DisplayName  string                 `gorm:"column:display_name;size:1040" json:"display_name"`
+	// Slug is a URL-friendly identifier derived from display_name
+	Slug string `gorm:"column:slug;size:255" json:"slug"`
+	// Aliases stores previous slugs for backward compatibility when display_name changes
+	Aliases      AliasesArray           `gorm:"column:aliases;type:text[]" json:"aliases"`
 	NamespaceUID types.NamespaceUIDType `gorm:"column:namespace_uid;type:uuid;not null" json:"namespace_uid"`
 	CreatorUID   types.CreatorUIDType   `gorm:"column:creator_uid;type:uuid;not null" json:"creator_uid"`
 	CreateTime   time.Time              `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP" json:"create_time"`
@@ -72,6 +76,8 @@ type ObjectColumns struct {
 	UID              string
 	ID               string
 	DisplayName      string
+	Slug             string
+	Aliases          string
 	NamespaceUID     string
 	CreatorUID       string
 	CreateTime       string
@@ -90,6 +96,8 @@ var ObjectColumn = ObjectColumns{
 	UID:              "uid",
 	ID:               "id",
 	DisplayName:      "display_name",
+	Slug:             "slug",
+	Aliases:          "aliases",
 	NamespaceUID:     "namespace_uid",
 	CreatorUID:       "creator_uid",
 	CreateTime:       "create_time",

@@ -27,16 +27,32 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- Step 1: Add new columns
 ALTER TABLE object ADD COLUMN IF NOT EXISTS id VARCHAR(255);
 ALTER TABLE object ADD COLUMN IF NOT EXISTS display_name VARCHAR(1040);
+ALTER TABLE object ADD COLUMN IF NOT EXISTS slug VARCHAR(255);
+ALTER TABLE object ADD COLUMN IF NOT EXISTS aliases TEXT[] DEFAULT '{}';
 ALTER TABLE object ADD COLUMN IF NOT EXISTS storage_path VARCHAR(255);
 
 -- Step 2: Backfill data
 -- - Generate hash-based id from uid
 -- - Copy name to display_name
+-- - Generate slug from display_name (URL-safe: lowercase, alphanumeric with hyphens)
 -- - Copy destination to storage_path
 UPDATE object
 SET
     id = generate_object_id(uid),
     display_name = name,
+    slug = LOWER(
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(name, '[^a-zA-Z0-9\s-]', '', 'g'),
+                '\s+',
+                '-',
+                'g'
+            ),
+            '-+',
+            '-',
+            'g'
+        )
+    ),
     storage_path = destination
 WHERE id IS NULL;
 
@@ -55,9 +71,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_object_namespace_id
 -- ALTER TABLE object DROP COLUMN IF EXISTS name;
 -- ALTER TABLE object DROP COLUMN IF EXISTS destination;
 
--- Step 6: Add comments for documentation
+-- Step 6: Add indexes for slug and aliases lookups
+CREATE INDEX IF NOT EXISTS idx_object_slug ON object(slug) WHERE slug IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_object_aliases ON object USING GIN(aliases);
+
+-- Step 7: Add comments for documentation
 COMMENT ON COLUMN object.id IS 'Hash-based canonical resource ID (obj-{hash}), unique within namespace';
 COMMENT ON COLUMN object.display_name IS 'User-provided filename for display purposes';
+COMMENT ON COLUMN object.slug IS 'URL-friendly identifier derived from display_name';
+COMMENT ON COLUMN object.aliases IS 'Previous slugs for backward compatibility when display_name changes';
 COMMENT ON COLUMN object.storage_path IS 'Path to the object in blob storage (e.g., ns-{nsUID}/obj-{objUID})';
 
 -- Cleanup helper function

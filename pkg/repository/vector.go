@@ -112,11 +112,40 @@ type milvusClient struct {
 	c *milvusclient.Client
 }
 
+// MilvusConfig holds the configuration for connecting to Milvus or Zilliz Cloud.
+// This is a subset of the main config.MilvusConfig to avoid circular imports.
+type MilvusConfig struct {
+	Host      string
+	Port      string
+	APIKey    string
+	Username  string
+	Password  string
+	EnableTLS bool
+}
+
 // NewVectorDatabase returns a VectorDatabase implementation (milvus).
-func NewVectorDatabase(ctx context.Context, host, port string) (db VectorDatabase, closeFn func() error, _ error) {
-	c, err := milvusclient.New(ctx, &milvusclient.ClientConfig{
-		Address: host + ":" + port,
-	})
+// Supports both self-hosted Milvus (CE) and Zilliz Cloud (EE) with authentication.
+func NewVectorDatabase(ctx context.Context, cfg MilvusConfig) (db VectorDatabase, closeFn func() error, _ error) {
+	clientCfg := &milvusclient.ClientConfig{
+		Address: cfg.Host + ":" + cfg.Port,
+	}
+
+	// Configure authentication
+	// API key takes precedence (recommended for Zilliz Cloud)
+	if cfg.APIKey != "" {
+		clientCfg.APIKey = cfg.APIKey
+	} else if cfg.Username != "" && cfg.Password != "" {
+		// Fallback to username/password authentication
+		clientCfg.Username = cfg.Username
+		clientCfg.Password = cfg.Password
+	}
+
+	// Enable TLS if configured (required for Zilliz Cloud)
+	if cfg.EnableTLS {
+		clientCfg.EnableTLSAuth = true
+	}
+
+	c, err := milvusclient.New(ctx, clientCfg)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -554,9 +554,56 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 		}, nil
 	}
 
+	// PRE-VALIDATION: Filter out KBs with unprocessed files (NOTSTARTED status)
+	// These KBs have data quality issues - files were uploaded but never processed.
+	// The update workflow's SynchronizeKBActivity will fail for these KBs.
+	// Better to skip them upfront and report clearly than to fail mid-workflow.
+	var eligibleKBs []repository.KnowledgeBaseModel
+	var skippedKBs []string
+	for _, kb := range kbs {
+		notStartedCount, err := s.repository.GetFileCountByKnowledgeBaseUID(ctx, kb.UID, artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String())
+		if err != nil {
+			logger.Warn("ExecuteKnowledgeBaseUpdate: Failed to check for unprocessed files",
+				zap.String("knowledgeBaseID", kb.ID),
+				zap.String("kbUID", kb.UID.String()),
+				zap.Error(err))
+			// Continue anyway - let the workflow handle it
+			eligibleKBs = append(eligibleKBs, kb)
+			continue
+		}
+
+		if notStartedCount > 0 {
+			logger.Warn("ExecuteKnowledgeBaseUpdate: Skipping KB with unprocessed files",
+				zap.String("knowledgeBaseID", kb.ID),
+				zap.String("kbUID", kb.UID.String()),
+				zap.Int64("notStartedFiles", notStartedCount))
+			skippedKBs = append(skippedKBs, kb.ID)
+
+			// Update KB status to indicate the issue
+			_ = s.repository.UpdateKnowledgeBaseWithMap(ctx, kb.ID, kb.NamespaceUID, map[string]any{
+				"update_status":        artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_FAILED.String(),
+				"update_error_message": fmt.Sprintf("Cannot update: %d file(s) in NOTSTARTED status. Please process or delete these files first.", notStartedCount),
+			})
+			continue
+		}
+
+		eligibleKBs = append(eligibleKBs, kb)
+	}
+
+	if len(eligibleKBs) == 0 {
+		msg := "No eligible knowledge bases found for update"
+		if len(skippedKBs) > 0 {
+			msg = fmt.Sprintf("All %d knowledge bases have unprocessed files and were skipped: %v", len(skippedKBs), skippedKBs)
+		}
+		return &artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse{
+			Started: false,
+			Message: msg,
+		}, nil
+	}
+
 	// Extract knowledge base IDs
-	knowledgeBaseIDs := make([]string, len(kbs))
-	for i, kb := range kbs {
+	knowledgeBaseIDs := make([]string, len(eligibleKBs))
+	for i, kb := range eligibleKBs {
 		knowledgeBaseIDs[i] = kb.ID
 	}
 
@@ -572,9 +619,15 @@ func (s *service) ExecuteKnowledgeBaseUpdateAdmin(ctx context.Context, req *arti
 		return nil, fmt.Errorf("failed to execute knowledge base update: %w", err)
 	}
 
+	// Include skipped KBs info in the response message
+	message := result.Message
+	if len(skippedKBs) > 0 {
+		message = fmt.Sprintf("%s. Skipped %d KB(s) with unprocessed files: %v", message, len(skippedKBs), skippedKBs)
+	}
+
 	return &artifactpb.ExecuteKnowledgeBaseUpdateAdminResponse{
 		Started: result.Started,
-		Message: result.Message,
+		Message: message,
 	}, nil
 }
 

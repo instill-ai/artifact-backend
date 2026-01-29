@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/redis/go-redis/v9"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
@@ -49,6 +50,41 @@ const (
 	ActivityTimeoutEmbedding = 10 * time.Minute // Embeddings: 100+ chunks @ ~3s/chunk = 5-10 min for large files
 )
 
+// AI Processing timeout constants for dynamic timeout calculation
+// These are used by ProcessContentActivity and ProcessSummaryActivity
+const (
+	AIProcessingMinTimeout     = 3 * time.Minute  // Minimum timeout for small files
+	AIProcessingMaxTimeout     = 30 * time.Minute // Maximum timeout cap for very large files
+	AIProcessingBaseTimeout    = 2 * time.Minute  // Base timeout added to calculated time
+	AIProcessingBytesPerSecond = 50 * 1024        // Estimated processing rate: ~50KB/sec for AI conversion
+)
+
+// CalculateAIProcessingTimeout returns a dynamic timeout based on file size.
+// Larger files need more time for AI processing (conversion, summarization).
+// The timeout scales with file size but is capped at AIProcessingMaxTimeout.
+//
+// Formula: base_timeout + (file_size_bytes / bytes_per_second) * safety_factor
+// Safety factor of 2x accounts for API latency, rate limiting, and processing variance.
+func CalculateAIProcessingTimeout(fileSizeBytes int) time.Duration {
+	if fileSizeBytes <= 0 {
+		return AIProcessingMinTimeout
+	}
+
+	// Calculate estimated processing time with 2x safety factor
+	estimatedSeconds := float64(fileSizeBytes) / float64(AIProcessingBytesPerSecond) * 2.0
+	calculatedTimeout := AIProcessingBaseTimeout + time.Duration(estimatedSeconds)*time.Second
+
+	// Apply bounds
+	if calculatedTimeout < AIProcessingMinTimeout {
+		return AIProcessingMinTimeout
+	}
+	if calculatedTimeout > AIProcessingMaxTimeout {
+		return AIProcessingMaxTimeout
+	}
+
+	return calculatedTimeout
+}
+
 // RetryInitialInterval, RetryBackoffCoefficient, RetryMaximumInterval*, and RetryMaximumAttempts control retry behavior.
 // Prevents retry storms under high concurrency.
 const (
@@ -80,6 +116,7 @@ type Worker struct {
 
 	postFileCompletion    PostFileCompletionFn
 	generateContentPrompt string // Prompt for AI content generation
+	generateSummaryPrompt string // Prompt for AI summary generation
 }
 
 // TemporalClient returns the Temporal client for workflow execution
@@ -121,12 +158,26 @@ func (w *Worker) SetGenerateContentPrompt(prompt string) {
 	w.generateContentPrompt = prompt
 }
 
+// SetGenerateSummaryPrompt allows clients to override the summary generation prompt.
+// If not set, defaults to CE's embedded prompt.
+func (w *Worker) SetGenerateSummaryPrompt(prompt string) {
+	w.generateSummaryPrompt = prompt
+}
+
 // getGenerateContentPrompt returns the prompt to use, falling back to CE default if not set.
 func (w *Worker) getGenerateContentPrompt() string {
 	if w.generateContentPrompt != "" {
 		return w.generateContentPrompt
 	}
 	return gemini.GetGenerateContentPrompt()
+}
+
+// getGenerateSummaryPrompt returns the prompt to use, falling back to CE default if not set.
+func (w *Worker) getGenerateSummaryPrompt() string {
+	if w.generateSummaryPrompt != "" {
+		return w.generateSummaryPrompt
+	}
+	return gemini.GetGenerateSummaryPrompt()
 }
 
 // New creates a new worker instance with direct dependencies (no circular dependency)
@@ -462,10 +513,13 @@ func (w *Worker) ExecuteKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseID
 			}
 
 			// Start child workflow for this KB
+			// CRITICAL: Allow duplicate workflow IDs to support retrying FAILED updates
+			// Without this policy, Temporal rejects re-running workflows with the same ID
 			workflowOptions := client.StartWorkflowOptions{
 				ID:                       fmt.Sprintf("update-kb-%s", kb.UID.String()),
 				TaskQueue:                "artifact-backend",
 				WorkflowExecutionTimeout: 24 * time.Hour,
+				WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			}
 
 			// Use creator UID as requester, or owner UID if no creator (system KB)
@@ -598,15 +652,15 @@ func (w *Worker) AbortKnowledgeBaseUpdate(ctx context.Context, knowledgeBaseIDs 
 			Status:           artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED.String(),
 		}
 
-		// Cancel the workflow
+		// Terminate the workflow (TerminateWorkflow immediately stops, unlike CancelWorkflow which sends a signal)
 		if kb.UpdateWorkflowID != "" {
-			err := w.temporalClient.CancelWorkflow(ctx, kb.UpdateWorkflowID, "")
+			err := w.temporalClient.TerminateWorkflow(ctx, kb.UpdateWorkflowID, "", "Aborted via AbortKnowledgeBaseUpdate API")
 			if err != nil {
-				w.log.Warn("Failed to cancel workflow (may have already completed)",
+				w.log.Warn("Failed to terminate workflow (may have already completed)",
 					zap.String("knowledgeBaseID", kb.ID),
 					zap.String("workflowID", kb.UpdateWorkflowID),
 					zap.Error(err))
-				// Continue with cleanup even if cancel fails
+				// Continue with cleanup even if terminate fails
 			}
 		}
 
