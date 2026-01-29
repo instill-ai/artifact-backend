@@ -130,6 +130,44 @@ func (c *Client) generateContentAndExtractMarkdown(ctx context.Context, model st
 	// === Call Gemini API ===
 	result, err := c.client.Models.GenerateContent(ctx, model, contents, config)
 	if err != nil {
+		errStr := err.Error()
+
+		// Handle specific Gemini API errors with user-friendly messages
+		// "The document has no pages" - PDF/document that Gemini can't parse page structure
+		if strings.Contains(errStr, "The document has no pages") {
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("failed to generate content: %v", err),
+				"The document appears to be empty or has no readable content. Please ensure the file contains text or visual content and try again.",
+			)
+		}
+
+		// DEADLINE_EXCEEDED (504) - Transient timeout error, should be retried
+		// Include "RETRYABLE:" prefix so upstream can identify this as retryable
+		if strings.Contains(errStr, "DEADLINE_EXCEEDED") || strings.Contains(errStr, "504") ||
+			strings.Contains(errStr, "Deadline expired") {
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("RETRYABLE: failed to generate content: %v", err),
+				"AI service timed out processing the file. This is usually temporary - the file will be retried automatically.",
+			)
+		}
+
+		// RESOURCE_EXHAUSTED (429) - Rate limit, should be retried with backoff
+		if strings.Contains(errStr, "RESOURCE_EXHAUSTED") || strings.Contains(errStr, "429") ||
+			strings.Contains(errStr, "quota") || strings.Contains(errStr, "rate limit") {
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("RETRYABLE: failed to generate content: %v", err),
+				"AI service is temporarily busy. The file will be retried automatically.",
+			)
+		}
+
+		// UNAVAILABLE (503) - Service temporarily unavailable, should be retried
+		if strings.Contains(errStr, "UNAVAILABLE") || strings.Contains(errStr, "503") {
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("RETRYABLE: failed to generate content: %v", err),
+				"AI service is temporarily unavailable. The file will be retried automatically.",
+			)
+		}
+
 		// Don't wrap with %w - create a flat error with user-facing message
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("gemini API call failed: %v", err),

@@ -390,6 +390,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				FileDisplayName: fm.metadata.File.DisplayName,
 				Pipelines:       []pipeline.Release{pipeline.ConvertFileTypePipeline},
 				Metadata:        fm.metadata.ExternalMetadata,
+				RequesterUID:    param.RequesterUID, // Pass requester UID for permission checks
 			}).Get(ctx, &result); err != nil {
 				// File type standardization failure is fatal - fail the workflow immediately
 				// This prevents downstream AI processing failures when the format is not supported
@@ -544,8 +545,29 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			// Get cache name for this file (if it exists - Gemini only)
 			fileCacheName := fileCacheNames[cr.fileUID.String()]
 
+			// Calculate dynamic timeout based on file size
+			// Larger files need more time for AI processing
+			fileSizeBytes := int(cr.fileMetadata.metadata.File.Size)
+			aiTimeout := CalculateAIProcessingTimeout(fileSizeBytes)
+
+			logger.Info("Using dynamic AI processing timeout",
+				"fileUID", cr.fileUID.String(),
+				"fileSizeBytes", fileSizeBytes,
+				"timeout", aiTimeout.String())
+
+			// Create activity context with dynamic timeout for AI processing
+			aiActivityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: aiTimeout,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalLong,
+					MaximumAttempts:    RetryMaximumAttempts,
+				},
+			})
+
 			// Use the CONVERTED file location (effectiveBucket/effectiveDestination/effectiveFileType)
-			contentFuture := workflow.ExecuteActivity(ctx, w.ProcessContentActivity, &ProcessContentActivityParam{
+			contentFuture := workflow.ExecuteActivity(aiActivityCtx, w.ProcessContentActivity, &ProcessContentActivityParam{
 				FileUID:         cr.fileUID,
 				KBUID:           kbUID,
 				Bucket:          cr.effectiveBucket,
@@ -564,16 +586,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				logger.Info("Starting content and summary in parallel (Gemini)",
 					"fileUID", cr.fileUID.String())
 
-				summaryCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-					StartToCloseTimeout: ActivityTimeoutLong, // 5 minutes (pipeline timeout is 5 min)
-					RetryPolicy: &temporal.RetryPolicy{
-						InitialInterval:    RetryInitialInterval,
-						BackoffCoefficient: RetryBackoffCoefficient,
-						MaximumInterval:    RetryMaximumIntervalLong,
-						MaximumAttempts:    RetryMaximumAttempts,
-					},
-				})
-				summaryFuture = workflow.ExecuteActivity(summaryCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
+				// Use the same dynamic timeout for summary activity
+				summaryFuture = workflow.ExecuteActivity(aiActivityCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
 					FileUID:         cr.fileUID,
 					KBUID:           kbUID,
 					Bucket:          cr.effectiveBucket,
@@ -598,6 +612,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				filename := cr.fileMetadata.metadata.File.DisplayName
 				fileType := cr.effectiveFileType
 				metadata := cr.fileMetadata.metadata.ExternalMetadata
+				capturedAITimeout := aiTimeout // Capture the dynamic timeout for the goroutine
 
 				// Create a channel to communicate the summary future
 				summaryFutureChan = workflow.NewChannel(ctx)
@@ -620,8 +635,9 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 						"contentLength", len(contentResult.Content))
 
 					// Step 2: Execute summary with the generated markdown content
+					// Use dynamic timeout based on file size (captured from outer scope)
 					summaryCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
-						StartToCloseTimeout: ActivityTimeoutLong, // 5 minutes (pipeline timeout is 5 min)
+						StartToCloseTimeout: capturedAITimeout,
 						RetryPolicy: &temporal.RetryPolicy{
 							InitialInterval:    RetryInitialInterval,
 							BackoffCoefficient: RetryBackoffCoefficient,

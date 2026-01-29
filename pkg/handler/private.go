@@ -69,11 +69,8 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 		return nil, status.Error(codes.InvalidArgument, "knowledge_base is required")
 	}
 
-	// For admin requests, id is required (not auto-generated)
+	// For admin requests, id is optional (auto-generated as kb-{hash} if empty)
 	kbID := kb.GetId()
-	if kbID == "" {
-		return nil, status.Error(codes.InvalidArgument, "knowledge_base.id is required for admin requests")
-	}
 
 	logger.Info("CreateKnowledgeBaseAdmin called",
 		zap.String("namespace_id", namespaceID),
@@ -163,6 +160,60 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 			CreateTime:  timestamppb.New(*dbData.CreateTime),
 			UpdateTime:  timestamppb.New(*dbData.UpdateTime),
 		},
+	}, nil
+}
+
+// ListKnowledgeBasesAdmin lists all knowledge bases in a namespace without ACL filtering.
+// Unlike the public ListKnowledgeBases, this endpoint:
+// - Does NOT filter by ACL permissions
+// - Returns ALL knowledge bases including system-created ones (no creator)
+// - Used by internal services (e.g., agent-backend) to find existing system KBs
+func (h *PrivateHandler) ListKnowledgeBasesAdmin(ctx context.Context, req *artifactpb.ListKnowledgeBasesAdminRequest) (*artifactpb.ListKnowledgeBasesAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Parse namespace ID from parent (format: namespaces/{namespace})
+	namespaceID, err := parseNamespaceFromParent(req.GetParent())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid parent format: %v", err)
+	}
+
+	logger.Info("ListKnowledgeBasesAdmin called", zap.String("namespace_id", namespaceID))
+
+	// Get namespace
+	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
+	if err != nil {
+		logger.Error("failed to get namespace", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
+	}
+
+	// List knowledge bases WITHOUT ACL filtering
+	// The repository ListKnowledgeBases directly queries by owner UID without ACL checks
+	kbs, err := h.service.Repository().ListKnowledgeBases(ctx, ns.NsUID.String())
+	if err != nil {
+		logger.Error("failed to list knowledge bases", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to list knowledge bases: %v", err)
+	}
+
+	// Convert to proto format
+	pbKBs := make([]*artifactpb.KnowledgeBase, 0, len(kbs))
+	for _, kb := range kbs {
+		pbKBs = append(pbKBs, &artifactpb.KnowledgeBase{
+			Name:        fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID),
+			Id:          kb.ID,
+			DisplayName: kb.DisplayName,
+			Description: kb.Description,
+			Tags:        kb.Tags,
+			OwnerName:   ns.Name(),
+			CreateTime:  timestamppb.New(*kb.CreateTime),
+			UpdateTime:  timestamppb.New(*kb.UpdateTime),
+		})
+	}
+
+	logger.Info("ListKnowledgeBasesAdmin completed", zap.Int("count", len(pbKBs)))
+
+	return &artifactpb.ListKnowledgeBasesAdminResponse{
+		KnowledgeBases: pbKBs,
+		TotalSize:      int32(len(pbKBs)),
 	}, nil
 }
 
@@ -500,6 +551,113 @@ func (h *PrivateHandler) DeleteFileAdmin(ctx context.Context, req *artifactpb.De
 
 	return &artifactpb.DeleteFileAdminResponse{
 		Name: resp.Name,
+	}, nil
+}
+
+// ReprocessFileAdmin triggers file reprocessing without ACL checks (admin only).
+func (h *PrivateHandler) ReprocessFileAdmin(ctx context.Context, req *artifactpb.ReprocessFileAdminRequest) (*artifactpb.ReprocessFileAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	fileUIDStr := req.GetFileUid()
+	if fileUIDStr == "" {
+		return nil, status.Error(codes.InvalidArgument, "file_uid is required")
+	}
+
+	logger.Info("ReprocessFileAdmin called", zap.String("file_uid", fileUIDStr))
+
+	// Parse file UID
+	fileUID, err := uuid.FromString(fileUIDStr)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid file_uid format: %v", err)
+	}
+
+	// Get file by UID
+	files, err := h.service.Repository().GetFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
+	if err != nil {
+		logger.Error("failed to get file", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to get file: %v", err)
+	}
+	if len(files) == 0 {
+		return nil, status.Error(codes.NotFound, "file not found")
+	}
+	file := files[0]
+
+	// Get KB UIDs from junction table
+	kbUIDs, err := h.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, file.UID)
+	if err != nil || len(kbUIDs) == 0 {
+		logger.Error("failed to get KB associations for file", zap.Error(err))
+		return nil, status.Error(codes.NotFound, "file not associated with any knowledge base")
+	}
+
+	// Get knowledge base
+	kb, err := h.service.Repository().GetKnowledgeBaseByUID(ctx, kbUIDs[0])
+	if err != nil {
+		logger.Error("failed to get knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to get knowledge base: %v", err)
+	}
+
+	// NOTE: No ACL check - this is an admin endpoint
+
+	// Block reprocessing during validation phase (same as public endpoint)
+	if kb.UpdateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING.String() {
+		return nil, status.Error(codes.ResourceExhausted, "knowledge base is in critical update phase, please wait")
+	}
+
+	logger.Info("Starting admin file reprocessing",
+		zap.String("fileUID", file.UID.String()),
+		zap.String("filename", file.DisplayName),
+		zap.String("currentStatus", file.ProcessStatus),
+		zap.String("kbUID", kb.UID.String()))
+
+	// Use KB owner as both owner and requester for admin operations
+	ownerUID := types.UserUIDType(uuid.FromStringOrNil(kb.NamespaceUID))
+	requesterUID := types.RequesterUIDType(uuid.FromStringOrNil(kb.NamespaceUID))
+
+	// Update file status to PROCESSING before triggering the workflow
+	updatedFiles, err := h.service.Repository().ProcessFiles(ctx, []string{file.UID.String()}, requesterUID)
+	if err != nil {
+		logger.Error("Failed to update file status to PROCESSING", zap.Error(err), zap.String("fileUID", file.UID.String()))
+		return nil, status.Errorf(codes.Internal, "failed to update file status: %v", err)
+	}
+
+	if len(updatedFiles) == 0 {
+		return nil, status.Error(codes.NotFound, "file not found after status update")
+	}
+
+	// Trigger file processing workflow
+	err = h.service.ProcessFile(ctx, kb.UID, []types.FileUIDType{file.UID}, ownerUID, requesterUID)
+	if err != nil {
+		logger.Error("Failed to trigger file reprocessing",
+			zap.Error(err),
+			zap.String("fileUID", file.UID.String()),
+			zap.String("filename", file.DisplayName))
+		return nil, status.Errorf(codes.Internal, "failed to start reprocessing: %v", err)
+	}
+
+	logger.Info("Admin file reprocessing started successfully",
+		zap.String("fileUID", file.UID.String()),
+		zap.String("filename", file.DisplayName),
+		zap.String("kbUID", kb.UID.String()))
+
+	// Convert to protobuf response
+	updatedFile := updatedFiles[0]
+	pbFile := &artifactpb.File{
+		Name:          fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", kb.NamespaceUID, kb.ID, updatedFile.ID),
+		Id:            updatedFile.ID,
+		DisplayName:   updatedFile.DisplayName,
+		Type:          artifactpb.File_Type(artifactpb.File_Type_value[updatedFile.FileType]),
+		ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[updatedFile.ProcessStatus]),
+		Size:          updatedFile.Size,
+	}
+	if updatedFile.CreateTime != nil {
+		pbFile.CreateTime = timestamppb.New(*updatedFile.CreateTime)
+	}
+	if updatedFile.UpdateTime != nil {
+		pbFile.UpdateTime = timestamppb.New(*updatedFile.UpdateTime)
+	}
+
+	return &artifactpb.ReprocessFileAdminResponse{
+		File: pbFile,
 	}, nil
 }
 

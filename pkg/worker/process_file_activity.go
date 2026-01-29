@@ -16,7 +16,6 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/ai"
-	"github.com/instill-ai/artifact-backend/pkg/ai/gemini"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -967,14 +966,15 @@ func (w *Worker) SaveChunksActivity(ctx context.Context, param *SaveChunksActivi
 
 // StandardizeFileTypeActivityParam defines the parameters for StandardizeFileTypeActivity
 type StandardizeFileTypeActivityParam struct {
-	FileUID         types.FileUIDType    // File unique identifier
-	KBUID           types.KBUIDType      // Knowledge base unique identifier
-	Bucket          string               // MinIO bucket containing the file
-	Destination     string               // MinIO path to the file
-	FileType        artifactpb.File_Type // Original file type to convert from
-	FileDisplayName string               // File display name for identification
-	Pipelines       []pipeline.Release   // indexing-convert-file-type pipeline
-	Metadata        *structpb.Struct     // Request metadata for authentication
+	FileUID         types.FileUIDType      // File unique identifier
+	KBUID           types.KBUIDType        // Knowledge base unique identifier
+	Bucket          string                 // MinIO bucket containing the file
+	Destination     string                 // MinIO path to the file
+	FileType        artifactpb.File_Type   // Original file type to convert from
+	FileDisplayName string                 // File display name for identification
+	Pipelines       []pipeline.Release     // indexing-convert-file-type pipeline
+	Metadata        *structpb.Struct       // Request metadata for authentication
+	RequesterUID    types.RequesterUIDType // Requester UID for permission checks (e.g., KB owner)
 }
 
 // StandardizeFileTypeActivityResult defines the result of StandardizeFileTypeActivity
@@ -1144,7 +1144,8 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 
 	// Convert using indexing-convert-file-type pipeline (handles both data URI and blob URL outputs)
 	mimeType := filetype.FileTypeToMimeType(param.FileType)
-	convertedContent, err := pipeline.ConvertFileTypePipe(authCtx, w.pipelineClient, content, param.FileType, mimeType)
+	// Pass the requester UID for permission checks when uploading blobs to user's namespace
+	convertedContent, err := pipeline.ConvertFileTypePipe(authCtx, w.pipelineClient, content, param.FileType, mimeType, param.RequesterUID.String())
 	if err != nil {
 		w.log.Warn("StandardizeFileTypeActivity: Pipeline standardization failed",
 			zap.Error(err),
@@ -1674,6 +1675,36 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 				if err != nil {
 					logger.Error("AI conversion failed", zap.Error(err))
 					conversionErr = err
+
+					// Check for "no pages" error - the document may have content but Gemini couldn't parse page structure
+					// In this case, treat the raw content as a single-page document if it's text-based
+					errStr := err.Error()
+					isNoPages := strings.Contains(errStr, "no pages") || strings.Contains(errStr, "has no pages")
+
+					if isNoPages {
+						logger.Warn("Document has no parseable pages, attempting text extraction fallback",
+							zap.String("fileType", param.FileType.String()))
+
+						// For text-based files, we can use the raw content directly
+						// This shouldn't happen as text files are handled earlier, but just in case
+						if param.FileType == artifactpb.File_TYPE_TEXT ||
+							param.FileType == artifactpb.File_TYPE_MARKDOWN ||
+							param.FileType == artifactpb.File_TYPE_CSV ||
+							param.FileType == artifactpb.File_TYPE_HTML {
+							rawText := string(rawFileContent)
+							if len(rawText) > 0 {
+								// Wrap with page tag for consistency
+								contentInMarkdown = "[Page: 1]\n\n" + rawText
+								length = []uint32{uint32(len(contentInMarkdown))}
+								positionData = &types.PositionData{
+									PageDelimiters: []uint32{uint32(len(contentInMarkdown))},
+								}
+								conversionErr = nil
+								logger.Info("Text extraction fallback successful",
+									zap.Int("contentLength", len(contentInMarkdown)))
+							}
+						}
+					}
 				} else {
 					logger.Info("AI conversion successful",
 						zap.Int("markdownLength", len(conversion.Markdown)))
@@ -1692,7 +1723,30 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			if contentInMarkdown == "" {
 				logger.Error("AI conversion failed to produce content")
 				if conversionErr != nil {
-					// Use NonRetryable for AI conversion failures (they won't succeed on retry)
+					errStr := conversionErr.Error()
+
+					// Check for retryable errors (DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE)
+					// These are transient and should be retried by Temporal
+					if strings.Contains(errStr, "RETRYABLE:") {
+						logger.Warn("AI conversion failed with retryable error, will retry",
+							zap.String("error", errStr))
+						return nil, activityErrorWithCauseFlat(
+							errorsx.MessageOrErr(conversionErr),
+							processContentActivityError,
+							fmt.Errorf("AI conversion failed (retryable): %s", conversionErr.Error()),
+						)
+					}
+
+					// Check if it's a "no pages" error and provide a more helpful message
+					if strings.Contains(errStr, "no pages") || strings.Contains(errStr, "has no pages") {
+						return nil, activityErrorNonRetryableFlat(
+							fmt.Sprintf("The document '%s' appears to have no readable content or its format is not supported. Please try converting it to a different format (e.g., save as text or re-export the PDF) and upload again.", param.FileDisplayName),
+							processContentActivityError,
+							fmt.Errorf("AI conversion failed - document has no pages: %s", conversionErr.Error()),
+						)
+					}
+
+					// Use NonRetryable for other AI conversion failures (they won't succeed on retry)
 					// Break the error chain: use MessageOrErr for display, Error() for internal details
 					// This prevents deeply nested error structures in Temporal logs
 					return nil, activityErrorNonRetryableFlat(
@@ -1951,9 +2005,10 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		var summarizationErr error
 
 		// Build prompt with file display name context
-		summaryPrompt := gemini.GetGenerateSummaryPrompt()
+		summaryPromptTemplate := w.getGenerateSummaryPrompt()
+		summaryPrompt := summaryPromptTemplate
 		if param.FileDisplayName != "" {
-			summaryPrompt = strings.ReplaceAll(gemini.GetGenerateSummaryPrompt(), "[filename]", param.FileDisplayName)
+			summaryPrompt = strings.ReplaceAll(summaryPromptTemplate, "[filename]", param.FileDisplayName)
 		}
 
 		// Use the file type from parameter (already converted in workflow)

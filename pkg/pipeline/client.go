@@ -24,16 +24,37 @@ var (
 	pipelineIDCacheMu sync.RWMutex
 )
 
-// withServiceHeader adds the Instill-Service header to the context.
+// withServiceHeader adds the Instill-Service header and user context to the context.
 // This is required for inter-service communication to access preset pipelines.
-func withServiceHeader(ctx context.Context) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, "Instill-Service", "instill")
+// NOTE: We create a new outgoing context to ensure the headers are properly set,
+// as Temporal activity contexts may not properly propagate gRPC metadata.
+// The requesterUID parameter specifies who is making the request - this is the actual
+// user/namespace that owns the resources being operated on (e.g., KB owner).
+func withServiceHeader(ctx context.Context, requesterUID string) context.Context {
+	// Extract existing outgoing metadata if any
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if !ok {
+		md = metadata.New(nil)
+	}
+	// Create a copy and add the required headers
+	md = md.Copy()
+	md.Set("instill-service", "instill")
+	// Add user context headers for internal calls
+	// Both instill-user-uid and instill-requester-uid should be the actual requester
+	// (the user/namespace that owns the resources being operated on)
+	md.Set("instill-auth-type", "user")
+	if requesterUID != "" {
+		md.Set("instill-user-uid", requesterUID)
+		md.Set("instill-requester-uid", requesterUID)
+	}
+	return metadata.NewOutgoingContext(ctx, md)
 }
 
 // getPipelineIDBySlug looks up a pipeline by its slug and returns the pipeline ID.
 // TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug.
 // The result is cached to avoid repeated lookups.
-func getPipelineIDBySlug(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, release Release) (string, error) {
+// requesterUID is the UID of the user/namespace making the request (for permission checks).
+func getPipelineIDBySlug(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, release Release, requesterUID string) (string, error) {
 	cacheKey := fmt.Sprintf("%s/%s", release.Namespace, release.Slug())
 
 	// Check cache first
@@ -46,7 +67,7 @@ func getPipelineIDBySlug(ctx context.Context, pipelineClient pipelinepb.Pipeline
 
 	// Add service header to access preset pipelines
 	// This is required for inter-service communication to access public preset pipelines
-	ctx = metadata.AppendToOutgoingContext(ctx, "Instill-Service", "instill")
+	ctx = withServiceHeader(ctx, requesterUID)
 
 	// Look up pipeline by slug
 	pipelineName := fmt.Sprintf("namespaces/%s/pipelines/%s", release.Namespace, release.Slug())
@@ -74,7 +95,7 @@ func getPipelineIDBySlug(ctx context.Context, pipelineClient pipelinepb.Pipeline
 func GenerateContentPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, params GenerateContentParams) (*GenerateContentResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
-	ctx = withServiceHeader(ctx)
+	ctx = withServiceHeader(ctx, "")
 
 	prefix := GetFileTypePrefix(params.Type)
 	input := &structpb.Struct{
@@ -85,7 +106,7 @@ func GenerateContentPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 
 	// Look up pipeline by slug to get the pipeline ID
 	// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug
-	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, GenerateContentPipeline)
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, GenerateContentPipeline, "")
 	if err != nil {
 		return nil, fmt.Errorf("looking up pipeline ID: %w", err)
 	}
@@ -118,11 +139,11 @@ func GenerateContentPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 func GenerateSummaryPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, content string, fileType artifactpb.File_Type) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
-	ctx = withServiceHeader(ctx)
+	ctx = withServiceHeader(ctx, "")
 
 	// Look up pipeline by slug to get the pipeline ID
 	// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug
-	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, GenerateSummaryPipeline)
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, GenerateSummaryPipeline, "")
 	if err != nil {
 		return "", fmt.Errorf("looking up pipeline ID: %w", err)
 	}
@@ -162,10 +183,16 @@ func GenerateSummaryPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 
 // ConvertFileTypePipe converts files to standardized formats using the indexing-convert-file-type pipeline
 // Handles conversions like PPTX→PDF, HEIC→PNG, MKV→MP4, etc.
-func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, content []byte, sourceType artifactpb.File_Type, mimeType string) ([]byte, error) {
+// requesterUID parameter is kept for API compatibility but not used - service-to-service auth is sufficient.
+// Using empty requesterUID avoids "namespace error" when the original file owner's namespace was deleted.
+func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, content []byte, sourceType artifactpb.File_Type, mimeType string, requesterUID string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
 	defer cancel()
-	ctx = withServiceHeader(ctx)
+	// Use empty requesterUID for service-to-service calls, consistent with other pipeline calls
+	// (GenerateContentPipe, GenerateSummaryPipe, EmbedPipe all use empty requesterUID)
+	// This prevents "fetching requester namespace: namespace error" when the KB owner's
+	// user/organization namespace was deleted but files still need processing during migration
+	ctx = withServiceHeader(ctx, "")
 
 	// Determine input variable name based on source type
 	inputVarName := getInputVariableName(sourceType)
@@ -179,7 +206,8 @@ func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 
 	// Look up pipeline by slug to get the pipeline ID
 	// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug
-	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, ConvertFileTypePipeline)
+	// Use empty requesterUID consistent with service-to-service calls
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, ConvertFileTypePipeline, "")
 	if err != nil {
 		return nil, fmt.Errorf("looking up pipeline ID: %w", err)
 	}
@@ -373,7 +401,7 @@ func decodeBlobURL(blobURL string) (string, error) {
 func EmbedPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, texts []string) ([][]float32, error) {
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
-	ctx = withServiceHeader(ctx)
+	ctx = withServiceHeader(ctx, "")
 
 	if len(texts) == 0 {
 		return [][]float32{}, nil
@@ -386,7 +414,7 @@ func EmbedPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServ
 
 	// Look up pipeline by slug to get the pipeline ID (do this once before the loop)
 	// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug
-	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, EmbedPipeline)
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, EmbedPipeline, "")
 	if err != nil {
 		return nil, fmt.Errorf("looking up pipeline ID: %w", err)
 	}

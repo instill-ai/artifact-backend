@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"go.temporal.io/sdk/temporal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
@@ -859,6 +860,19 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 			if err == nil {
 				break
 			}
+
+			// Check for duplicate key error - file might already exist (race condition or soft-deleted)
+			if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "23505") {
+				w.log.Warn("Duplicate key error creating staging file - file may already exist, skipping",
+					zap.Error(err),
+					zap.String("filename", prodFile.DisplayName),
+					zap.String("stagingKBUID", stagingKBUID.String()))
+				// Skip this file - it already exists in staging (possibly soft-deleted or duplicate)
+				// This is not a critical error; the reconciliation can proceed
+				err = nil
+				break
+			}
+
 			if attempt < maxRetries {
 				w.log.Warn("Failed to create staging file during reconciliation, retrying...",
 					zap.Error(err),
@@ -873,6 +887,11 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 				zap.Error(err),
 				zap.String("filename", prodFile.DisplayName))
 			return nil, fmt.Errorf("failed to create staging file %s: %w", prodFile.DisplayName, err)
+		}
+
+		// If we skipped due to duplicate key, continue to next file
+		if createdFile == nil {
+			continue
 		}
 
 		// Track this file for exclusion from NOTSTARTED check on next retry
@@ -1897,25 +1916,27 @@ func (w *Worker) CloneFileToStagingKBActivity(ctx context.Context, param *CloneF
 	// to fail, blocking system maintenance. By checking blob existence upfront, we can
 	// gracefully skip orphaned records and allow the update to proceed with valid files.
 	//
-	// **OBSERVABILITY:**
-	// When blobs are missing, we log ERROR level with "action_required" to alert operators
-	// of potential data loss requiring investigation.
+	// CRITICAL: Verify blob file exists in MinIO before cloning
+	// If the blob is missing, FAIL the update workflow immediately (non-retryable).
+	// Missing blobs indicate data corruption that requires manual investigation.
 	//
 	// Use GetFileMetadata (StatObject) instead of GetFile to avoid reading entire file.
 	bucket := object.BucketFromDestination(originalFile.StoragePath)
 	_, err = w.repository.GetMinIOStorage().GetFileMetadata(ctx, bucket, originalFile.StoragePath)
 	if err != nil {
-		w.log.Error("CloneFileToStagingKBActivity: Original blob file not found in MinIO - skipping file",
+		w.log.Error("CloneFileToStagingKBActivity: Original blob file not found in MinIO - failing update",
 			zap.String("fileUID", param.OriginalFileUID.String()),
 			zap.String("filename", originalFile.DisplayName),
 			zap.String("storagePath", originalFile.StoragePath),
 			zap.String("bucket", bucket),
 			zap.Error(err),
-			zap.String("impact", "File will not be available in updated KB"),
 			zap.String("action_required", "Investigate data loss - production file has DB record but no blob"))
-		return &CloneFileToStagingKBActivityResult{
-			NewFileUID: types.FileUIDType(uuid.Nil), // Return nil UID to indicate skipped file
-		}, nil
+		// Use non-retryable error - missing blobs won't magically appear
+		return nil, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("blob file missing in MinIO for file %s (%s): %s", originalFile.DisplayName, param.OriginalFileUID.String(), err.Error()),
+			cloneFileToStagingKBActivityError,
+			err,
+		)
 	}
 
 	// Get staging KB to inherit owner

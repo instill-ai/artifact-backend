@@ -134,9 +134,20 @@ type RegistryConfig struct {
 }
 
 // MilvusConfig is the milvus configuration.
+// Supports both self-hosted Milvus (CE) and Zilliz Cloud (EE).
 type MilvusConfig struct {
 	Host string `koanf:"host"`
 	Port string `koanf:"port"`
+	// APIKey is used for Zilliz Cloud authentication (recommended for EE).
+	// When set, Username and Password are ignored.
+	APIKey string `koanf:"apikey"`
+	// Username for Milvus authentication (optional, used when APIKey is not set).
+	Username string `koanf:"username"`
+	// Password for Milvus authentication (optional, used when APIKey is not set).
+	Password string `koanf:"password"`
+	// EnableTLS enables TLS/SSL for the connection.
+	// Required for Zilliz Cloud, optional for self-hosted Milvus.
+	EnableTLS bool `koanf:"enabletls"`
 }
 
 // BlobConfig is the blob configuration.

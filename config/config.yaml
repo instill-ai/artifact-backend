@@ -92,6 +92,11 @@ minio:
 milvus:
   host: milvus
   port: 19530
+  # Authentication for Zilliz Cloud or secured Milvus (optional for CE)
+  apikey:       # API key for Zilliz Cloud (takes precedence over username/password)
+  username:     # Username for Milvus authentication
+  password:     # Password for Milvus authentication
+  enabletls: false  # Enable TLS (required for Zilliz Cloud)
 blob:
   hostport: http://localhost:8080
 
