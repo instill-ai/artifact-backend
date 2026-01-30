@@ -43,24 +43,34 @@ func (r filterRequestWrapper) GetFilter() string {
 	return r.filter
 }
 
-// parseKnowledgeBaseFromParent parses a parent resource name of format "namespaces/{namespace}/knowledge-bases/{kb}"
-// and returns the namespace_id and knowledge_base_id
+// parseKnowledgeBaseFromParent parses a parent resource name of format:
+// 1. "namespaces/{namespace}/knowledge-bases/{kb}"
+// 2. "namespaces/{namespace}"
+// and returns the namespace_id and kbID (if present)
+// parseKnowledgeBaseFromParent parses a parent resource name of format:
+// "namespaces/{namespace}/knowledge-bases/{knowledge_base}"
+// and returns the namespace_id and kb_id
 func parseKnowledgeBaseFromParent(parent string) (namespaceID, kbID string, err error) {
 	parts := strings.Split(parent, "/")
-	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "knowledge-bases" {
-		return "", "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}/knowledge-bases/{knowledge_base}")
+	if len(parts) == 4 && parts[0] == "namespaces" && parts[2] == "knowledge-bases" {
+		return parts[1], parts[3], nil
 	}
-	return parts[1], parts[3], nil
+	return "", "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}/knowledge-bases/{knowledge_base}")
 }
 
-// parseFileFromName parses a resource name of format "namespaces/{namespace}/knowledge-bases/{kb}/files/{file}"
-// and returns the namespace_id, knowledge_base_id, and file_id
+// parseFileFromName parses a resource name of format:
+// 1. "namespaces/{namespace}/knowledge-bases/{kb}/files/{file}"
+// 2. "namespaces/{namespace}/files/{file}"
+// and returns the namespace_id, kbID (if present), and file_id
 func parseFileFromName(name string) (namespaceID, kbID, fileID string, err error) {
 	parts := strings.Split(name, "/")
-	if len(parts) != 6 || parts[0] != "namespaces" || parts[2] != "knowledge-bases" || parts[4] != "files" {
-		return "", "", "", fmt.Errorf("invalid file name format, expected namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file}")
+	if len(parts) == 6 && parts[0] == "namespaces" && parts[2] == "knowledge-bases" && parts[4] == "files" {
+		return parts[1], parts[3], parts[5], nil
 	}
-	return parts[1], parts[3], parts[5], nil
+	if len(parts) == 4 && parts[0] == "namespaces" && parts[2] == "files" {
+		return parts[1], "", parts[3], nil
+	}
+	return "", "", "", fmt.Errorf("invalid file name format, expected namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file} or namespaces/{namespace}/files/{file}")
 }
 
 // parseObjectIDFromResourceName parses an object resource name of format "namespaces/{namespace}/objects/{object_id}"
@@ -633,7 +643,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing parent: %w", err),
-			"Invalid parent format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}",
+			"Invalid parent format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base} or namespaces/{namespace}",
 		)
 	}
 
@@ -665,28 +675,33 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		)
 	}
 
-	// Get knowledge base and check permissions
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, kbID)
-	if err != nil {
-		logger.Error("failed to get knowledge base", zap.Error(err), zap.String("kbID", kbID))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
-			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
-		)
-	}
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
-	if err != nil {
-		logger.Error("failed to check permission", zap.Error(err))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
-			"Unable to verify access permissions. Please try again.",
-		)
-	}
-	if !granted {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized),
-			"You don't have permission to view this knowledge base. Please contact the owner for access.",
-		)
+	var kbUID string
+	var kb *repository.KnowledgeBaseModel
+	if kbID != "" {
+		// Get knowledge base and check permissions
+		kb, err = ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, kbID)
+		if err != nil {
+			logger.Error("failed to get knowledge base", zap.Error(err), zap.String("kbID", kbID))
+			return nil, errorsx.AddMessage(
+				fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
+				"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
+			)
+		}
+		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+		if err != nil {
+			logger.Error("failed to check permission", zap.Error(err))
+			return nil, errorsx.AddMessage(
+				fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
+				"Unable to verify access permissions. Please try again.",
+			)
+		}
+		if !granted {
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized),
+				"You don't have permission to view this knowledge base. Please contact the owner for access.",
+			)
+		}
+		kbUID = kb.UID.String()
 	}
 
 	// Use filter directly - no need to strip knowledge_base_id since it's now in the path
@@ -718,7 +733,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 
 	kbFileList, err := ph.service.Repository().ListFiles(ctx, repository.KnowledgeBaseFileListParams{
 		OwnerUID:  ns.NsUID.String(),
-		KBUID:     kb.UID.String(),
+		KBUID:     kbUID,
 		PageSize:  int(req.GetPageSize()),
 		PageToken: req.GetPageToken(),
 		Filter:    parsedFilter,
@@ -757,6 +772,19 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 
 	// Fetch owner once (same for all files in this KB)
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+
+	// Fetch all file-KB associations for all files in one go if kbID is empty
+	var fileKBAssociations map[types.FileUIDType][]string
+	if kbID == "" {
+		fileUIDs := make([]types.FileUIDType, len(kbFileList.Files))
+		for i, f := range kbFileList.Files {
+			fileUIDs[i] = f.UID
+		}
+		fileKBAssociations, err = ph.service.Repository().GetKnowledgeBaseIDsForFiles(ctx, fileUIDs)
+		if err != nil {
+			logger.Warn("failed to fetch KB associations for files", zap.Error(err))
+		}
+	}
 
 	files := make([]*artifactpb.File, 0, len(kbFileList.Files))
 	for _, kbFile := range kbFileList.Files {
@@ -815,58 +843,78 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			downloadURL = response.GetDownloadUrl()
 		}
 
-		// Fetch creator for this file (owner is the same for all files in this KB)
-		creator, _ := ph.service.FetchUserByUID(ctx, kbFile.CreatorUID.String())
+	// Fetch creator for this file (owner is the same for all files in this KB)
+	creator, _ := ph.service.FetchUserByUID(ctx, kbFile.CreatorUID.String())
 
-		// Use ID if set, otherwise fallback to UID (for backward compatibility)
-		fileID := kbFile.ID
-		if fileID == "" {
-			fileID = kbFile.UID.String()
-		}
-		// Knowledge base ID is always known from the parent path
-		knowledgeBaseIDs := []string{kb.ID}
+	// Use ID if set, otherwise fallback to UID (for backward compatibility)
+	fileID := kbFile.ID
+	if fileID == "" {
+		fileID = kbFile.UID.String()
+	}
 
-		// Get object ID for AIP-122 compliant resource name
-		objectID := ""
-		objectResourceName := ""
-		if kbFile.ObjectUID != nil {
-			obj, err := ph.service.Repository().GetObjectByUID(ctx, *kbFile.ObjectUID)
-			if err == nil && obj != nil {
-				objectID = string(obj.ID)
-				objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
+	// Determine KB ID for this file
+	var fileKBID string
+	var knowledgeBaseNames []string
+	if kbID != "" {
+		fileKBID = kb.ID
+		knowledgeBaseNames = []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)}
+	} else {
+		// Use batch-fetched associations
+		kbIDs := fileKBAssociations[kbFile.UID]
+		if len(kbIDs) > 0 {
+			fileKBID = kbIDs[0] // Pick first one as primary
+			knowledgeBaseNames = make([]string, len(kbIDs))
+			for i, id := range kbIDs {
+				knowledgeBaseNames[i] = fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, id)
 			}
-		} else if objectUID != uuid.Nil {
-			// Fallback: try to get object by UID parsed from storage path
-			obj, err := ph.service.Repository().GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
-			if err == nil && obj != nil {
-				objectID = string(obj.ID)
-				objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
-			}
+		} else {
+			// Fallback if no associations found (should not happen)
+			fileKBID = "unknown"
+			knowledgeBaseNames = []string{}
 		}
+	}
 
-		file := &artifactpb.File{
-			Id:                 fileID,
-			Slug:               kbFile.Slug,
-			OwnerName:          ns.Name(),
-			Owner:              owner,
-			Creator:            creator,
-			KnowledgeBases:     knowledgeBaseIDs,
-			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kb.ID, fileID),
-			DisplayName:        kbFile.DisplayName,
-			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
-			CreateTime:         timestamppb.New(*kbFile.CreateTime),
-			UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
-			ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
-			Size:               kbFile.Size,
-			ExternalMetadata:   kbFile.PublicExternalMetadataUnmarshal(),
-			TotalChunks:        int32(totalChunks[kbFile.UID]),
-			TotalTokens:        int32(totalTokens[kbFile.UID]),
-			Object:             objectResourceName,
-			DownloadUrl:        downloadURL,
-			ConvertingPipeline: kbFile.ConvertingPipeline(),
-			Tags:               []string(kbFile.Tags),
-			Collections:        extractCollectionUIDs(kbFile.Tags),
+	// Get object ID for AIP-122 compliant resource name
+	objectID := ""
+	objectResourceName := ""
+	if kbFile.ObjectUID != nil {
+		obj, err := ph.service.Repository().GetObjectByUID(ctx, *kbFile.ObjectUID)
+		if err == nil && obj != nil {
+			objectID = string(obj.ID)
+			objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
 		}
+	} else if objectUID != uuid.Nil {
+		// Fallback: try to get object by UID parsed from storage path
+		obj, err := ph.service.Repository().GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
+		if err == nil && obj != nil {
+			objectID = string(obj.ID)
+			objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
+		}
+	}
+
+	file := &artifactpb.File{
+		Id:                 fileID,
+		Slug:               kbFile.Slug,
+		OwnerName:          ns.Name(),
+		Owner:              owner,
+		Creator:            creator,
+		KnowledgeBases:     knowledgeBaseNames,
+		Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, fileKBID, fileID),
+		DisplayName:        kbFile.DisplayName,
+		Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
+		CreateTime:         timestamppb.New(*kbFile.CreateTime),
+		UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
+		ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
+		Size:               kbFile.Size,
+		ExternalMetadata:   kbFile.PublicExternalMetadataUnmarshal(),
+		TotalChunks:        int32(totalChunks[kbFile.UID]),
+		TotalTokens:        int32(totalTokens[kbFile.UID]),
+		Object:             objectResourceName,
+		DownloadUrl:        downloadURL,
+		ConvertingPipeline: kbFile.ConvertingPipeline(),
+		Tags:               []string(kbFile.Tags),
+		Collections:        extractCollectionUIDs(kbFile.Tags),
+	}
 
 		// Include status message (error or success message)
 		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.StatusMessage != "" {

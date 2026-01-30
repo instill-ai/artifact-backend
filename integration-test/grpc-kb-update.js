@@ -253,6 +253,7 @@ import encoding from "k6/encoding";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
+import { grpcInvokeWithRetry } from "./helper.js";
 
 // Use httpRetry for automatic retry on transient errors (429, 5xx)
 const http = helper.httpRetry;
@@ -336,38 +337,23 @@ export function setup() {
 
     // Connect gRPC client to private service
     // Authenticate with retry to handle transient failures
-    const loginResp = helper.authenticateWithRetry(
-        constant.mgmtRESTPublicHost,
-        constant.defaultUsername,
-        constant.defaultPassword
-    );
-
-    check(loginResp, {
-        "Setup: Authentication successful": (r) => r && r.status === 200,
-    });
-
-    if (!loginResp || loginResp.status !== 200) {
-        console.error("Setup: Authentication failed, cannot continue");
-        return null;
-    }
-
-    const accessToken = loginResp.json().accessToken;
+    const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
     const header = {
         "headers": {
-            "Authorization": `Bearer ${accessToken}`,
+            "Authorization": authHeader,
             "Content-Type": "application/json",
         },
         "timeout": "600s",
     };
 
     const userResp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-        headers: { "Authorization": `Bearer ${accessToken}` }
+        headers: { "Authorization": authHeader }
     });
 
     // gRPC metadata format
     const grpcMetadata = {
         "metadata": {
-            "Authorization": `Bearer ${accessToken}`
+            "Authorization": authHeader
         },
         "timeout": "600s"
     };
@@ -525,7 +511,7 @@ export function teardown(data) {
                 const knowledgeBaseIds = knowledgeBaseToAbort.map(c => c.id);
                 try {
                     client.connect(constant.artifactGRPCPrivateHost, { plaintext: true });
-                    const abortRes = client.invoke(
+                    const abortRes = grpcInvokeWithRetry(client,
                         "artifact.v1alpha.ArtifactPrivateService/AbortKnowledgeBaseUpdateAdmin",
                         { knowledge_base_ids: knowledgeBaseIds },
                         data.metadata
@@ -609,7 +595,7 @@ export function teardown(data) {
                         const knowledgeBaseId = kb.id.replace('-rollback', '');
                         console.log(`Step 3: Purging rollback KB for KB: ${knowledgeBaseId}`);
 
-                        const purgeRes = client.invoke(
+                        const purgeRes = grpcInvokeWithRetry(client,
                             "artifact.v1alpha.ArtifactPrivateService/PurgeRollbackAdmin",
                             {
                                 name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`
@@ -789,7 +775,7 @@ function TestAdminAPIs(client, data) {
         check(true, { [constant.banner(groupName)]: () => true });
 
         // Test 1.1: GetUpdateStatus - No Active Updates
-        const statusRes = client.invoke(
+        const statusRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
             {},
             data.metadata
@@ -865,14 +851,14 @@ function TestCompleteUpdateWorkflow(client, data) {
 
         const uploadRes1 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ displayName: file1Name, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
         const uploadRes2 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ displayName: file2Name, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
@@ -912,7 +898,7 @@ function TestCompleteUpdateWorkflow(client, data) {
 
         // Trigger update workflow
         console.log("Workflow: Triggering update...");
-        const executeRes = client.invoke(
+        const executeRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -1057,7 +1043,7 @@ function TestPhasePrepare(client, data) {
         const filename = data.dbIDPrefix + "prepare-test.txt";
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({
                 displayName: filename,
                 type: "TYPE_TEXT",
@@ -1097,7 +1083,7 @@ function TestPhasePrepare(client, data) {
         console.log("Phase 1 Prepare: File processed, triggering update...");
 
         // Trigger update
-        const executeRes = client.invoke(
+        const executeRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -1237,7 +1223,7 @@ function TestReprocessAndDualProcessing(client, data) {
         const file1Name = data.dbIDPrefix + "initial.txt";
         const uploadRes1 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ displayName: file1Name, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
@@ -1273,7 +1259,7 @@ function TestReprocessAndDualProcessing(client, data) {
         console.log("Group 4: Initial file processed, triggering update...");
 
         // Trigger update
-        const updateRes = client.invoke(
+        const updateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -1332,7 +1318,7 @@ function TestReprocessAndDualProcessing(client, data) {
         const fileToDelete = data.dbIDPrefix + "to-delete.txt";
         const uploadRes2 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ displayName: fileToDelete, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
@@ -1406,7 +1392,7 @@ function TestReprocessAndDualProcessing(client, data) {
         // k6 gRPC requires exact proto field names (snake_case)
         const deleteReq = { file_id: fileId2 };
         console.log(`Group 4: DELETE request: ${JSON.stringify(deleteReq)}`);
-        const deleteRes = client.invoke(
+        const deleteRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/DeleteFileAdmin",
             deleteReq,
             data.metadata
@@ -1580,7 +1566,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         // Upload and process 1 initial file (simplified for faster test)
         const uploadResCC1Initial = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC1}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}/files`,
             JSON.stringify({
                 displayName: `${data.dbIDPrefix}cc1-initial.txt`,
                 type: "TYPE_TEXT",
@@ -1623,7 +1609,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         console.log("CC1: Initial file processed, triggering update...");
 
         // Trigger update
-        const updateResCC1 = client.invoke(
+        const updateResCC1 = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC1] },
             data.metadata
@@ -1657,7 +1643,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
 
         const uploadRes2CC1 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC1}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}/files`,
             JSON.stringify({
                 displayName: fileAddedDuringSwapping,
                 type: "TYPE_TEXT",
@@ -1700,7 +1686,7 @@ function TestCC01_AddingFilesDuringSwap(client, data) {
         console.log("CC1: Re-querying file by name after swap to get correct UID...");
         const listFilesResCC1 = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC1}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC1}/files`,
             null,
             data.header
         );
@@ -1833,9 +1819,9 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         const knowledgeBaseUidCC2 = helper.getKnowledgeBaseUidFromId(knowledgeBaseIdCC2);
 
         // Upload 2 initial files
-        const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC2}`,
+        const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc2-keep-1.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
-        const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC2}`,
+        const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC2}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc2-keep-2.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileId1, fileId2;
@@ -1874,7 +1860,7 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         console.log("CC2: Files processed, triggering update...");
 
         // Trigger update
-        const updateRes = client.invoke(
+        const updateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC2] },
             data.metadata
@@ -1902,7 +1888,7 @@ function TestCC02_DeletingFilesDuringSwap(client, data) {
         sleep(10);
 
         // Delete first file during update
-        const deleteRes = client.invoke(
+        const deleteRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/DeleteFileAdmin",
             { file_id: fileId1 },
             data.metadata
@@ -1994,9 +1980,9 @@ function TestCC03_RapidOperations(client, data) {
         const knowledgeBaseUidCC3 = helper.getKnowledgeBaseUidFromId(knowledgeBaseIdCC3);
 
         // Upload initial files
-        const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC3}`,
+        const uploadRes1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc3-init-1.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
-        const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC3}`,
+        const uploadRes2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc3-init-2.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileId1, fileId2;
@@ -2035,7 +2021,7 @@ function TestCC03_RapidOperations(client, data) {
         console.log("CC3: Files processed, triggering update...");
 
         // Trigger update
-        const updateRes = client.invoke(
+        const updateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC3] },
             data.metadata
@@ -2061,11 +2047,11 @@ function TestCC03_RapidOperations(client, data) {
 
         console.log("CC3: Staging KB ready, performing rapid operations...");
         // Rapid operations: Upload 3 files
-        const newUpload1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC3}`,
+        const newUpload1 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc3-rapid-1.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
-        const newUpload2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC3}`,
+        const newUpload2 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc3-rapid-2.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
-        const newUpload3 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC3}`,
+        const newUpload3 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc3-rapid-3.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let newFileId1, newFileId2, newFileId3;
@@ -2084,7 +2070,7 @@ function TestCC03_RapidOperations(client, data) {
 
 
         // Delete one file during update
-        const deleteRes = client.invoke(
+        const deleteRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/DeleteFileAdmin",
             { file_id: fileId1 },
             data.metadata
@@ -2113,7 +2099,7 @@ function TestCC03_RapidOperations(client, data) {
         console.log("CC3: Re-querying files by name after swap to get correct UIDs...");
         const listFilesResCC3 = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC3}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC3}/files`,
             null,
             data.header
         );
@@ -2231,7 +2217,7 @@ function TestCC04_RaceConditions(client, data) {
         // Upload initial file
         const uploadResCC4 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC4}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc4-initial.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
@@ -2267,7 +2253,7 @@ function TestCC04_RaceConditions(client, data) {
         console.log("CC4: Initial file processed, triggering update...");
 
         // Trigger update
-        const updateResCC4 = client.invoke(
+        const updateResCC4 = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC4] },
             data.metadata
@@ -2292,7 +2278,7 @@ function TestCC04_RaceConditions(client, data) {
         // Upload race file immediately - don't wait to poll status first
         const raceUploadCC4 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC4}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}/files`,
             JSON.stringify({ displayName: raceFileNameCC4, type: "TYPE_TEXT", content: encoding.b64encode("File uploaded during update race window") }),
             data.header
         );
@@ -2316,7 +2302,7 @@ function TestCC04_RaceConditions(client, data) {
         // Now monitor for update completion
         console.log("CC4: Monitoring for update completion...");
         for (let i = 0; i < 120; i++) {  // Max 60 seconds polling (120 x 0.5s)
-            const statusRes = client.invoke(
+            const statusRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
                 {},  // Empty request - returns status for all knowledge bases
                 data.metadata
@@ -2369,7 +2355,7 @@ function TestCC04_RaceConditions(client, data) {
             console.log("CC4: Re-querying race file by name after swap to get correct UID...");
             const listFilesResCC4 = http.request(
                 "GET",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC4}`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC4}/files`,
                 null,
                 data.header
             );
@@ -2490,7 +2476,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         // Upload and process initial file
         const uploadResCC5 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC5}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc5-initial.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
@@ -2525,7 +2511,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
         console.log("CC5: Initial file processed, triggering update...");
 
         // Trigger update
-        const updateResCC5 = client.invoke(
+        const updateResCC5 = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC5] },
             data.metadata
@@ -2598,7 +2584,7 @@ function TestCC05_AddingFilesAfterSwap(client, data) {
 
         const uploadRes2CC5 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC5}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC5}/files`,
             JSON.stringify({
                 displayName: fileAfterSwap,
                 type: "TYPE_TEXT",
@@ -2737,14 +2723,14 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
 
         const upload1CC6 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC6}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}/files`,
             JSON.stringify({ displayName: file1NameCC6, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
 
         const upload2CC6 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC6}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}/files`,
             JSON.stringify({ displayName: file2NameCC6, type: "TYPE_TEXT", content: encoding.b64encode("File to delete after swap") }),
             data.header
         );
@@ -2781,7 +2767,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         console.log("CC6: Files processed, triggering update...");
 
         // Trigger update
-        const updateResCC6 = client.invoke(
+        const updateResCC6 = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC6] },
             data.metadata
@@ -2847,7 +2833,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
 
             const listFilesRes = http.request(
                 "GET",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC6}`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC6}/files`,
                 null,
                 data.header
             );
@@ -2882,7 +2868,7 @@ function TestCC06_DeletingFilesAfterSwap(client, data) {
         console.log(`CC6: File to delete UID: ${fileToDeleteUID}`);
 
         // Delete the file using gRPC private API
-        const deleteResCC6 = client.invoke(
+        const deleteResCC6 = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/DeleteFileAdmin",
             { file_id: fileToDeleteUID },
             data.metadata
@@ -2978,11 +2964,11 @@ function TestCC07_MultipleOperations(client, data) {
         const file2NameCC7 = data.dbIDPrefix + "cc7-file2.txt";
         const file3NameCC7 = data.dbIDPrefix + "cc7-file3.txt";
 
-        const upload1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC7}`,
+        const upload1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ displayName: file1NameCC7, type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
-        const upload2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC7}`,
+        const upload2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ displayName: file2NameCC7, type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
-        const upload3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC7}`,
+        const upload3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ displayName: file3NameCC7, type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileId1CC7, fileId2CC7, fileId3CC7;
@@ -3018,7 +3004,7 @@ function TestCC07_MultipleOperations(client, data) {
         console.log("CC7: Initial files processed, triggering update...");
 
         // Trigger update
-        const updateResCC7 = client.invoke(
+        const updateResCC7 = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC7] },
             data.metadata
@@ -3072,11 +3058,11 @@ function TestCC07_MultipleOperations(client, data) {
         // Multiple operations: Upload 3 new, delete 2 existing
         console.log("CC7: Executing multiple operations during retention...");
 
-        const uploadNew1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC7}`,
+        const uploadNew1CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc7-new1.txt", type: "TYPE_TEXT", content: encoding.b64encode("New1") }), data.header);
-        const uploadNew2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC7}`,
+        const uploadNew2CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc7-new2.txt", type: "TYPE_TEXT", content: encoding.b64encode("New2") }), data.header);
-        const uploadNew3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC7}`,
+        const uploadNew3CC7 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC7}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc7-new3.txt", type: "TYPE_TEXT", content: encoding.b64encode("New3") }), data.header);
 
         let newFileIds = [];
@@ -3095,8 +3081,8 @@ function TestCC07_MultipleOperations(client, data) {
         // Auto-trigger: Processing starts automatically on upload
 
         if (prodFileId1CC7 && prodFileId2CC7) {
-            client.invoke("artifact.v1alpha.ArtifactPrivateService/DeleteFileAdmin", { file_id: prodFileId1CC7 }, data.metadata);
-            client.invoke("artifact.v1alpha.ArtifactPrivateService/DeleteFileAdmin", { file_id: prodFileId2CC7 }, data.metadata);
+            grpcInvokeWithRetry(client, "artifact.v1alpha.ArtifactPrivateService/DeleteFileAdmin", { file_id: prodFileId1CC7 }, data.metadata);
+            grpcInvokeWithRetry(client, "artifact.v1alpha.ArtifactPrivateService/DeleteFileAdmin", { file_id: prodFileId2CC7 }, data.metadata);
         }
 
         // CRITICAL: Wait for new files to complete processing before validation - increased timeout for CI
@@ -3187,7 +3173,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         const knowledgeBaseUidCC8 = helper.getKnowledgeBaseUidFromId(knowledgeBaseIdCC8);
 
         // Upload and process initial file
-        const uploadResCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC8}`,
+        const uploadResCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc8-initial.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileIdCC8;
@@ -3220,7 +3206,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         console.log("CC8: Initial file processed, triggering update...");
 
         // Trigger update
-        const updateResCC8 = client.invoke(
+        const updateResCC8 = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC8] },
             data.metadata
@@ -3256,7 +3242,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         const largeContent = helper.generateArticle(5000);
 
         console.log("CC8: Uploading large file during retention...");
-        const largeUploadCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC8}`,
+        const largeUploadCC8 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}/files`,
             JSON.stringify({ displayName: largeFileName, type: "TYPE_TEXT", content: encoding.b64encode(largeContent) }), data.header);
 
         check(largeUploadCC8, {
@@ -3279,7 +3265,7 @@ function TestCC08_RollbackDuringProcessing(client, data) {
         // Trigger rollback immediately (file may still be processing)
         // No sleep needed - testing rollback during file processing
         console.log("CC8: Triggering rollback IMMEDIATELY...");
-        const rollbackResCC8 = client.invoke(
+        const rollbackResCC8 = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/RollbackAdmin",
             { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC8}` },
             data.metadata
@@ -3341,7 +3327,7 @@ function TestCC09_DualProcessingStops(client, data) {
         const knowledgeBaseUidCC9 = helper.getKnowledgeBaseUidFromId(knowledgeBaseIdCC9);
 
         // Upload, process, and trigger update
-        const uploadResCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC9}`,
+        const uploadResCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc9-init.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         let fileIdCC9;
@@ -3363,7 +3349,7 @@ function TestCC09_DualProcessingStops(client, data) {
         );
 
         // Trigger update
-        client.invoke("artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
+        grpcInvokeWithRetry(client, "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC9] }, data.metadata);
 
         // Wait for completion
@@ -3387,7 +3373,7 @@ function TestCC09_DualProcessingStops(client, data) {
 
         // Upload file BEFORE purge (should be dual-processed)
         const fileBeforePurge = data.dbIDPrefix + "before-purge.txt";
-        const uploadBeforePurgeCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC9}`,
+        const uploadBeforePurgeCC9 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
             JSON.stringify({ displayName: fileBeforePurge, type: "TYPE_TEXT", content: encoding.b64encode("Before purge") }), data.header);
 
         let fileBeforePurgeId;
@@ -3437,7 +3423,7 @@ function TestCC09_DualProcessingStops(client, data) {
 
         // Purge rollback KB
         console.log("CC9: Purging rollback KB...");
-        const purgeRes = client.invoke(
+        const purgeRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/PurgeRollbackAdmin",
             { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}` },
             data.metadata
@@ -3455,7 +3441,7 @@ function TestCC09_DualProcessingStops(client, data) {
 
         // Upload file AFTER purge (should be single-processed only, no dual-processing to rollback KB)
         const fileAfterPurge = data.dbIDPrefix + "after-purge.txt";
-        const uploadAfterPurgeRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC9}`,
+        const uploadAfterPurgeRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC9}/files`,
             JSON.stringify({ displayName: fileAfterPurge, type: "TYPE_TEXT", content: encoding.b64encode("After purge - dual processing should be stopped") }), data.header);
 
         // Verify upload succeeded
@@ -3587,7 +3573,7 @@ function TestCC10_RetentionExpiration(client, data) {
 
         // Upload and process initial file
         console.log("CC10: Uploading initial file...");
-        const uploadResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC10}`,
+        const uploadResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc10-init.txt", type: "TYPE_TEXT", content: constant.docSampleTxt }), data.header);
 
         check(uploadResCC10, {
@@ -3624,7 +3610,7 @@ function TestCC10_RetentionExpiration(client, data) {
 
         // Trigger update
         console.log("CC10: Triggering KB update...");
-        const updateResCC10 = client.invoke("artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
+        const updateResCC10 = grpcInvokeWithRetry(client, "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdCC10] }, data.metadata);
 
         check(updateResCC10, {
@@ -3670,7 +3656,7 @@ function TestCC10_RetentionExpiration(client, data) {
 
         // Set short retention period (5 seconds)
         console.log("CC10: Setting short retention (5s)...");
-        const setRetentionResCC10 = client.invoke(
+        const setRetentionResCC10 = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
             {
                 name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}`,
@@ -3686,10 +3672,10 @@ function TestCC10_RetentionExpiration(client, data) {
 
         // Upload files continuously
         console.log("CC10: Uploading files during retention...");
-        const file1ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC10}`,
+        const file1ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc10-file1.txt", type: "TYPE_TEXT", content: encoding.b64encode("File 1") }), data.header);
 
-        const file2ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseIdCC10}`,
+        const file2ResCC10 = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIdCC10}/files`,
             JSON.stringify({ displayName: data.dbIDPrefix + "cc10-file2.txt", type: "TYPE_TEXT", content: encoding.b64encode("File 2") }), data.header);
 
         // Track uploaded file IDs for cleanup verification
@@ -3866,19 +3852,19 @@ function TestPhaseValidate(client, data) {
 
         const upload1 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ displayName: file1, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
         const upload2 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ displayName: file2, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
         const upload3 = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ displayName: file3, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
@@ -3982,7 +3968,7 @@ function TestPhaseValidate(client, data) {
         // TRIGGER UPDATE
         console.log("Validate: Triggering update to test validation phase...");
 
-        const updateRes = client.invoke(
+        const updateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -4317,7 +4303,7 @@ function TestPhaseSwap(client, data) {
         const filename = data.dbIDPrefix + "swap-test.txt";
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({
                 displayName: filename,
                 type: "TYPE_TEXT",
@@ -4357,7 +4343,7 @@ function TestPhaseSwap(client, data) {
         console.log("Phase 5 Swap: File processed, triggering update...");
 
         // Trigger update
-        const executeRes = client.invoke(
+        const executeRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -4487,7 +4473,7 @@ function TestPhaseSwap(client, data) {
         // files from concurrent tests running in parallel.
         const listFilesRes = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             null,
             data.header
         );
@@ -4517,7 +4503,7 @@ function TestPhaseSwap(client, data) {
         // API CHANGE: ListChunks now uses /files/{file_id}/chunks
         const chunksRes = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${currentFileId}/chunks`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${currentFileId}/chunks`,
             null,
             data.header
         );
@@ -4656,7 +4642,7 @@ function TestResourceCleanup(client, data) {
 
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
@@ -4704,7 +4690,7 @@ function TestResourceCleanup(client, data) {
 
         // Trigger update to create staging and rollback KBs
         console.log("Cleanup: Triggering system update...");
-        const updateRes = client.invoke(
+        const updateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -4784,7 +4770,7 @@ function TestResourceCleanup(client, data) {
         // (seconds, minutes, hours, days) to enable precise control over cleanup timing
         console.log("Cleanup: Testing SetKnowledgeBaseRollbackRetention API with 5 seconds...");
 
-        const setRetentionRes = client.invoke(
+        const setRetentionRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
             {
                 name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
@@ -4964,7 +4950,7 @@ function TestResourceCleanup(client, data) {
         console.log("Cleanup: Testing PurgeRollback API (manual purge)...");
 
         // Trigger another update to create a new rollback KB
-        const secondUpdateRes = client.invoke(
+        const secondUpdateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -5011,7 +4997,7 @@ function TestResourceCleanup(client, data) {
         // The second update may or may not create a rollback KB with resources depending on timing.
         // If it exists, the API should successfully purge it.
         // If it doesn't exist or was already auto-purged, the API should handle gracefully.
-        const purgeRes = client.invoke(
+        const purgeRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/PurgeRollbackAdmin",
             {
                 name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`
@@ -5112,7 +5098,7 @@ function TestResourceCleanup(client, data) {
         const minioTestFilename = data.dbIDPrefix + "minio-cleanup-test.txt";
         const minioTestUploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${minioTestKBId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${minioTestKBId}/files`,
             JSON.stringify({
                 displayName: minioTestFilename,
                 type: "TYPE_TEXT",
@@ -5163,7 +5149,7 @@ function TestResourceCleanup(client, data) {
 
         // Trigger update to create staging KB
         console.log("MinIO Cleanup Test: Triggering update to create staging KB...");
-        const minioTestUpdateRes = client.invoke(
+        const minioTestUpdateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [minioTestKBId] },
             data.metadata
@@ -5358,7 +5344,7 @@ function TestCollectionVersioning(client, data) {
         const filename = data.dbIDPrefix + "collection-ver-file.txt";
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
             data.header
         );
@@ -5402,7 +5388,7 @@ function TestCollectionVersioning(client, data) {
 
         // TEST 2: Trigger update and verify staging KB creates its own collection
         console.log("Collection Versioning: Triggering update...");
-        const updateRes = client.invoke(
+        const updateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -5508,7 +5494,7 @@ function TestCollectionVersioning(client, data) {
                 // files from concurrent tests running in parallel.
                 const listFilesRes = http.request(
                     "GET",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                     null,
                     data.header
                 );
@@ -5544,7 +5530,7 @@ function TestCollectionVersioning(client, data) {
                     // API CHANGE: ListChunks now uses /files/{file_id}/chunks
                     const chunksRes = http.request(
                         "GET",
-                        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${currentFileId}/chunks`,
+                        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${currentFileId}/chunks`,
                         null,
                         data.header
                     );
@@ -5670,7 +5656,7 @@ function TestRollbackAndReUpdate(client, data) {
         const filename = data.dbIDPrefix + "reupdate-v1.txt";
         const uploadRes = http.request(
             "POST",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             JSON.stringify({
                 displayName: filename,
                 type: "TYPE_TEXT",
@@ -5705,7 +5691,7 @@ function TestRollbackAndReUpdate(client, data) {
 
         // STEP 1: First update
         console.log(`Rollback Cycle: Executing first update for knowledgeBaseId=${knowledgeBaseId}, knowledgeBaseUid=${knowledgeBaseUid}...`);
-        const firstUpdateRes = client.invoke(
+        const firstUpdateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -5750,7 +5736,7 @@ function TestRollbackAndReUpdate(client, data) {
 
         // STEP 2: Perform rollback
         console.log("Rollback Cycle: Executing rollback...");
-        const rollbackRes = client.invoke(
+        const rollbackRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/RollbackAdmin",
             { name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}` },
             data.metadata
@@ -5787,7 +5773,7 @@ function TestRollbackAndReUpdate(client, data) {
         // Use the hash-based ID for API calls, and UID for database queries
         console.log(`Rollback Cycle: Using knowledgeBaseId=${knowledgeBaseId} for second update`);
 
-        const secondUpdateRes = client.invoke(
+        const secondUpdateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseId] },
             data.metadata
@@ -5836,7 +5822,7 @@ function TestRollbackAndReUpdate(client, data) {
         // files from concurrent tests running in parallel.
         const listFilesAfterReUpdateRes = http.request(
             "GET",
-            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             null,
             data.header
         );
@@ -5869,7 +5855,7 @@ function TestRollbackAndReUpdate(client, data) {
             // API CHANGE: ListChunks now uses /files/{file_id}/chunks
             const chunksAfterReUpdateRes = http.request(
                 "GET",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${currentFileIdAfterReUpdate}/chunks`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${currentFileIdAfterReUpdate}/chunks`,
                 null,
                 data.header
             );
@@ -5965,7 +5951,7 @@ function TestRollbackAndReUpdate(client, data) {
 
             // Set a very short rollback retention (5 seconds) to trigger cleanup workflow quickly
             console.log("Rollback Cycle: Setting rollback retention to 5 seconds to trigger cleanup...");
-            const retentionRes = client.invoke(
+            const retentionRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
                 {
                     name: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
@@ -6127,7 +6113,7 @@ function TestMultipleKBUpdates(client, data) {
             const filename = data.dbIDPrefix + `multi-file-${i}.txt`;
             const uploadRes = http.request(
                 "POST",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${kb.id}`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
                 JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: constant.docSampleTxt }),
                 data.header
             );
@@ -6202,7 +6188,7 @@ function TestMultipleKBUpdates(client, data) {
         }
 
         // TEST 1: Trigger update for all knowledge bases simultaneously
-        const updateRes = client.invoke(
+        const updateRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: knowledgeBaseIds },
             data.metadata
@@ -6427,7 +6413,7 @@ function TestMultipleKBUpdates(client, data) {
             }
 
             const kbName = `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseIds[i]}`;
-            const retentionRes = client.invoke(
+            const retentionRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/SetRollbackRetentionAdmin",
                 {
                     name: kbName,
@@ -6718,7 +6704,7 @@ function TestEdgeCases(client, data) {
 
         // Trigger update on empty knowledge base
         console.log(`Edge Cases: Triggering update on empty knowledge base ${emptyKBId} (UID: ${emptyKBUid})...`);
-        const executeRes = client.invoke(
+        const executeRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [emptyKBId] },
             data.metadata
@@ -6740,7 +6726,7 @@ function TestEdgeCases(client, data) {
         console.log(`Edge Cases: Update workflow started. Message: ${JSON.stringify(executeRes.message)}`);
 
         // Check initial status (polling logic now handles race conditions)
-        let statusRes = client.invoke(
+        let statusRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
             {},
             data.metadata
@@ -6772,7 +6758,7 @@ function TestEdgeCases(client, data) {
         // If we delete the KB while workflow is still running, it will be canceled!
         if (updateCompletedEmpty === true || updateCompletedEmpty === false) {
             // Get final status regardless of poll result
-            const statusRes = client.invoke(
+            const statusRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
                 {},
                 data.metadata
@@ -6887,7 +6873,7 @@ function TestEdgeCases(client, data) {
             const missingCollFilename = data.dbIDPrefix + "missing-coll-test.txt";
             const missingCollUploadRes = http.request(
                 "POST",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${missingCollKBId}`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${missingCollKBId}/files`,
                 JSON.stringify({
                     displayName: missingCollFilename,
                     type: "TYPE_TEXT",
@@ -6953,7 +6939,7 @@ function TestEdgeCases(client, data) {
 
                             // Now trigger update - this will test the swap logic with missing collection
                             console.log("Edge Cases: Triggering update with missing Milvus collection...");
-                            const missingCollUpdateRes = client.invoke(
+                            const missingCollUpdateRes = grpcInvokeWithRetry(client,
                                 "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
                                 { knowledge_base_ids: [missingCollKBId] },
                                 data.metadata
@@ -7036,7 +7022,7 @@ function TestEdgeCases(client, data) {
             const idempotentFilename = data.dbIDPrefix + "idempotent-test.jpg";
             const idempotentUploadRes = http.request(
                 "POST",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${idempotentTestKBId}`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${idempotentTestKBId}/files`,
                 JSON.stringify({
                     displayName: idempotentFilename,
                     type: "TYPE_IMAGE",
@@ -7140,7 +7126,7 @@ function TestEdgeCases(client, data) {
             // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
             const updateCompletedFileRes = http.request(
                 "POST",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${updateCompletedKBId}`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${updateCompletedKBId}/files`,
                 JSON.stringify({
                     displayName: data.dbIDPrefix + "update-completed-test.txt",
                     type: "TYPE_TEXT",
@@ -7160,7 +7146,7 @@ function TestEdgeCases(client, data) {
 
                 // Trigger update
                 console.log("Edge Cases: Triggering update to test updateCompleted flag behavior...");
-                const updateCompletedUpdateRes = client.invoke(
+                const updateCompletedUpdateRes = grpcInvokeWithRetry(client,
                     "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
                     { knowledge_base_ids: [updateCompletedKBId] },
                     data.metadata
@@ -7177,7 +7163,7 @@ function TestEdgeCases(client, data) {
 
                     // CRITICAL: Verify that the KB is marked as COMPLETED (not FAILED)
                     // This validates Fix #2: updateCompleted flag is set immediately after swap
-                    const finalStatusRes = client.invoke(
+                    const finalStatusRes = grpcInvokeWithRetry(client,
                         "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
                         {},
                         data.metadata
@@ -7271,7 +7257,7 @@ function TestEdgeCases(client, data) {
             const constraintFilename = data.dbIDPrefix + "constraint-test.txt";
             const constraintUploadRes = http.request(
                 "POST",
-                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${constraintTestKBId}`,
+                `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${constraintTestKBId}/files`,
                 JSON.stringify({
                     displayName: constraintFilename,
                     type: "TYPE_TEXT",
@@ -7302,7 +7288,7 @@ function TestEdgeCases(client, data) {
                     console.log("Bug Regression: File processed, triggering update to test swap constraint handling...");
 
                     // Trigger update - this will test the constraint handling during swap
-                    const constraintUpdateRes = client.invoke(
+                    const constraintUpdateRes = grpcInvokeWithRetry(client,
                         "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
                         { knowledge_base_ids: [constraintTestKBId] },
                         data.metadata
@@ -7429,7 +7415,7 @@ function TestEdgeCases(client, data) {
                 const filename = data.dbIDPrefix + testFile.name;
                 const uploadRes = http.request(
                     "POST",
-                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${duplicateTestKBId}`,
+                    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${duplicateTestKBId}/files`,
                     JSON.stringify({
                         displayName: filename,
                         type: "TYPE_TEXT",
@@ -7475,7 +7461,7 @@ function TestEdgeCases(client, data) {
 
                     // Trigger update
                     console.log("Bug Regression: Triggering update to test atomic swap...");
-                    const duplicateUpdateRes = client.invoke(
+                    const duplicateUpdateRes = grpcInvokeWithRetry(client,
                         "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
                         { knowledge_base_ids: [duplicateTestKBId] },
                         data.metadata
@@ -7595,7 +7581,7 @@ function TestObservability(client, data) {
         check(true, { [constant.banner(groupName)]: () => true });
 
         // Test GetUpdateStatus structure
-        const statusRes = client.invoke(
+        const statusRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
             {},
             data.metadata
@@ -7673,7 +7659,7 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         const knowledgeBaseIdAbort = kbAbort.id;
 
         // Start update on this knowledge base (no file needed for abort test)
-        const executeRes = client.invoke(
+        const executeRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdAbort] },
             data.metadata
@@ -7686,7 +7672,7 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
 
         // Test 14.3: Abort the specific knowledge base
         console.log("\n=== Test 14.3: Abort specific knowledge base ===");
-        const abortRes = client.invoke(
+        const abortRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/AbortKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: [knowledgeBaseIdAbort] },
             data.metadata
@@ -7717,7 +7703,7 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
 
         // Test 14.4: Verify knowledge base status is now "KNOWLEDGE_BASE_UPDATE_STATUS_ABORTED"
         console.log("\n=== Test 14.4: Verify knowledge base status ===");
-        const statusCheckRes = client.invoke(
+        const statusCheckRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/GetKnowledgeBaseUpdateStatusAdmin",
             {},
             data.metadata
@@ -7784,7 +7770,7 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         }
 
         // Start updates on these knowledge bases
-        const executeAllRes = client.invoke(
+        const executeAllRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/ExecuteKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: knowledgeBaseIds },
             data.metadata
@@ -7797,7 +7783,7 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
         // Abort the specific knowledge bases we just created (not ALL knowledge bases)
         // CRITICAL: We must specify knowledgeBaseIds to avoid aborting updates from other test groups
         // that may still be running asynchronously (e.g., TEST_GROUP_12's empty KB update)
-        const abortAllRes = client.invoke(
+        const abortAllRes = grpcInvokeWithRetry(client,
             "artifact.v1alpha.ArtifactPrivateService/AbortKnowledgeBaseUpdateAdmin",
             { knowledge_base_ids: knowledgeBaseIds },  // Abort only our 2 test knowledge bases
             data.metadata
@@ -7813,7 +7799,7 @@ function TestAbortKnowledgeBaseUpdate(client, data) {
 
         // Cleanup - delete test knowledge bases
         console.log("\n=== Cleanup test knowledge bases ===");
-        [knowledgeBaseIdAbort, ...knowledgeBaseIds].forEach(kbId => {
+        [knowledgeBaseIdAbort, ...knowledgeBases].forEach(kbId => {
             http.request(
                 "DELETE",
                 `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}`,

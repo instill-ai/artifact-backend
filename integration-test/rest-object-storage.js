@@ -116,32 +116,17 @@ export function setup() {
   console.log(`rest-object-storage.js: Using unique test prefix: ${dbIDPrefix}`);
 
   // Authenticate with retry to handle transient failures
-  var loginResp = helper.authenticateWithRetry(
-    constant.mgmtRESTPublicHost,
-    constant.defaultUsername,
-    constant.defaultPassword
-  );
-
-  check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r && r.status === 200,
-  });
-
-  if (!loginResp || loginResp.status !== 200) {
-    console.error("Setup: Authentication failed, cannot continue");
-    return null;
-  }
-
-  var accessToken = loginResp.json().accessToken;
+  const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
   var header = {
     "headers": {
-      "Authorization": `Bearer ${accessToken}`,
+      "Authorization": authHeader,
       "Content-Type": "application/json",
     },
     "timeout": "600s",
   }
 
   var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-    headers: { "Authorization": `Bearer ${accessToken}` }
+    headers: { "Authorization": authHeader }
   })
 
   return {
@@ -236,7 +221,7 @@ function createFile(data, kbId, filename, fileType, content) {
 
   const res = http.request(
     "POST",
-    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${kbId}`,
+    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files`,
     JSON.stringify(body),
     data.header
   );
@@ -263,7 +248,7 @@ function waitForFileAvailable(data, kbId, fileId, maxWaitSeconds = 10) {
   while (new Date().getTime() < endTime) {
     const res = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${fileId}`,
       null,
       data.header
     );
@@ -283,7 +268,7 @@ function waitForFileAvailable(data, kbId, fileId, maxWaitSeconds = 10) {
 // Helper function to get file with specific view and storage provider
 // Uses the new flattened URL: GET /namespaces/{ns}/files/{file}
 function getFileWithStorage(data, kbId, fileId, view, storageProvider) {
-  let url = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`;
+  let url = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${fileId}`;
 
   const params = [];
   if (view) {

@@ -31,7 +31,9 @@ parse_results() {
     for test_file in \
         "rest.js" \
         "rest-object-storage.js" \
+        "rest-invariants.js" \
         "rest-hash-based-ids.js" \
+        "rest-namespace-permission.js" \
         "rest-file-type.js" \
         "rest-db.js" \
         "rest-ai-client.js" \

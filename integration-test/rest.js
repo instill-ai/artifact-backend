@@ -99,32 +99,17 @@ export function setup() {
   console.log(`rest.js: Using unique test prefix: ${dbIDPrefix}`);
 
   // Authenticate with retry to handle transient failures
-  var loginResp = helper.authenticateWithRetry(
-    constant.mgmtRESTPublicHost,
-    constant.defaultUsername,
-    constant.defaultPassword
-  );
-
-  check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r && r.status === 200,
-  });
-
-  if (!loginResp || loginResp.status !== 200) {
-    console.error("Setup: Authentication failed, cannot continue");
-    return null;
-  }
-
-  var accessToken = loginResp.json().accessToken;
+  const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
   var header = {
     "headers": {
-      "Authorization": `Bearer ${accessToken}`,
+      "Authorization": authHeader,
       "Content-Type": "application/json",
     },
     "timeout": "600s",
   }
 
   var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-    headers: { "Authorization": `Bearer ${accessToken}` }
+    headers: { "Authorization": authHeader }
   })
 
   return {
@@ -397,7 +382,7 @@ export function TEST_07_CleanupFiles(data) {
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
     const uploadRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
       JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
       data.header
     );
@@ -472,7 +457,7 @@ export function TEST_07_CleanupFiles(data) {
           (SELECT COUNT(*) FROM embedding WHERE file_uid = '${fileUid}') as embeddings
       `;
       try {
-        const result = constant.db.exec(checkAfter);
+        const result = constant.artifactDb.exec(checkAfter);
         if (result && result.length > 0) {
           const after = result[0];
           check(after, {
@@ -536,7 +521,7 @@ export function TEST_08_E2EKnowledgeBase(data) {
         tags,
         req: {
           method: "POST",
-          url: `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+          url: `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
           body: JSON.stringify({ displayName: filename, type: s.type, content: s.content, tags: tags }),
           params: data.header,
         },
@@ -583,7 +568,7 @@ export function TEST_08_E2EKnowledgeBase(data) {
         const lastBatch = http.batch(
           Array.from(pending).map((id) => ({
             method: "GET",
-            url: `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${id}`,
+            url: `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${id}`,
             params: data.header,
           }))
         );
@@ -637,7 +622,7 @@ export function TEST_08_E2EKnowledgeBase(data) {
     // Verify file metadata
     // API CHANGE: ListFiles now uses /files (top-level) with filter
     for (const f of uploaded) {
-      var viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/files?filter=${encodeURIComponent(`id = "${f.fileId}"`)}`
+      var viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files?filter=${encodeURIComponent(`id = "${f.fileId}"`)}`
       const viewRes = http.request("GET", constant.artifactRESTPublicHost + viewPath, null, data.header);
 
       if (viewRes.status === 200) {
@@ -662,7 +647,7 @@ export function TEST_08_E2EKnowledgeBase(data) {
 
     // List knowledge base files
     // API CHANGE: ListFiles now uses /files (top-level) - filter by knowledgeBaseIds if needed
-    const listFilesRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?pageSize=100`, null, data.header);
+    const listFilesRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files?pageSize=100`, null, data.header);
     let listFilesJson; try { listFilesJson = listFilesRes.json(); } catch (e) { listFilesJson = {}; }
     check(listFilesRes, {
       "E2E: List files returns all uploaded": () =>
@@ -672,7 +657,7 @@ export function TEST_08_E2EKnowledgeBase(data) {
     // List chunks for first file
     // API CHANGE: ListChunks now uses /files/{file_id}/chunks
     if (fileIds.length > 0) {
-      const listChunksRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileIds[0]}/chunks`, null, data.header);
+      const listChunksRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileIds[0]}/chunks`, null, data.header);
       check(listChunksRes, {
         "E2E: List chunks returns array": (r) => {
           try {
@@ -687,7 +672,7 @@ export function TEST_08_E2EKnowledgeBase(data) {
     // Get summary
     // API CHANGE: GetFile now uses /files/{file_id}
     if (fileIds.length > 0) {
-      const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileIds[0]}?view=VIEW_SUMMARY`, null, data.header);
+      const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileIds[0]}?view=VIEW_SUMMARY`, null, data.header);
       check(getSummaryRes, {
         "E2E: Get summary returns derived resource URI": (r) => {
           try {
@@ -711,7 +696,7 @@ export function TEST_08_E2EKnowledgeBase(data) {
         // API CHANGE: UpdateFile now uses /files/{file_id}
         const updateTagsRes = http.request(
           "PATCH",
-          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${pdfFile.fileId}?updateMask=tags`,
+          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${pdfFile.fileId}?updateMask=tags`,
           JSON.stringify(updateTagsBody),
           data.header
         );
@@ -735,23 +720,11 @@ export function TEST_08_E2EKnowledgeBase(data) {
 
     // Chunk similarity search tests
     {
-      // Test 1: Search with multiple tags using OR logic (array_contains_any)
-      // All files were embedded with ["kim", "knives"], so searching for ["scott", "kim"]
-      // will match on "kim" (OR logic) and return results.
-      // Note: Tags are stored as Milvus scalar fields at embedding time.
-      const searchBody1 = {
-        knowledgeBaseId: knowledgeBaseId,  // Now passed in request body
-        textPrompt: "test file markdown",
-        topK: 10,
-        tags: ["scott", "kim"],  // OR logic: matches chunks with "scott" OR "kim"
-      };
-
-      // httpRetry automatically handles transient errors (429, 5xx)
-      // New URL format: POST /v1alpha/namespaces/{ns}/searchChunks (KrakenD doesn't support colon)
+      // New URL format: POST /v1alpha/namespaces/{ns}/search-chunks
       const searchRes1 = http.request(
         "POST",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/searchChunks`,
-        JSON.stringify(searchBody1),
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/search-chunks`,
+        JSON.stringify({ knowledgeBase: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, textPrompt: "test file markdown", topK: 10, tags: ["scott", "kim"] }),
         data.header
       );
       let searchJson1; try { searchJson1 = searchRes1.json(); } catch (e) { searchJson1 = {}; }
@@ -763,22 +736,22 @@ export function TEST_08_E2EKnowledgeBase(data) {
         "E2E: Chunk search returns results": () => similarChunks1.length > 0,
         "E2E: Chunks have similarity scores": () =>
           similarChunks1.every(chunk => typeof chunk.similarityScore === 'number' && chunk.similarityScore >= 0),
-        "E2E: Chunks have metadata": () =>
-          similarChunks1.every(chunk => chunk.chunkMetadata && chunk.chunkMetadata.originalFileId),
+        "E2E: Chunks have metadata": (r) => {
+          try {
+            const body = r.json();
+            const similarChunks = body.similarChunks || [];
+            return similarChunks.every(chunk => chunk.chunkMetadata && chunk.chunkMetadata.id);
+          } catch (e) {
+            return false;
+          }
+        },
       });
 
       // Test 2: Search with original embedded tags (all files have "kim", "knives")
-      const searchBody2 = {
-        knowledgeBaseId: knowledgeBaseId,  // Now passed in request body
-        textPrompt: "test file markdown",
-        topK: 10,
-        tags: ["kim", "knives"],  // Tags that were originally embedded
-      };
-
       const searchRes2 = http.request(
         "POST",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/searchChunks`,
-        JSON.stringify(searchBody2),
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/search-chunks`,
+        JSON.stringify({ knowledgeBase: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, textPrompt: "test file markdown", topK: 10, tags: ["kim", "knives"] }),
         data.header
       );
       let searchJson2; try { searchJson2 = searchRes2.json(); } catch (e) { searchJson2 = {}; }
@@ -800,21 +773,14 @@ export function TEST_08_E2EKnowledgeBase(data) {
       // Previously, only Postgres was updated, causing searches with new tags to fail.
       // We search with ONLY "scott" (new tag) to verify Milvus was synced.
       if (pdfFileId) {
-        const searchBodyNewTag = {
-          knowledgeBaseId: knowledgeBaseId,  // Now passed in request body
-          textPrompt: "test file markdown",
-          topK: 10,
-          tags: ["scott"],  // NEW tag that was added via UpdateFile (not in original embedded tags)
-        };
-
         // Wait a moment for Milvus to sync after tag update
         sleep(1);
 
         // httpRetry automatically handles transient errors
         const searchResNewTag = http.request(
           "POST",
-          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/searchChunks`,
-          JSON.stringify(searchBodyNewTag),
+          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/search-chunks`,
+          JSON.stringify({ knowledgeBase: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, textPrompt: "test file markdown", topK: 10, tags: ["scott"] }),
           data.header
         );
         let searchJsonNewTag; try { searchJsonNewTag = searchResNewTag.json(); } catch (e) { searchJsonNewTag = {}; }
@@ -857,17 +823,11 @@ export function TEST_08_E2EKnowledgeBase(data) {
       if (documentFiles.length > 0) {
         // Note: uid removed in AIP refactoring - use id for identification
         const documentFileIds = documentFiles.map(f => f.fileId);
-        const searchBody3 = {
-          knowledgeBaseId: knowledgeBaseId,  // Now passed in request body
-          textPrompt: "test file markdown",
-          topK: 50,
-          fileIds: documentFileIds,
-        };
 
         const searchRes3 = http.request(
           "POST",
-          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/searchChunks`,
-          JSON.stringify(searchBody3),
+          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/search-chunks`,
+          JSON.stringify({ knowledgeBase: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, textPrompt: "test file markdown", topK: 50, files: documentFileIds.map(id => `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${id}`) }),
           data.header
         );
         let searchJson3; try { searchJson3 = searchRes3.json(); } catch (e) { searchJson3 = {}; }
@@ -968,7 +928,7 @@ function createFileAuthenticated(data, knowledgeBaseId) {
   // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
   const res = http.request(
     "POST",
-    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
     JSON.stringify(body),
     data.header
   );
@@ -1048,7 +1008,7 @@ export function TEST_13_JWT_CreateFile(data) {
     const created = createKBAuthenticated(data);
     const body = { displayName: data.dbIDPrefix + "x.txt", type: "TYPE_TEXT", content: constant.docSampleTxt };
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
-    const res = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${created.id}`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
+    const res = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`, JSON.stringify(body), constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: POST file");
     check(res, { "JWT: POST file 401": (r) => r.status === 401 });
     deleteKBAuthenticated(data, created.id);
@@ -1078,7 +1038,7 @@ export function TEST_15_JWT_GetFile(data) {
     const created = createKBAuthenticated(data);
     const fileId = createFileAuthenticated(data, created.id);
     // API CHANGE: GetFile now uses /files/{file_id} (top-level)
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileId}`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET file");
     check(res, { "JWT: GET file 401": (r) => r.status === 401 });
     deleteKBAuthenticated(data, created.id);
@@ -1093,7 +1053,7 @@ export function TEST_16_JWT_GetFileContent(data) {
     const created = createKBAuthenticated(data);
     const fileId = createFileAuthenticated(data, created.id);
     // API CHANGE: GetFile now uses /files/{file_id}
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CONTENT`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileId}?view=VIEW_CONTENT`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET file content");
     check(res, { "JWT: GET file content 401": (r) => r.status === 401 });
     deleteKBAuthenticated(data, created.id);
@@ -1108,7 +1068,7 @@ export function TEST_17_JWT_GetFileSummary(data) {
     const created = createKBAuthenticated(data);
     const fileId = createFileAuthenticated(data, created.id);
     // API CHANGE: GetFile now uses /files/{file_id}
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_SUMMARY`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileId}?view=VIEW_SUMMARY`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET file summary");
     check(res, { "JWT: GET file summary 401": (r) => r.status === 401 });
     deleteKBAuthenticated(data, created.id);
@@ -1123,7 +1083,7 @@ export function TEST_18_JWT_ListChunks(data) {
     const created = createKBAuthenticated(data);
     const fileId = createFileAuthenticated(data, created.id);
     // API CHANGE: ListChunks now uses /files/{file_id}/chunks
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}/chunks`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileId}/chunks`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET chunks");
     check(res, { "JWT: GET chunks 401 or 404": (r) => r.status === 401 || r.status === 404 });
     deleteKBAuthenticated(data, created.id);
@@ -1138,7 +1098,7 @@ export function TEST_19_JWT_GetFileCache(data) {
     const created = createKBAuthenticated(data);
     const fileId = createFileAuthenticated(data, created.id);
     // API CHANGE: GetFile now uses /files/{file_id}
-    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CACHE`, null, constant.paramsHTTPWithJWT.headers);
+    const res = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileId}?view=VIEW_CACHE`, null, constant.paramsHTTPWithJWT.headers);
     logUnexpected(res, "JWT: GET file cache");
     check(res, { "JWT: GET file cache 401": (r) => r.status === 401 });
     deleteKBAuthenticated(data, created.id);
@@ -1160,7 +1120,7 @@ function waitForCacheReady(namespaceId, knowledgeBaseId, fileId, headers, maxWai
     // API CHANGE: GetFile now uses /files/{file_id}
     const res = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/files/${fileId}?view=VIEW_CACHE`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_CACHE`,
       null,
       headers
     );
@@ -1216,7 +1176,7 @@ export function TEST_20_GetFileCache(data) {
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
     const uploadRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${created.id}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`,
       JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
       data.header
     );
@@ -1268,7 +1228,7 @@ export function TEST_20_GetFileCache(data) {
 
     // First call to GetFile with VIEW_CACHE should have the cache ready
     // API CHANGE: GetFile now uses /files/{file_id}
-    const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
+    const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
     logUnexpected(res1, "GET file VIEW_CACHE (first call)");
 
     check(res1, {
@@ -1313,7 +1273,7 @@ export function TEST_21_GetFileCacheRenewal(data) {
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
     const uploadRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${created.id}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`,
       JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSamplePdf }),
       data.header
     );
@@ -1361,7 +1321,7 @@ export function TEST_21_GetFileCacheRenewal(data) {
 
     // First call to create cache
     // API CHANGE: GetFile now uses /files/{file_id}
-    const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
+    const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
     check(res1, { "First call status 200": (r) => r.status === 200 });
 
     // Wait a moment
@@ -1369,7 +1329,7 @@ export function TEST_21_GetFileCacheRenewal(data) {
 
     // Second call should renew the cache
     // API CHANGE: GetFile now uses /files/{file_id}
-    const res2 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
+    const res2 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
     logUnexpected(res2, "GET file VIEW_CACHE (renewal)");
 
     check(res2, {
@@ -1416,7 +1376,7 @@ export function TEST_21_GetFileCacheRenewal(data) {
     // Third call to verify renewal works multiple times
     sleep(1);
     // API CHANGE: GetFile now uses /files/{file_id}
-    const res3 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
+    const res3 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
     check(res3, { "Third call status 200": (r) => r.status === 200 });
 
     deleteKBAuthenticated(data, created.id);
@@ -1434,7 +1394,7 @@ export function TEST_22_GetFileCacheLargeFile(data) {
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
     const uploadRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${created.id}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files`,
       JSON.stringify({ displayName: filename, type: "TYPE_PDF", content: constant.docSampleMultiPagePdf }),
       data.header
     );
@@ -1494,7 +1454,7 @@ export function TEST_22_GetFileCacheLargeFile(data) {
 
     // Call GetFile with VIEW_CACHE
     // API CHANGE: GetFile now uses /files/{file_id}
-    const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
+    const res1 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${created.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
     logUnexpected(res1, "Large file: GET file VIEW_CACHE");
 
     check(res1, {
@@ -1527,7 +1487,7 @@ export function TEST_22_GetFileCacheLargeFile(data) {
     // Test cache renewal for large files
     sleep(2);
     // API CHANGE: GetFile now uses /files/{file_id}
-    const res2 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
+    const res2 = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_CACHE`, null, data.header);
 
     check(res2, {
       "Large file: Second call status 200": (r) => r.status === 200,
@@ -1581,7 +1541,7 @@ export function TEST_22_GetFileCacheLargeFile(data) {
 
     // Verify file metadata
     // API CHANGE: GetFile now uses /files/{file_id}
-    const fileRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`, null, data.header);
+    const fileRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`, null, data.header);
     if (fileRes.status === 200) {
       try {
         const fileData = fileRes.json().file;
@@ -1657,7 +1617,7 @@ export function TEST_23_OwnerCreatorFields(data) {
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
     const fileRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${kb.id}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
       JSON.stringify(fileReqBody),
       data.header
     );
@@ -1673,7 +1633,7 @@ export function TEST_23_OwnerCreatorFields(data) {
       "File: creator object exists and is valid": () => file && helper.isValidCreator(file.creator, data.expectedOwner),
       "File: creator.id matches expected user": () => file && file.creator && file.creator.id === data.expectedOwner.id,
       // Note: uid field removed in AIP refactoring - no longer checking creator.uid
-      "File: collectionIds is array (or undefined)": () => file && (!file.collectionIds || Array.isArray(file.collectionIds)),
+      "File: knowledgeBases is array (or undefined)": () => file && (!file.knowledgeBases || Array.isArray(file.knowledgeBases)),
     });
 
     // Verify owner/creator fields persist after fetching the knowledge base
@@ -1721,7 +1681,7 @@ export function TEST_23_OwnerCreatorFields(data) {
       // API CHANGE: GetFile now uses /files/{file_id}
       const getFileRes = http.request(
         "GET",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${file.id}`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files/${file.id}`,
         null,
         data.header
       );
@@ -1737,10 +1697,9 @@ export function TEST_23_OwnerCreatorFields(data) {
       });
 
       // Verify owner/creator fields persist when listing files
-      // API CHANGE: ListFiles now uses /files (top-level)
       const listFilesRes = http.request(
         "GET",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
         null,
         data.header
       );
@@ -1805,7 +1764,7 @@ export function TEST_24_ReservedTagsValidation(data) {
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
     const normalRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${kb.id}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
       JSON.stringify(normalTagsBody),
       data.header
     );
@@ -1815,8 +1774,8 @@ export function TEST_24_ReservedTagsValidation(data) {
     check(normalRes, {
       "Normal tags: File created successfully (200)": (r) => r.status === 200,
       "Normal tags: File has correct tags": () => normalFile && Array.isArray(normalFile.tags) && normalFile.tags.length === 3,
-      // Note: collectionUids renamed to collectionIds in AIP refactoring
-      "Normal tags: collectionIds is empty array": () => normalFile && Array.isArray(normalFile.collectionIds) && normalFile.collectionIds.length === 0,
+      // Note: knowledgeBases renamed to knowledgeBases in AIP refactoring
+      "Normal tags: knowledgeBases has our KB": () => normalFile && Array.isArray(normalFile.knowledgeBases) && normalFile.knowledgeBases.length === 1,
     });
 
     // Test 2: Try to create file with agent:collection: prefix - should be rejected
@@ -1830,7 +1789,7 @@ export function TEST_24_ReservedTagsValidation(data) {
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
     const agentRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${kb.id}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
       JSON.stringify(agentTagBody),
       data.header
     );
@@ -1859,7 +1818,7 @@ export function TEST_24_ReservedTagsValidation(data) {
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
     const instillRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${kb.id}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files`,
       JSON.stringify(instillTagBody),
       data.header
     );
@@ -1887,7 +1846,7 @@ export function TEST_24_ReservedTagsValidation(data) {
       // API CHANGE: UpdateFile now uses /files/{file_id}
       const updateRes = http.request(
         "PATCH",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${normalFile.id}?updateMask=tags`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files/${normalFile.id}?updateMask=tags`,
         JSON.stringify(updateBody),
         data.header
       );
@@ -1913,7 +1872,7 @@ export function TEST_24_ReservedTagsValidation(data) {
       // API CHANGE: UpdateFile now uses /files/{file_id}
       const normalUpdateRes = http.request(
         "PATCH",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${normalFile.id}?updateMask=tags`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kb.id}/files/${normalFile.id}?updateMask=tags`,
         JSON.stringify(normalUpdateBody),
         data.header
       );
@@ -1923,8 +1882,8 @@ export function TEST_24_ReservedTagsValidation(data) {
       check(normalUpdateRes, {
         "Update with normal tags: Succeeds (200)": (r) => r.status === 200,
         "Update with normal tags: Tags updated correctly": () => updatedFile && Array.isArray(updatedFile.tags) && updatedFile.tags.includes("updated-tag"),
-        // Note: collectionUids renamed to collectionIds in AIP refactoring
-        "Update with normal tags: collectionIds still empty": () => updatedFile && Array.isArray(updatedFile.collectionIds) && updatedFile.collectionIds.length === 0,
+        // Note: knowledgeBases renamed to knowledgeBases in AIP refactoring
+        "Update with normal tags: knowledgeBases still has our KB": () => updatedFile && Array.isArray(updatedFile.knowledgeBases) && updatedFile.knowledgeBases.length === 1,
       });
     }
 

@@ -32,6 +32,7 @@ import { check, group } from "k6";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
+import { grpcInvokeWithRetry } from "./helper.js";
 
 // Use httpRetry for automatic retry on transient errors (429, 5xx)
 const http = helper.httpRetry;
@@ -59,25 +60,10 @@ export function setup() {
     console.log(`grpc-system-admin.js: Using unique test prefix: ${dbIDPrefix}`);
 
     // Authenticate with retry to handle transient failures
-    const loginResp = helper.authenticateWithRetry(
-        constant.mgmtRESTPublicHost,
-        constant.defaultUsername,
-        constant.defaultPassword
-    );
-
-    check(loginResp, {
-        "Setup: Authentication successful": (r) => r && r.status === 200,
-    });
-
-    if (!loginResp || loginResp.status !== 200) {
-        console.error("Setup: Authentication failed, cannot continue");
-        return null;
-    }
-
-    const accessToken = loginResp.json().accessToken;
+    const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
     const grpcMetadata = {
         "metadata": {
-            "Authorization": `Bearer ${accessToken}`,
+            "Authorization": authHeader,
         },
         "timeout": "300s",
     };
@@ -100,7 +86,7 @@ export function teardown(data) {
 
         for (const systemId of testSystemIds) {
             try {
-                client.invoke(
+                grpcInvokeWithRetry(client,
                     "artifact.v1alpha.ArtifactPrivateService/DeleteSystemAdmin",
                     { system_id: systemId },
                     data.metadata
@@ -133,7 +119,7 @@ export default function (data) {
         group("Phase 1: List all system configurations", () => {
             console.log("\n=== Phase 1: Listing all systems ===");
 
-            const listRes = client.invoke(
+            const listRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/ListSystemsAdmin",
                 {},
                 data.metadata
@@ -175,7 +161,7 @@ export default function (data) {
                 console.log("Phase 2: OpenAI system ID not found in Phase 1, skipping OpenAI tests");
             } else {
                 // Get OpenAI system using its canonical ID (sys-{hash} format)
-                const openaiRes = client.invoke(
+                const openaiRes = grpcInvokeWithRetry(client,
                     "artifact.v1alpha.ArtifactPrivateService/GetSystemAdmin",
                     { system_id: openaiSystemId },
                     data.metadata
@@ -197,7 +183,7 @@ export default function (data) {
                 console.log("Phase 2: Gemini system ID not found in Phase 1, skipping Gemini tests");
             } else {
                 // Get Gemini system using its canonical ID
-                const geminiRes = client.invoke(
+                const geminiRes = grpcInvokeWithRetry(client,
                     "artifact.v1alpha.ArtifactPrivateService/GetSystemAdmin",
                     { system_id: geminiSystemId },
                     data.metadata
@@ -221,7 +207,7 @@ export default function (data) {
         group("Phase 3: Get default system configuration", () => {
             console.log("\n=== Phase 3: Getting default system ===");
 
-            const defaultRes = client.invoke(
+            const defaultRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/GetDefaultSystemAdmin",
                 {},
                 data.metadata
@@ -249,7 +235,7 @@ export default function (data) {
             // API CHANGE: ID is now auto-generated as "sys-{hash}", use display_name instead
             const customDisplayName = `${data.dbIDPrefix}sysadmin-custom`;
 
-            const createRes = client.invoke(
+            const createRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/CreateSystemAdmin",
                 {
                     system: {
@@ -310,7 +296,7 @@ export default function (data) {
             };
             console.log(`Phase 5: Request object: ${JSON.stringify(updateRequest)}`);
 
-            const updateRes = client.invoke(
+            const updateRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/UpdateSystemAdmin",
                 updateRequest,
                 data.metadata
@@ -333,7 +319,7 @@ export default function (data) {
             // Update both config and description
             console.log("\n=== Phase 5: Updating config with field mask ===");
 
-            const updateConfigRes = client.invoke(
+            const updateConfigRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/UpdateSystemAdmin",
                 {
                     system: {
@@ -384,7 +370,7 @@ export default function (data) {
             // API CHANGE: IDs are immutable, we can only change display_name (and slug)
             const newDisplayName = `${data.dbIDPrefix}sysadmin-renamed`;
 
-            const renameRes = client.invoke(
+            const renameRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/RenameSystemAdmin",
                 {
                     system_id: customSystemId,
@@ -410,7 +396,7 @@ export default function (data) {
             }
 
             // Verify system is still accessible by the same ID (ID is immutable)
-            const getRes = client.invoke(
+            const getRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/GetSystemAdmin",
                 { system_id: customSystemId },
                 data.metadata
@@ -435,7 +421,7 @@ export default function (data) {
             }
 
             // First, get current default
-            const getCurrentDefaultRes = client.invoke(
+            const getCurrentDefaultRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/GetDefaultSystemAdmin",
                 {},
                 data.metadata
@@ -448,7 +434,7 @@ export default function (data) {
             }
 
             // Set custom system as default
-            const setDefaultRes = client.invoke(
+            const setDefaultRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/SetDefaultSystemAdmin",
                 { system_id: renamedSystemId },
                 data.metadata
@@ -461,7 +447,7 @@ export default function (data) {
             });
 
             // Verify via GetDefaultSystemAdmin
-            const verifyDefaultRes = client.invoke(
+            const verifyDefaultRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/GetDefaultSystemAdmin",
                 {},
                 data.metadata
@@ -476,7 +462,7 @@ export default function (data) {
             // Restore original default
             if (previousDefaultId && previousDefaultId !== renamedSystemId) {
                 console.log(`Phase 7: Restoring original default: ${previousDefaultId}`);
-                const restoreRes = client.invoke(
+                const restoreRes = grpcInvokeWithRetry(client,
                     "artifact.v1alpha.ArtifactPrivateService/SetDefaultSystemAdmin",
                     { system_id: previousDefaultId },
                     data.metadata
@@ -500,7 +486,7 @@ export default function (data) {
                 return;
             }
 
-            const deleteRes = client.invoke(
+            const deleteRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/DeleteSystemAdmin",
                 { system_id: renamedSystemId },
                 data.metadata
@@ -512,7 +498,7 @@ export default function (data) {
             });
 
             // Verify system is deleted
-            const getDeletedRes = client.invoke(
+            const getDeletedRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/GetSystemAdmin",
                 { system_id: renamedSystemId },
                 data.metadata
@@ -542,7 +528,7 @@ export default function (data) {
             console.log(`Phase 9: Using OpenAI system ID: ${openaiSystemId}`);
 
             // Try to delete openai system (should fail - protected)
-            const deleteOpenaiRes = client.invoke(
+            const deleteOpenaiRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/DeleteSystemAdmin",
                 { system_id: openaiSystemId },
                 data.metadata
@@ -553,7 +539,7 @@ export default function (data) {
             });
 
             // Try to rename openai system (should fail - protected)
-            const renameOpenaiRes = client.invoke(
+            const renameOpenaiRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/RenameSystemAdmin",
                 {
                     system_id: openaiSystemId,
@@ -567,7 +553,7 @@ export default function (data) {
             });
 
             // Verify openai system still exists with same ID
-            const getOpenaiRes = client.invoke(
+            const getOpenaiRes = grpcInvokeWithRetry(client,
                 "artifact.v1alpha.ArtifactPrivateService/GetSystemAdmin",
                 { system_id: openaiSystemId },
                 data.metadata

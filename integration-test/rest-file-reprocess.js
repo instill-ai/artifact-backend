@@ -30,32 +30,17 @@ export function setup() {
   console.log(`rest-file-reprocess.js: Using unique test prefix: ${dbIDPrefix}`);
 
   // Authenticate with retry to handle transient failures
-  var loginResp = helper.authenticateWithRetry(
-    constant.mgmtRESTPublicHost,
-    constant.defaultUsername,
-    constant.defaultPassword
-  );
-
-  check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r && r.status === 200,
-  });
-
-  if (!loginResp || loginResp.status !== 200) {
-    console.error("Setup: Authentication failed, cannot continue");
-    return null;
-  }
-
-  var accessToken = loginResp.json().accessToken;
+  const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
   var header = {
     "headers": {
-      "Authorization": `Bearer ${accessToken}`,
+      "Authorization": authHeader,
       "Content-Type": "application/json",
     },
     "timeout": "600s",
   }
 
   var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-    headers: { "Authorization": `Bearer ${accessToken}` }
+    headers: { "Authorization": authHeader }
   })
 
   // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST
@@ -187,7 +172,7 @@ export function CheckFileReprocessing(data) {
     const fileDisplayName = `${data.dbIDPrefix}reprocess-test.pdf`;
     const uploadRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
       JSON.stringify({
         displayName: fileDisplayName,
         type: "TYPE_PDF",
@@ -303,7 +288,7 @@ export function CheckFileReprocessing(data) {
 
     const reprocessRes = http.request(
       "POST",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}/reprocess`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}/reprocess`,
       null,
       data.header
     );

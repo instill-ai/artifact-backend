@@ -38,28 +38,17 @@ export let options = {
 // Setup function for standalone execution
 export function setup() {
     // Authenticate with retry to handle transient failures
-    const loginResp = helper.authenticateWithRetry(
-        constant.mgmtRESTPublicHost,
-        constant.defaultUsername,
-        constant.defaultPassword
-    );
-
-    if (!loginResp || loginResp.status !== 200) {
-        console.error("Setup: Authentication failed, cannot continue");
-        return null;
-    }
-
-    const accessToken = loginResp.json().accessToken;
+    const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
     const header = {
         "headers": {
-            "Authorization": `Bearer ${accessToken}`,
+            "Authorization": authHeader,
             "Content-Type": "application/json",
         },
         "timeout": "120s",
     };
 
     const userResp = helper.httpRetry.get(`${constant.mgmtRESTPublicHost}/v1beta/user`, {
-        headers: { "Authorization": `Bearer ${accessToken}` }
+        headers: { "Authorization": authHeader }
     });
 
     return {
@@ -194,7 +183,7 @@ export function checkInvariants(data) {
             if (knowledgeBaseId) {
                 // API CHANGE: CreateFile now uses /namespaces/{ns}/files with knowledge_base_id query param
                 const createFileResp = helper.httpRetry.post(
-                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                     JSON.stringify({
                         displayName: "test-file-" + randomString(8) + ".txt",
                         type: "TYPE_TEXT",
@@ -219,9 +208,9 @@ export function checkInvariants(data) {
                 check({ fileName, fileId, expectedOwner }, {
                     "[RF-2] File has name field": (d) => d.fileName !== undefined,
                     "[RF-2] File name starts with namespaces/": (d) => d.fileName.startsWith("namespaces/"),
-                    "[RF-2] File name format matches pattern (top-level)": (d) => {
-                        // Pattern: namespaces/{ns}/files/{id} (files are now top-level)
-                        const pattern = new RegExp(`^namespaces/[^/]+/files/[^/]+$`);
+                    "[RF-2] File name format matches pattern (nested)": (d) => {
+                        // Pattern: namespaces/{ns}/knowledge-bases/{kb}/files/{id}
+                        const pattern = new RegExp(`^namespaces/[^/]+/knowledge-bases/[^/]+/files/[^/]+$`);
                         return pattern.test(d.fileName);
                     },
                     "[RF-2] File id equals last segment of name": (d) => {
@@ -238,7 +227,7 @@ export function checkInvariants(data) {
             group("Verify file accessible by ID (top-level)", () => {
                 // API CHANGE: Files are now accessed at /namespaces/{ns}/files/{file_id}
                 const getResp = helper.httpRetry.get(
-                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/files/${fileId}`,
+                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`,
                     header
                 );
 
@@ -250,13 +239,14 @@ export function checkInvariants(data) {
                     },
                     "[RF-2] File has knowledgeBaseIds array (many-to-many)": (r) => {
                         const body = r.json();
-                        return body.file && Array.isArray(body.file.knowledgeBaseIds);
+                        return body.file && Array.isArray(body.file.knowledgeBases);
                     },
                     "[RF-2] File is associated with our KB": (r) => {
                         const body = r.json();
+                        const kbName = `namespaces/${expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`;
                         return body.file &&
-                               Array.isArray(body.file.knowledgeBaseIds) &&
-                               body.file.knowledgeBaseIds.includes(knowledgeBaseId);
+                            Array.isArray(body.file.knowledgeBases) &&
+                            body.file.knowledgeBases.includes(kbName);
                     }
                 });
             });
@@ -296,10 +286,10 @@ export function checkInvariants(data) {
         });
 
         // Test: GET file by invalid ID should fail
-        // API CHANGE: Files are now top-level, so we test directly at /files endpoint
+        // Files are nested under knowledge-bases in CE
         group("GET file by invalid ID fails", () => {
             const getResp = helper.httpRetry.get(
-                `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/files/non-existent-file-id-12345`,
+                `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/knowledge-bases/kb-123/files/non-existent-file-id-12345`,
                 header
             );
 
@@ -496,7 +486,7 @@ export function checkInvariants(data) {
             if (knowledgeBaseId) {
                 // API CHANGE: CreateFile now uses /namespaces/{ns}/files with knowledge_base_id query param
                 const createFileResp = helper.httpRetry.post(
-                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                     JSON.stringify({
                         displayName: "id-mapping-test-" + randomString(8) + ".txt",
                         type: "TYPE_TEXT",

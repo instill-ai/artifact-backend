@@ -11,18 +11,16 @@ import * as constant from "./const.js";
 import * as helper from "./helper.js";
 
 /**
- * TEST SUITE: Namespace Permission Checks for ListFiles
+ * TEST SUITE: Namespace Permission Checks
  *
  * PURPOSE:
- * Tests the namespace-level permission checks for the ListFiles API.
- * When listing files without a knowledge_base_id filter, the system should verify
- * that the authenticated user has access to the namespace.
+ * Tests the namespace-level permission checks for Artifact backend APIs.
  *
  * Test Scenarios:
- * 1. User can list files in their own namespace (positive test)
- * 2. User cannot list files in a non-existent namespace (404)
- * 3. User cannot list files in another user's namespace (401/403)
- * 4. With KB filter, user needs both namespace and KB permission
+ * 1. User can list KBs in their own namespace (positive)
+ * 2. User can list files in their own knowledge base (positive)
+ * 3. User cannot list KBs in another user's namespace (401/403/404)
+ * 4. User cannot list files in another user's knowledge base (401/403/404)
  */
 
 export let options = {
@@ -35,28 +33,17 @@ export let options = {
 };
 
 export function setup() {
-    const loginResp = helper.authenticateWithRetry(
-        constant.mgmtRESTPublicHost,
-        constant.defaultUsername,
-        constant.defaultPassword
-    );
-
-    if (!loginResp || loginResp.status !== 200) {
-        console.error("Setup: Authentication failed, cannot continue");
-        return null;
-    }
-
-    const accessToken = loginResp.json().accessToken;
+    const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
     const header = {
         "headers": {
-            "Authorization": `Bearer ${accessToken}`,
+            "Authorization": authHeader,
             "Content-Type": "application/json",
         },
         "timeout": "120s",
     };
 
     const userResp = helper.httpRetry.get(`${constant.mgmtRESTPublicHost}/v1beta/user`, {
-        headers: { "Authorization": `Bearer ${accessToken}` }
+        headers: { "Authorization": authHeader }
     });
 
     return {
@@ -104,9 +91,34 @@ export function testNamespacePermissions(data) {
     const apiHost = constant.artifactRESTPublicHost;
 
     // ===============================================================
-    // Test 1: User CAN list files in their own namespace
+    // Test 1: User CAN list knowledge bases in their own namespace
     // ===============================================================
-    group("Namespace Permission: User can list files in own namespace", () => {
+    group("Namespace Permission: User can list KBs in own namespace", () => {
+        const listResp = http.request(
+            "GET",
+            `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/knowledge-bases`,
+            null,
+            header
+        );
+
+        check(listResp, {
+            "[Perm] List KBs in own namespace returns 200": (r) => r.status === 200,
+            "[Perm] List KBs returns knowledgeBases array": (r) => {
+                try {
+                    const body = r.json();
+                    return Array.isArray(body.knowledgeBases);
+                } catch (e) {
+                    console.error(`Failed to parse KBs JSON (status ${r.status}): ${r.body}`);
+                    return false;
+                }
+            },
+        });
+    });
+
+    // ===============================================================
+    // Test 2: User CAN list files in their own knowledge base
+    // ===============================================================
+    group("Namespace Permission: User can list files in own knowledge base", () => {
         let knowledgeBaseId = null;
         let fileId = null;
 
@@ -128,7 +140,7 @@ export function testNamespacePermissions(data) {
 
             if (knowledgeBaseId) {
                 const createFileResp = helper.httpRetry.post(
-                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                     JSON.stringify({
                         displayName: "perm-test-file-" + randomString(4) + ".txt",
                         type: "TYPE_TEXT",
@@ -143,172 +155,35 @@ export function testNamespacePermissions(data) {
             }
         });
 
-        // Test: List all files in own namespace (without KB filter) - should succeed
-        group("List files without KB filter succeeds", () => {
-            const listResp = http.request(
-                "GET",
-                `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/files`,
-                null,
-                header
-            );
-
-            check(listResp, {
-                "[Perm] List files in own namespace returns 200": (r) => r.status === 200,
-                "[Perm] List files returns files array": (r) => {
-                    const body = r.json();
-                    return Array.isArray(body.files);
-                },
-            });
-        });
-
-        // Test: List files with KB filter - should also succeed
         if (knowledgeBaseId) {
-            group("List files with KB filter succeeds", () => {
-                const filterExpr = `knowledge_base_id = "${knowledgeBaseId}"`;
+            // Test: List files in own KB - should succeed
+            group("List files in own KB succeeds", () => {
                 const listResp = http.request(
                     "GET",
-                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/files?filter=${encodeURIComponent(filterExpr)}`,
+                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                     null,
                     header
                 );
 
                 check(listResp, {
-                    "[Perm] List files with KB filter returns 200": (r) => r.status === 200,
-                    "[Perm] List files with KB filter returns files": (r) => {
-                        const body = r.json();
-                        return Array.isArray(body.files);
+                    "[Perm] List files in own KB returns 200": (r) => r.status === 200,
+                    "[Perm] List files returns files array": (r) => {
+                        try {
+                            const body = r.json();
+                            return Array.isArray(body.files);
+                        } catch (e) {
+                            console.error(`Failed to parse files JSON (status ${r.status}): ${r.body}`);
+                            return false;
+                        }
                     },
                     "[Perm] Listed files include our test file": (r) => {
-                        if (!fileId) return true; // Skip if no file was created
-                        const body = r.json();
-                        return body.files && body.files.some(f => f.id === fileId);
-                    },
-                });
-            });
-        }
-
-        // Cleanup
-        if (knowledgeBaseId) {
-            helper.httpRetry.del(
-                `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
-                header
-            );
-        }
-    });
-
-    // ===============================================================
-    // Test 2: User CANNOT list files in a non-existent namespace
-    // ===============================================================
-    group("Namespace Permission: Non-existent namespace returns error", () => {
-        const fakeNamespaceId = "non-existent-namespace-" + randomString(8);
-
-        group("List files in non-existent namespace fails", () => {
-            const listResp = http.request(
-                "GET",
-                `${apiHost}/v1alpha/namespaces/${fakeNamespaceId}/files`,
-                null,
-                header
-            );
-
-            check(listResp, {
-                "[Perm] List files in non-existent namespace returns 404 or 401": (r) => {
-                    // Could be 404 (namespace not found) or 401 (unauthorized to access)
-                    return r.status === 404 || r.status === 401 || r.status === 403;
-                },
-            });
-        });
-    });
-
-    // ===============================================================
-    // Test 3: User CANNOT list files in another user's namespace
-    // Note: This test uses a known namespace that the test user shouldn't own
-    // ===============================================================
-    group("Namespace Permission: Cannot access other namespace", () => {
-        // Try to access a system-level or different user's namespace
-        // Using a common test namespace pattern that shouldn't match the test user
-        const otherNamespaceId = "other-user-namespace-" + randomString(8);
-
-        group("List files in other namespace fails", () => {
-            const listResp = http.request(
-                "GET",
-                `${apiHost}/v1alpha/namespaces/${otherNamespaceId}/files`,
-                null,
-                header
-            );
-
-            check(listResp, {
-                "[Perm] List files in other namespace returns 401/403/404": (r) => {
-                    // Should fail with:
-                    // - 401 (unauthenticated - user doesn't own namespace)
-                    // - 403 (forbidden - no permission)
-                    // - 404 (namespace not found)
-                    return r.status === 401 || r.status === 403 || r.status === 404;
-                },
-                "[Perm] List files in other namespace does not return files": (r) => {
-                    // Even if status is 200 (which it shouldn't be), should not have files
-                    if (r.status === 200) {
-                        const body = r.json();
-                        return !body.files || body.files.length === 0;
-                    }
-                    return true;
-                },
-            });
-        });
-    });
-
-    // ===============================================================
-    // Test 4: KB permission is still checked when KB filter is provided
-    // ===============================================================
-    group("Namespace Permission: KB-level permission still enforced", () => {
-        let knowledgeBaseId = null;
-
-        // Setup: Create a KB with default (private) permissions
-        group("Setup: Create test KB", () => {
-            const createKBResp = helper.httpRetry.post(
-                `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/knowledge-bases`,
-                JSON.stringify({
-                    displayName: dbIdPrefix + "kb-perm-test-" + randomString(4),
-                    description: "Test KB for KB permission tests",
-                    type: "KNOWLEDGE_BASE_TYPE_PERSISTENT",
-                }),
-                header
-            );
-
-            if (createKBResp.status === 200 || createKBResp.status === 201) {
-                knowledgeBaseId = createKBResp.json().knowledgeBase?.id;
-            }
-        });
-
-        if (knowledgeBaseId) {
-            // Test: Owner can list files with KB filter
-            group("Owner can list files with KB filter", () => {
-                const filterExpr = `knowledge_base_id = "${knowledgeBaseId}"`;
-                const listResp = http.request(
-                    "GET",
-                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/files?filter=${encodeURIComponent(filterExpr)}`,
-                    null,
-                    header
-                );
-
-                check(listResp, {
-                    "[Perm] Owner can list files with KB filter": (r) => r.status === 200,
-                });
-            });
-
-            // Test: Invalid KB ID returns error
-            group("Invalid KB ID in filter returns error", () => {
-                const filterExpr = `knowledge_base_id = "kb-invalid-12345"`;
-                const listResp = http.request(
-                    "GET",
-                    `${apiHost}/v1alpha/namespaces/${expectedOwner.id}/files?filter=${encodeURIComponent(filterExpr)}`,
-                    null,
-                    header
-                );
-
-                check(listResp, {
-                    "[Perm] Invalid KB ID returns error (404 or similar)": (r) => {
-                        // Should return 404 (KB not found) or similar error
-                        return r.status === 404 || r.status === 400 || r.status === 500;
+                        if (!fileId) return true;
+                        try {
+                            const body = r.json();
+                            return body.files && body.files.some(f => f.id === fileId);
+                        } catch (e) {
+                            return false;
+                        }
                     },
                 });
             });
@@ -319,6 +194,61 @@ export function testNamespacePermissions(data) {
                 header
             );
         }
+    });
+
+    // ===============================================================
+    // Test 3: User CANNOT list knowledge bases in another user's namespace
+    // ===============================================================
+    group("Namespace Permission: Cannot access other namespace's KBs", () => {
+        const otherNamespaceId = "other-user-namespace-" + randomString(8);
+
+        group("List KBs in other namespace fails", () => {
+            const listResp = http.request(
+                "GET",
+                `${apiHost}/v1alpha/namespaces/${otherNamespaceId}/knowledge-bases`,
+                null,
+                header
+            );
+
+            console.log(`Scenario 3: List KBs in other namespace '${otherNamespaceId}' returned status ${listResp.status}`);
+
+            if (listResp.status === 200) {
+                console.error(`SECURITY WARNING: List KBs in other namespace '${otherNamespaceId}' returned 200!`);
+            }
+
+            check(listResp, {
+                "[Perm] List KBs in other namespace returns 401/403/404": (r) => {
+                    return r.status === 401 || r.status === 403 || r.status === 404;
+                },
+            });
+        });
+    });
+
+    // ===============================================================
+    // Test 4: User CANNOT list files in another user's knowledge base
+    // ===============================================================
+    group("Namespace Permission: Cannot access other namespace's files", () => {
+        const otherNamespaceId = "other-user-namespace-" + randomString(8);
+        const someKbId = "some-kb-id";
+
+        group("List files in other namespace fails", () => {
+            const listResp = http.request(
+                "GET",
+                `${apiHost}/v1alpha/namespaces/${otherNamespaceId}/knowledge-bases/${someKbId}/files`,
+                null,
+                header
+            );
+
+            if (listResp.status === 200) {
+                console.error(`SECURITY WARNING: List files in other namespace '${otherNamespaceId}' returned 200!`);
+            }
+
+            check(listResp, {
+                "[Perm] List files in other namespace returns 401/403/404": (r) => {
+                    return r.status === 401 || r.status === 403 || r.status === 404;
+                },
+            });
+        });
     });
 
     // Banner for visual test completion
