@@ -7,11 +7,14 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 
 	pb "github.com/instill-ai/protogen-go/mgmt/v1beta"
+	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
 )
 
@@ -23,6 +26,9 @@ func (s *service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resourc
 	)
 	if err != nil {
 		logger.Error("failed to check namespace", zap.Error(err))
+		if status.Code(err) == codes.NotFound {
+			return nil, errorsx.ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to check namespace: %w", err)
 	}
 	ownerUUID := nsRes.GetUid()
@@ -37,13 +43,12 @@ func (s *service) GetNamespaceByNsID(ctx context.Context, nsID string) (*resourc
 	}
 
 	var nsType resource.NamespaceType
-	if nsRes.GetType().String() == pb.CheckNamespaceAdminResponse_NAMESPACE_ORGANIZATION.String() {
+	if nsRes.GetType() == pb.CheckNamespaceAdminResponse_NAMESPACE_ORGANIZATION {
 		nsType = resource.Organization
-	} else if nsRes.GetType().String() == pb.CheckNamespaceAdminResponse_NAMESPACE_USER.String() {
+	} else if nsRes.GetType() == pb.CheckNamespaceAdminResponse_NAMESPACE_USER {
 		nsType = resource.User
 	} else {
-		err := fmt.Errorf("unknown namespace type: %v", nsRes.GetType().String())
-		return nil, fmt.Errorf("failed to check namespace: %w", err)
+		return nil, errorsx.ErrNotFound
 	}
 	ns := resource.Namespace{
 		NsUID:  ownerUUIDParsed,

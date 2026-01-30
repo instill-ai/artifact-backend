@@ -21,24 +21,26 @@ import (
 	"github.com/instill-ai/x/resource"
 )
 
-// parseChunkFromName parses a resource name of format "namespaces/{namespace}/files/{file}/chunks/{chunk}"
-// and returns the namespace_id, file_id, and chunk_id
-func parseChunkFromName(name string) (namespaceID, fileID, chunkID string, err error) {
+// parseChunkFromName parses a resource name of format:
+// "namespaces/{namespace}/knowledge-bases/{kb}/files/{file}/chunks/{chunk}"
+// and returns the namespace_id, kb_id, file_id, and chunk_id
+func parseChunkFromName(name string) (namespaceID, kbID, fileID, chunkID string, err error) {
 	parts := strings.Split(name, "/")
-	if len(parts) != 6 || parts[0] != "namespaces" || parts[2] != "files" || parts[4] != "chunks" {
-		return "", "", "", fmt.Errorf("invalid chunk name format, expected namespaces/{namespace}/files/{file}/chunks/{chunk}")
+	if len(parts) == 8 && parts[0] == "namespaces" && parts[2] == "knowledge-bases" && parts[4] == "files" && parts[6] == "chunks" {
+		return parts[1], parts[3], parts[5], parts[7], nil
 	}
-	return parts[1], parts[3], parts[5], nil
+	return "", "", "", "", fmt.Errorf("invalid chunk name format, expected namespaces/{namespace}/knowledge-bases/{kb}/files/{file}/chunks/{chunk}")
 }
 
-// parseFileFromParent parses a parent resource name of format "namespaces/{namespace}/files/{file}"
-// and returns the namespace_id and file_id
-func parseFileFromParent(parent string) (namespaceID, fileID string, err error) {
+// parseFileFromParent parses a parent resource name of format:
+// "namespaces/{namespace}/knowledge-bases/{kb}/files/{file}"
+// and returns the namespace_id, kb_id, and file_id
+func parseFileFromParent(parent string) (namespaceID, kbID, fileID string, err error) {
 	parts := strings.Split(parent, "/")
-	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "files" {
-		return "", "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}/files/{file}")
+	if len(parts) == 6 && parts[0] == "namespaces" && parts[2] == "knowledge-bases" && parts[4] == "files" {
+		return parts[1], parts[3], parts[5], nil
 	}
-	return parts[1], parts[3], nil
+	return "", "", "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}/knowledge-bases/{kb}/files/{file}")
 }
 
 // parseNamespaceFromParent parses a parent resource name of format "namespaces/{namespace}"
@@ -52,8 +54,8 @@ func parseNamespaceFromParent(parent string) (namespaceID string, err error) {
 }
 
 // convertToProtoChunk converts a TextChunkModel to a protobuf Chunk
-// namespaceID and fileID are used to construct the resource name
-func convertToProtoChunk(chunk repository.ChunkModel, namespaceID, fileID string) *artifactpb.Chunk {
+// namespaceID, kbID and fileID are used to construct the resource name
+func convertToProtoChunk(chunk repository.ChunkModel, namespaceID, kbID, fileID string) *artifactpb.Chunk {
 	var chunkType artifactpb.Chunk_Type
 
 	// Convert database string to protobuf enum
@@ -68,16 +70,17 @@ func convertToProtoChunk(chunk repository.ChunkModel, namespaceID, fileID string
 		chunkType = artifactpb.Chunk_TYPE_CONTENT // Default to content
 	}
 
-	resourceName := fmt.Sprintf("namespaces/%s/files/%s/chunks/%s",
-		namespaceID, fileID, chunk.ID)
+	resourceName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s/chunks/%s",
+		namespaceID, kbID, fileID, chunk.ID)
+	originalFile := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kbID, fileID)
 
 	pbChunk := &artifactpb.Chunk{
-		Name:           resourceName,
+		Name:         resourceName,
 		Id:           chunk.ID,
 		Retrievable:  chunk.Retrievable,
 		Tokens:       uint32(chunk.Tokens),
 		CreateTime:   timestamppb.New(*chunk.CreateTime),
-		OriginalFile: fmt.Sprintf("namespaces/%s/files/%s", namespaceID, chunk.FileUID.String()),
+		OriginalFile: originalFile,
 		Type:         chunkType,
 	}
 
@@ -123,12 +126,12 @@ func convertToProtoChunk(chunk repository.ChunkModel, namespaceID, fileID string
 func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkRequest) (*artifactpb.GetChunkResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Parse resource name to get namespace_id, file_id, and chunk_id
-	namespaceID, fileID, chunkID, err := parseChunkFromName(req.GetName())
+	// Parse resource name to get namespace_id, kb_id, file_id, and chunk_id
+	namespaceID, kbID, fileID, chunkID, err := parseChunkFromName(req.GetName())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing chunk name: %w", err),
-			"Invalid chunk name format. Expected: namespaces/{namespace}/files/{file}/chunks/{chunk}",
+			"Invalid chunk name format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file}/chunks/{chunk}",
 		)
 	}
 
@@ -224,7 +227,7 @@ func (ph *PublicHandler) GetChunk(ctx context.Context, req *artifactpb.GetChunkR
 	}
 
 	// Convert to protobuf format - use namespace ID from name parsing
-	pbChunk := convertToProtoChunk(chunk, namespaceID, fileID)
+	pbChunk := convertToProtoChunk(chunk, namespaceID, kbID, fileID)
 
 	return &artifactpb.GetChunkResponse{
 		Chunk: pbChunk,
@@ -240,12 +243,12 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 		return nil, err
 	}
 
-	// Parse parent to get namespace_id and file_id
-	namespaceID, fileID, err := parseFileFromParent(req.GetParent())
+	// Parse parent to get namespace_id, kb_id, and file_id
+	namespaceID, kbID, fileID, err := parseFileFromParent(req.GetParent())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing parent: %w", err),
-			"Invalid parent format. Expected: namespaces/{namespace}/files/{file}",
+			"Invalid parent format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file}",
 		)
 	}
 
@@ -328,7 +331,7 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 
 	res := make([]*artifactpb.Chunk, 0, len(chunks))
 	for _, chunk := range chunks {
-		res = append(res, convertToProtoChunk(chunk, namespaceID, fileID))
+		res = append(res, convertToProtoChunk(chunk, namespaceID, kbID, fileID))
 	}
 
 	return &artifactpb.ListChunksResponse{
@@ -340,12 +343,12 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.UpdateChunkRequest) (*artifactpb.UpdateChunkResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Parse resource name to get namespace_id, file_id, and chunk_id
-	namespaceID, fileID, chunkID, err := parseChunkFromName(req.GetName())
+	// Parse resource name to get namespace_id, kb_id, file_id, and chunk_id
+	namespaceID, kbID, fileID, chunkID, err := parseChunkFromName(req.GetName())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing chunk name: %w", err),
-			"Invalid chunk name format. Expected: namespaces/{namespace}/files/{file}/chunks/{chunk}",
+			"Invalid chunk name format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file}/chunks/{chunk}",
 		)
 	}
 
@@ -381,7 +384,7 @@ func (ph *PublicHandler) UpdateChunk(ctx context.Context, req *artifactpb.Update
 	}
 
 	return &artifactpb.UpdateChunkResponse{
-		Chunk: convertToProtoChunk(*chunk, namespaceID, fileID),
+		Chunk: convertToProtoChunk(*chunk, namespaceID, kbID, fileID),
 	}, nil
 }
 
@@ -404,6 +407,12 @@ func (ph *PublicHandler) SearchChunks(
 
 	// Extract KB ID from resource name: namespaces/{namespace}/knowledge-bases/{kb}
 	kbID := resource.ExtractResourceID(req.GetKnowledgeBase())
+	if kbID == "" {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("missing knowledge base"),
+			"Knowledge base resource name is required in format: namespaces/{namespace}/knowledge-bases/{knowledge_base}",
+		)
+	}
 	logger = logger.With(
 		zap.String("namespace", namespaceID),
 		zap.String("knowledge_base", kbID),
@@ -542,15 +551,15 @@ func (ph *PublicHandler) SearchChunks(
 		}
 
 		// Build full resource names for chunk and file
-		chunkName := fmt.Sprintf("namespaces/%s/files/%s/chunks/%s", namespaceID, chunk.FileUID.String(), chunk.ID)
-		fileName := fmt.Sprintf("namespaces/%s/files/%s", namespaceID, chunk.FileUID.String())
+		chunkName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s/chunks/%s", namespaceID, kbID, chunk.FileUID.String(), chunk.ID)
+		fileName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kbID, chunk.FileUID.String())
 
 		pbChunk := &artifactpb.SimilarityChunk{
 			Chunk:           chunkName,
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
 			File:            fileName,
-			ChunkMetadata:   convertToProtoChunk(chunk, namespaceID, chunk.FileUID.String()),
+			ChunkMetadata:   convertToProtoChunk(chunk, namespaceID, kbID, chunk.FileUID.String()),
 		}
 		simChunks = append(simChunks, pbChunk)
 	}

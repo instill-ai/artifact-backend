@@ -75,25 +75,10 @@ export function setup() {
   console.log(`rest-hash-based-ids.js: Using unique test prefix: ${dbIDPrefix}`);
 
   // Authenticate with retry to handle transient failures
-  var loginResp = helper.authenticateWithRetry(
-    constant.mgmtRESTPublicHost,
-    constant.defaultUsername,
-    constant.defaultPassword
-  );
-
-  check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r && r.status === 200,
-  });
-
-  if (!loginResp || loginResp.status !== 200) {
-    console.error("Setup: Authentication failed, cannot continue");
-    return null;
-  }
-
-  var accessToken = loginResp.json().accessToken;
+  const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
   var header = {
     "headers": {
-      "Authorization": `Bearer ${accessToken}`,
+      "Authorization": authHeader,
       "Content-Type": "application/json",
     },
     "timeout": "600s",
@@ -256,7 +241,7 @@ export function TEST_File_PrefixedID(data) {
     };
 
     const resp = http.post(
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/files?knowledgeBaseId=${kbID}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${kbID}/files`,
       JSON.stringify(createPayload),
       header
     );
@@ -310,8 +295,9 @@ export function TEST_File_PrefixedID(data) {
           const body = JSON.parse(r.body);
           if (!body.file) return false;
           // File should show which KBs it's associated with
-          return Array.isArray(body.file.knowledgeBaseIds) &&
-            body.file.knowledgeBaseIds.includes(kbID);
+          const kbName = `namespaces/${namespaceId}/knowledge-bases/${kbID}`;
+          return Array.isArray(body.file.knowledgeBases) &&
+            body.file.knowledgeBases.includes(kbName);
         } catch (e) {
           return false;
         }
@@ -332,7 +318,7 @@ export function TEST_File_PrefixedID(data) {
   // Test 2: Get File by ID (now at top-level /files endpoint)
   group("[File] Get by ID - verify retrieval", () => {
     const resp = http.get(
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/files/${fileID}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${kbID}/files/${fileID}`,
       header
     );
 
@@ -358,7 +344,7 @@ export function TEST_File_PrefixedID(data) {
           const body = JSON.parse(r.body);
           // name should be: namespaces/{ns}/files/{id}
           return body.file &&
-            body.file.name === `namespaces/${namespaceId}/files/${fileID}`;
+            body.file.name === `namespaces/${namespaceId}/knowledge-bases/${kbID}/files/${fileID}`;
         } catch (e) {
           return false;
         }

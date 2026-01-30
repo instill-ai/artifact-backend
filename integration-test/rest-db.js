@@ -121,33 +121,16 @@ export function setup() {
     console.log(`rest-db.js: Using unique test prefix: ${dbIDPrefix}`);
 
     // Authenticate with retry to handle transient failures
-    var loginResp = helper.authenticateWithRetry(
-        constant.mgmtRESTPublicHost,
-        constant.defaultUsername,
-        constant.defaultPassword
-    );
-
-    check(loginResp, {
-        [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (
-            r
-        ) => r && r.status === 200,
-    });
-
-    if (!loginResp || loginResp.status !== 200) {
-        console.error("Setup: Authentication failed, cannot continue");
-        return null;
-    }
-
-    var accessToken = loginResp.json().accessToken;
+    const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
     var header = {
         "headers": {
-            "Authorization": `Bearer ${accessToken}`,
+            "Authorization": authHeader,
             "Content-Type": "application/json",
         },
         "timeout": "600s",
     }
 
-    var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${accessToken}` } })
+    var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": authHeader } })
 
     // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST
     // Use API-only cleanup to properly trigger workflows (no direct DB manipulation)
@@ -257,7 +240,7 @@ export function TEST_DB_SCHEMA(data) {
 
             // Use retry logic to handle transient upload failures during parallel execution
             const uRes = helper.uploadFileWithRetry(
-                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                 fReq,
                 data.header,
                 3 // max retries
@@ -736,7 +719,7 @@ export function TEST_DB_SCHEMA(data) {
             // 8.1: List Files API
             const listFilesRes = http.request(
                 "GET",
-                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
                 null,
                 data.header
             );
@@ -776,7 +759,7 @@ export function TEST_DB_SCHEMA(data) {
             const testFile = uploaded[0];
             const getFileRes = http.request(
                 "GET",
-                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${testFile.fileId}`,
+                `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${testFile.fileId}`,
                 null,
                 data.header
             );
@@ -815,7 +798,7 @@ export function TEST_DB_SCHEMA(data) {
                 if (fileOfType) {
                     const fileRes = http.request(
                         "GET",
-                        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileOfType.fileId}`,
+                        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileOfType.fileId}`,
                         null,
                         data.header
                     );

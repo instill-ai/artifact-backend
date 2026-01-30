@@ -68,25 +68,10 @@ export function setup() {
     helper.staggerTestExecution(2);
 
     // Authenticate with retry to handle transient failures
-    var loginResp = helper.authenticateWithRetry(
-        constant.mgmtRESTPublicHost,
-        constant.defaultUsername,
-        constant.defaultPassword
-    );
-
-    check(loginResp, {
-        [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r && r.status === 200,
-    });
-
-    if (!loginResp || loginResp.status !== 200) {
-        console.error("Setup: Authentication failed, cannot continue");
-        return null;
-    }
-
-    var accessToken = loginResp.json().accessToken;
+    const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
     var header = {
         "headers": {
-            "Authorization": `Bearer ${accessToken}`,
+            "Authorization": authHeader,
             "Content-Type": "application/json",
         },
         "timeout": "600s",
@@ -94,7 +79,7 @@ export function setup() {
 
     var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
         headers: {
-            "Authorization": `Bearer ${accessToken}`
+            "Authorization": authHeader
         }
     })
 
@@ -109,7 +94,7 @@ export function setup() {
             for (const kb of knowledgeBases) {
                 const kbId = kb.id;
                 if (kbId && kbId.match(/^test-ai-/)) {
-                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases/${kbId}`, null, header);
+                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${resp.json().user.id}/knowledge-bases/${knowledgeBaseId}`, null, header);
                     if (delResp.status === 200 || delResp.status === 204) {
                         cleanedCount++;
                     }
@@ -140,7 +125,7 @@ export function teardown(data) {
             for (const kb of knowledgeBases) {
                 const kbId = kb.id;
                 if (kbId && kbId.match(/^test-ai-/)) {
-                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}`, null, data.header);
+                    const delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
                     if (delResp.status === 200 || delResp.status === 204) {
                         cleanedCount++;
                     }
@@ -159,7 +144,7 @@ export default function (data) {
         // Test 1: Verify system initializes with configured client
         // Note: Gemini is required for content conversion and summarization
         // OpenAI is optional and only used for legacy embedding support (1536-dim)
-        const healthResp = http.get(`${apiHost}/v1alpha/health/artifact`, constant.params);
+        const healthResp = http.get(`${apiHost}/v1beta/health/artifact`, constant.params);
         check(healthResp, {
             "AI Client Test 1.1: Health check returns 200": (r) => r.status === 200,
         });
@@ -198,7 +183,7 @@ export default function (data) {
         const testContent = "This is a test document for Gemini content conversion testing.\n\nIt contains multiple paragraphs.\n\nAnd tests markdown extraction.";
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
                 displayName: "test-gemini-conversion.txt",
                 type: "TYPE_TEXT",
@@ -255,7 +240,7 @@ export default function (data) {
                 sleep(1); // Wait 1 second between retries
                 chunksResp = http.request(
                     "GET",
-                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}/chunks`,
+                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}/chunks`,
                     null,
                     data.header
                 );
@@ -345,7 +330,7 @@ export default function (data) {
         const testContent = "Artificial Intelligence and Machine Learning are transforming technology. Deep learning models process vast amounts of data.";
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
                 displayName: "test-embedding.txt",
                 type: "TYPE_TEXT",
@@ -419,9 +404,9 @@ export default function (data) {
         if (processedStatus) {
             const searchResp = http.request(
                 "POST",
-                `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/searchChunks`,
+                `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/search-chunks`,
                 JSON.stringify({
-                    knowledgeBaseId: knowledgeBaseId,  // Now passed in request body
+                    knowledgeBase: `namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`,
                     textPrompt: "machine learning",
                     topK: 5,
                 }),
@@ -506,7 +491,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         `.trim();
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
                 displayName: "test-summary.txt",
                 type: "TYPE_TEXT",
@@ -563,7 +548,7 @@ in artificial intelligence integration and customer satisfaction metrics.
                 sleep(1); // Wait 1 second between retries
                 summaryResp = http.request(
                     "GET",
-                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_SUMMARY`,
+                    `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_SUMMARY`,
                     null,
                     data.header
                 );
@@ -634,7 +619,7 @@ in artificial intelligence integration and customer satisfaction metrics.
         const testContent = "Cache test content for Gemini client validation with native caching support.";
 
         const uploadResp = helper.uploadFileWithRetry(
-            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+            `${apiHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
             {
                 displayName: "test-gemini-cache.txt",
                 type: "TYPE_TEXT",

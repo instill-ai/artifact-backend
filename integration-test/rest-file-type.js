@@ -222,33 +222,16 @@ export function setup() {
   check(true, { [constant.banner('Artifact API: Setup')]: () => true });
 
   // Authenticate with retry to handle transient failures
-  var loginResp = helper.authenticateWithRetry(
-    constant.mgmtRESTPublicHost,
-    constant.defaultUsername,
-    constant.defaultPassword
-  );
-
-  check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (
-      r
-    ) => r && r.status === 200,
-  });
-
-  if (!loginResp || loginResp.status !== 200) {
-    console.error("Setup: Authentication failed, cannot continue");
-    return null;
-  }
-
-  var accessToken = loginResp.json().accessToken;
+  const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
   var header = {
     "headers": {
-      "Authorization": `Bearer ${accessToken}`,
+      "Authorization": authHeader,
       "Content-Type": "application/json",
     },
     "timeout": "600s",
   }
 
-  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": `Bearer ${accessToken}` } })
+  var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, { headers: { "Authorization": authHeader } })
 
   // Generate THIS test run's unique prefix
   // Each test run gets a unique prefix to avoid conflicts with parallel tests
@@ -292,9 +275,9 @@ export function teardown(data) {
         // API returns id (AIP-compliant)
         const kbId = kb.id;
         if (kbId && kbId.startsWith(data.dbIDPrefix)) {
-          var delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}`, null, data.header);
+          var delResp = http.request("DELETE", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}`, null, data.header);
           check(delResp, {
-            [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
+            [`DELETE /v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId} response status is 200 or 404`]: (r) => r.status === 200 || r.status === 404,
           });
         }
       }
@@ -384,7 +367,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
     const s = constant.sampleFiles.find((x) => x.originalName === "doc-sample.txt") || {};
     const filename = data.dbIDPrefix + "process-status-test.txt";
 
-    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`, JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: s.content || "" }), data.header);
+    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`, JSON.stringify({ displayName: filename, type: "TYPE_TEXT", content: s.content || "" }), data.header);
     logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/files');
     const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
     const fileId = file.id;
@@ -419,7 +402,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
 
     // Wait for file to start processing and check status again
     sleep(2);
-    const processingRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`, null, data.header);
+    const processingRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`, null, data.header);
     let processingFile; try { processingFile = processingRes.json(); } catch (e) { processingFile = {}; }
     const processingStatus = processingFile.file ? processingFile.file.processStatus : "";
 
@@ -441,7 +424,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
 
     if (result.completed && result.status === "COMPLETED") {
       // Final check: Verify completed status is also a string enum
-      const completedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`, null, data.header);
+      const completedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`, null, data.header);
       let completedFile; try { completedFile = completedRes.json(); } catch (e) { completedFile = {}; }
       const completedStatus = completedFile.file ? completedFile.file.processStatus : "";
 
@@ -454,7 +437,7 @@ export function TEST_PROCESS_STATUS_FORMAT(data) {
       console.log(`✓ Process status format validation passed: ${initialProcessStatus} → ${processingStatus} → ${completedStatus}`);
     } else if (result.status === "FAILED") {
       // Even for failed files, status should be a string enum
-      const failedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`, null, data.header);
+      const failedRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`, null, data.header);
       let failedFile; try { failedFile = failedRes.json(); } catch (e) { failedFile = {}; }
       const failedStatus = failedFile.file ? failedFile.file.processStatus : "";
 
@@ -519,7 +502,7 @@ function runFileTest(data, opts) {
       console.log(`Testing type inference for ${fileType}: uploading with filename only (no type field)`);
     }
 
-    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`, JSON.stringify(fReq), data.header);
+    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`, JSON.stringify(fReq), data.header);
     logUnexpected(uRes, 'POST /v1alpha/namespaces/{namespace_id}/files');
     const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
     const fileId = file.id;
@@ -537,7 +520,7 @@ function runFileTest(data, opts) {
     // List knowledge base files and ensure our file is present
     const listKBFilesRes = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
       null,
       data.header
     );
@@ -553,7 +536,7 @@ function runFileTest(data, opts) {
     // GET single knowledge base file and validate
     const getKBFileRes = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`,
       null,
       data.header
     );
@@ -656,7 +639,7 @@ function runFileTest(data, opts) {
     // Re-fetch file to get updated token counts from usage metadata
     const getFileAfterProcessing = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`,
       null,
       data.header
     );
@@ -676,7 +659,7 @@ function runFileTest(data, opts) {
     }
 
     // Get file content (using VIEW_CONTENT)
-    const getKBFileContent = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_CONTENT`, null, data.header);
+    const getKBFileContent = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_CONTENT`, null, data.header);
     logUnexpected(getKBFileContent, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_CONTENT');
     let contentData; try { contentData = getKBFileContent.json(); } catch (e) { contentData = {}; }
     const contentUri = contentData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
@@ -686,7 +669,7 @@ function runFileTest(data, opts) {
     });
 
     // Get file summary (using VIEW_SUMMARY)
-    const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_SUMMARY`, null, data.header);
+    const getSummaryRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_SUMMARY`, null, data.header);
     logUnexpected(getSummaryRes, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_SUMMARY');
     let summaryData; try { summaryData = getSummaryRes.json(); } catch (e) { summaryData = {}; }
     const summaryUri = summaryData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
@@ -718,7 +701,7 @@ function runFileTest(data, opts) {
     const isVideo = videoTypes.includes(fileType);
     const isStandardizable = isDocument || isImage || isAudio || isVideo;
 
-    const getStandardRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_STANDARD_FILE_TYPE`, null, data.header);
+    const getStandardRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_STANDARD_FILE_TYPE`, null, data.header);
     logUnexpected(getStandardRes, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_STANDARD_FILE_TYPE');
     let standardData; try { standardData = getStandardRes.json(); } catch (e) { standardData = {}; }
     const standardUri = standardData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
@@ -806,7 +789,7 @@ function runFileTest(data, opts) {
 
     // Get original file (using VIEW_ORIGINAL_FILE_TYPE)
     // This should return the original uploaded file for ALL file types
-    const getOriginalRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}?view=VIEW_ORIGINAL_FILE_TYPE`, null, data.header);
+    const getOriginalRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_ORIGINAL_FILE_TYPE`, null, data.header);
     logUnexpected(getOriginalRes, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_ORIGINAL_FILE_TYPE');
     let originalData; try { originalData = getOriginalRes.json(); } catch (e) { originalData = {}; }
     const originalUri = originalData.derivedResourceUri || ""; // derivedResourceUri is at top level, not inside .file
@@ -837,7 +820,7 @@ function runFileTest(data, opts) {
     }
 
     // List chunks for this file
-    const listChunksUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}/chunks`;
+    const listChunksUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}/chunks`;
     const listChunksRes = http.request("GET", listChunksUrl, null, data.header);
     logUnexpected(listChunksRes, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_id}/chunks');
     let listChunksJson; try { listChunksJson = listChunksRes.json(); } catch (e) { listChunksJson = {}; }

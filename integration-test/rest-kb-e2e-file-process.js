@@ -83,32 +83,17 @@ export function setup() {
   console.log(`rest-kb-e2e-file-process.js: Using unique test prefix: ${dbIDPrefix}`);
 
   // Authenticate with retry to handle transient failures
-  var loginResp = helper.authenticateWithRetry(
-    constant.mgmtRESTPublicHost,
-    constant.defaultUsername,
-    constant.defaultPassword
-  );
-
-  check(loginResp, {
-    [`POST ${constant.mgmtRESTPublicHost}/v1beta/auth/login response status is 200`]: (r) => r && r.status === 200,
-  });
-
-  if (!loginResp || loginResp.status !== 200) {
-    console.error("Setup: Authentication failed, cannot continue");
-    return null;
-  }
-
-  var accessToken = loginResp.json().accessToken;
+  const authHeader = helper.getBasicAuthHeader(constant.defaultUsername, constant.defaultPassword);
   var header = {
     "headers": {
-      "Authorization": `Bearer ${accessToken}`,
+      "Authorization": authHeader,
       "Content-Type": "application/json",
     },
     "timeout": "600s",
   }
 
   var resp = http.request("GET", `${constant.mgmtRESTPublicHost}/v1beta/user`, {}, {
-    headers: { "Authorization": `Bearer ${accessToken}` }
+    headers: { "Authorization": authHeader }
   })
 
   // Cleanup orphaned knowledge bases from previous failed test runs OF THIS SPECIFIC TEST
@@ -260,7 +245,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         filename: filename,
         req: {
           method: "POST",
-          url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?knowledgeBaseId=${knowledgeBaseId}`,
+          url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`,
           body: JSON.stringify({ displayName: filename, type: s.type, content: s.content }),
           params: data.header,
         },
@@ -327,7 +312,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
         lastBatch = http.batch(
           Array.from(pending).map((fileId) => ({
             method: "GET",
-            url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${fileId}`,
+            url: `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`,
             params: data.header,
           }))
         );
@@ -397,24 +382,24 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     }
 
     // Step 7: Verify each file's metadata and processing results
-    // API CHANGE: ListFiles now uses /files (top-level)
+    // Files are nested under knowledge-bases: /namespaces/{ns}/knowledge-bases/{kb}/files/{file_id}
     for (const f of uploaded) {
-      const viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/files?filter=${encodeURIComponent(`id = "${f.fileId}"`)}`;
+      const viewPath = `/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${f.fileId}`;
 
       const viewRes = http.request("GET", artifactRESTPublicHost + viewPath, null, data.header);
 
       let fileData;
       try {
         const viewJson = viewRes.json();
-        fileData = viewJson.files && viewJson.files[0];
+        fileData = viewJson.file;
       } catch (e) {
         fileData = null;
       }
 
       check(viewRes, {
         [`E2E: File view successful (${f.originalName})`]: (r) => r.status === 200,
-        // Note: In AIP refactoring, file.name format changed to namespaces/{ns}/files/{id}
-        [`E2E: File has correct resource name format (${f.originalName})`]: () => fileData && fileData.name && fileData.name.startsWith(`namespaces/${data.expectedOwner.id}/files/`),
+        // Note: In AIP refactoring, file.name format changed to namespaces/{ns}/knowledge-bases/{kb}/files/{id}
+        [`E2E: File has correct resource name format (${f.originalName})`]: () => fileData && fileData.name && fileData.name.includes(`/knowledge-bases/${knowledgeBaseId}/files/`),
         [`E2E: File has correct filename (${f.originalName})`]: () => fileData && fileData.displayName === f.filename,
         [`E2E: File status is COMPLETED (${f.originalName})`]: () => fileData && fileData.processStatus === "FILE_PROCESS_STATUS_COMPLETED",
         // Note: creatorUid removed in AIP refactoring - use creator object instead
@@ -535,7 +520,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
       // API CHANGE: ListChunks now uses /files/{file_id}/chunks
       const chunksResp = http.request(
         "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${pdfFile.fileId}/chunks`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${pdfFile.fileId}/chunks`,
         null,
         data.header
       );
@@ -592,12 +577,9 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     }
 
     // Step 8: List all files in knowledge base (pagination test)
-    // API CHANGE: ListFiles now uses /files (top-level) with knowledge_base_id filter
-    // Note: AIP-160 filter expressions use snake_case with spaces around operators
-    const filterExpr = `knowledge_base_id = "${knowledgeBaseId}"`;
     const listFilesRes = http.request(
       "GET",
-      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files?pageSize=100&filter=${encodeURIComponent(filterExpr)}`,
+      `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files?pageSize=100`,
       null,
       data.header
     );
@@ -618,7 +600,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     let totalChunksCount = 0;
     console.log(`E2E: Starting chunk verification for ${uploaded.length} files`);
     for (const f of uploaded) {
-      const chunkApiUrl = `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${f.fileId}/chunks`;
+      const chunkApiUrl = `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${f.fileId}/chunks`;
 
       console.log(`E2E: Polling chunks for ${f.originalName} (${f.fileId})`);
       // Poll for chunks until they appear or timeout
@@ -653,7 +635,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     for (const f of uploaded) {
       const getSummaryRes = http.request(
         "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${f.fileId}?view=VIEW_SUMMARY`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${f.fileId}?view=VIEW_SUMMARY`,
         null,
         data.header
       );
@@ -672,7 +654,7 @@ export function CheckKnowledgeBaseEndToEndFileProcessing(data) {
     for (const f of uploaded) {
       const contentRes = http.request(
         "GET",
-        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/files/${f.fileId}?view=VIEW_CONTENT`,
+        `${artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${f.fileId}?view=VIEW_CONTENT`,
         null,
         data.header
       );

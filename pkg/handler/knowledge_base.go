@@ -246,7 +246,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 			zap.String("owner_id(ns_id)", namespaceID),
 			zap.String("auth_uid", authUID))
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to get namespace: %w", err),
+			err,
 			"Unable to access the specified namespace. Please check the namespace ID and try again.",
 		)
 	}

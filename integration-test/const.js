@@ -72,6 +72,22 @@ export const paramsHTTPWithJWT = {
   },
 };
 
+// Invalid Basic Auth credentials for testing authentication rejection
+const invalidAuthHeader = `Basic ${encoding.b64encode("invalid:wrongpassword")}`;
+export const paramsGRPCWithInvalidAuth = {
+  metadata: {
+    "Content-Type": "application/json",
+    "Authorization": invalidAuthHeader,
+  },
+};
+
+// No auth metadata for testing unauthenticated requests
+export const paramsGRPCNoAuth = {
+  metadata: {
+    "Content-Type": "application/json",
+  },
+};
+
 // Test document sample data files
 export const docSampleDoc = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/doc-sample.doc`, "b")

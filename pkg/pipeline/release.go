@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"golang.org/x/mod/semver"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/v1beta"
@@ -192,6 +194,9 @@ func (u *ReleaseUpserter) Upsert(ctx context.Context, pr Release) error {
 	})
 
 	if err != nil {
+		if status.Code(err) != codes.NotFound {
+			return fmt.Errorf("getting namespace pipeline: %w", err)
+		}
 		// Pipeline doesn't exist, create it
 		parentName := fmt.Sprintf("namespaces/%s", pr.Namespace)
 		createResp, err := u.PipelinePublicServiceClient.CreatePipeline(ctx, &pipelinepb.CreatePipelineRequest{
@@ -199,10 +204,21 @@ func (u *ReleaseUpserter) Upsert(ctx context.Context, pr Release) error {
 			Pipeline: p,
 		})
 		if err != nil {
-			return fmt.Errorf("creating namespace pipeline: %w", err)
+			if status.Code(err) != codes.AlreadyExists {
+				return fmt.Errorf("creating namespace pipeline: %w", err)
+			}
+			// If already exists, try to get it again to get the ID
+			getResp, err = u.PipelinePublicServiceClient.GetPipeline(ctx, &pipelinepb.GetPipelineRequest{
+				Name: pipelineName,
+			})
+			if err != nil {
+				return fmt.Errorf("getting namespace pipeline after already exists: %w", err)
+			}
+			pipelineID = getResp.Pipeline.Id
+		} else {
+			// Use the server-generated ID for subsequent operations
+			pipelineID = createResp.Pipeline.Id
 		}
-		// Use the server-generated ID for subsequent operations
-		pipelineID = createResp.Pipeline.Id
 	} else {
 		// Pipeline exists, update it using the existing ID
 		pipelineID = getResp.Pipeline.Id
@@ -250,12 +266,17 @@ func (u *ReleaseUpserter) Upsert(ctx context.Context, pr Release) error {
 
 	if existingRelease == nil {
 		// Create new release
-		_, err = u.PipelinePublicServiceClient.CreatePipelineRelease(ctx, &pipelinepb.CreatePipelineReleaseRequest{
+		_, err := u.PipelinePublicServiceClient.CreatePipelineRelease(ctx, &pipelinepb.CreatePipelineReleaseRequest{
 			Parent:  pipelineParent,
 			Release: r,
 		})
 		if err != nil {
-			return fmt.Errorf("creating pipeline release: %w", err)
+			if status.Code(err) != codes.AlreadyExists {
+				return fmt.Errorf("creating pipeline release: %w", err)
+			}
+			// If already exists but not found in list (e.g. pagination), just ignore or we could try to find it by name if we really wanted to update it.
+			// Given it's a preset, it's probably fine to just return nil here as it's already there.
+			return nil
 		}
 	} else {
 		// Update existing release (AIP-134 requires name in resource)

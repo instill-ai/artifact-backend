@@ -4,8 +4,10 @@
 
 import * as constant from './const.js';
 import http from 'k6/http';
+import encoding from 'k6/encoding';
 import { sleep } from 'k6';
 import exec from 'k6/x/exec';
+import grpc from "k6/net/grpc";
 
 /**
  * Safe database query wrapper with proper error handling.
@@ -246,6 +248,68 @@ export const httpRetry = {
 
 
 // ============================================================================
+// gRPC Retry Helpers for Transient Errors
+// ============================================================================
+
+// gRPC status codes that are retryable
+const GRPC_RETRYABLE_STATUS = [
+  grpc.StatusUnknown,           // 2 - Unknown error
+  grpc.StatusDeadlineExceeded,  // 4 - Timeout
+  grpc.StatusResourceExhausted, // 8 - Rate limiting
+  grpc.StatusAborted,           // 10 - Concurrency issue
+  grpc.StatusUnavailable,       // 14 - Server temporarily unavailable
+];
+
+/**
+ * gRPC invoke with automatic retry for transient errors.
+ * Handles rate limits, server errors, and network issues.
+ *
+ * @param {object} client - gRPC client instance
+ * @param {string} method - gRPC method to invoke (e.g., "service/Method")
+ * @param {object} request - Request payload
+ * @param {object} metadata - Optional metadata (e.g., { metadata: { Authorization: "..." } })
+ * @param {object} retryConfig - Optional retry config override
+ * @returns {object} gRPC response
+ */
+export function grpcInvokeWithRetry(client, method, request, metadata = {}, retryConfig = {}) {
+  const maxRetries = retryConfig.maxRetries || DEFAULT_RETRY_CONFIG.maxRetries;
+  const backoffMs = retryConfig.backoffMs || DEFAULT_RETRY_CONFIG.backoffMs;
+  const retryOnStatus = retryConfig.retryOnStatus || GRPC_RETRYABLE_STATUS;
+
+  let lastResponse = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    lastResponse = client.invoke(method, request, metadata);
+
+    // Success - return immediately
+    if (lastResponse.status === grpc.StatusOK) {
+      return lastResponse;
+    }
+
+    // Check if we should retry this status code
+    if (!retryOnStatus.includes(lastResponse.status)) {
+      // Non-retryable error - return immediately
+      return lastResponse;
+    }
+
+    // Retryable error - wait and retry
+    if (attempt < maxRetries) {
+      const waitTime = backoffMs * Math.pow(2, attempt - 1); // Exponential backoff: 1s, 2s, 4s
+      const methodName = method.split('/').pop(); // Last part for logging
+      console.log(`⚠ gRPC ${methodName} failed (status=${lastResponse.status}), ` +
+        `retry ${attempt}/${maxRetries} in ${waitTime}ms...`);
+      sleep(waitTime / 1000);
+    }
+  }
+
+  // All retries exhausted
+  const methodName = method.split('/').pop();
+  console.log(`✗ gRPC ${methodName} failed after ${maxRetries} retries (status=${lastResponse.status})`);
+  return lastResponse;
+}
+
+
+// ============================================================================
 // Utility Functions
 // ============================================================================
 
@@ -379,8 +443,18 @@ export function isValidChunkID(id) {
 export function isValidResourceName(name, resourceType) {
   if (!name || typeof name !== 'string') return false;
 
-  const pattern = new RegExp(`^namespaces/[^/]+/${resourceType}/[^/]+$`);
-  return pattern.test(name);
+  // Supports:
+  // 1. namespaces/{ns}/{resourceType}/{id} (flat)
+  // 2. namespaces/{ns}/knowledge-bases/{kb}/{resourceType}/{id} (nested)
+  const flatPattern = new RegExp(`^namespaces/[^/]+/${resourceType}/[^/]+$`);
+  const nestedPattern = new RegExp(`^namespaces/[^/]+/knowledge-bases/[^/]+/${resourceType}/[^/]+$`);
+  const kbPattern = new RegExp(`^namespaces/[^/]+/knowledge-bases/[^/]+$`);
+
+  if (resourceType === "knowledge-bases") {
+    return kbPattern.test(name);
+  }
+
+  return flatPattern.test(name) || nestedPattern.test(name);
 }
 
 export function validateKnowledgeBase(knowledgeBase, isPrivate) {
@@ -539,16 +613,16 @@ export function validateFile(file, isPrivate) {
     }
   }
 
-  // Validate collectionIds field (optional, should be array if present)
-  if ("collectionIds" in file && file.collectionIds !== null && file.collectionIds !== undefined) {
-    if (!Array.isArray(file.collectionIds)) {
-      console.log("File collectionIds is not an array");
+  // Validate knowledgeBases field (optional, should be array if present)
+  if ("knowledgeBases" in file && file.knowledgeBases !== null && file.knowledgeBases !== undefined) {
+    if (!Array.isArray(file.knowledgeBases)) {
+      console.log("File knowledgeBases is not an array");
       return false;
     }
     // Each element should be a valid string ID
-    for (const id of file.collectionIds) {
+    for (const id of file.knowledgeBases) {
       if (typeof id !== "string" || id.length === 0) {
-        console.log(`File collectionIds contains invalid ID: ${id}`);
+        console.log(`File knowledgeBases contains invalid ID: ${id}`);
         return false;
       }
     }
@@ -684,16 +758,16 @@ export function validateFileGRPC(file, isPrivate) {
     }
   }
 
-  // Validate collectionIds field (optional, should be array if present)
-  if ("collectionIds" in file && file.collectionIds !== null && file.collectionIds !== undefined) {
-    if (!Array.isArray(file.collectionIds)) {
-      console.log("File collectionIds is not an array");
+  // Validate knowledgeBases field (optional, should be array if present)
+  if ("knowledgeBases" in file && file.knowledgeBases !== null && file.knowledgeBases !== undefined) {
+    if (!Array.isArray(file.knowledgeBases)) {
+      console.log("File knowledgeBases is not an array");
       return false;
     }
     // Each element should be a valid string ID
-    for (const id of file.collectionIds) {
+    for (const id of file.knowledgeBases) {
       if (typeof id !== "string" || id.length === 0) {
-        console.log(`File collectionIds contains invalid ID: ${id}`);
+        console.log(`File knowledgeBases contains invalid ID: ${id}`);
         return false;
       }
     }
@@ -1334,8 +1408,8 @@ export function pollMilvusVectorsCleanup(kbUID, fileUID, maxWaitSeconds = 30) {
  */
 export function getFileMetadata(namespaceId, knowledgeBaseId, fileId, headers) {
   try {
-    // Note: knowledgeBaseId is no longer needed in the URL but kept in signature for backward compatibility
-    const apiUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/files/${fileId}`;
+    // Files are nested under knowledge-bases: /namespaces/{ns}/knowledge-bases/{kb}/files/{file_id}
+    const apiUrl = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`;
     const res = http.request("GET", apiUrl, null, headers);
 
     if (res.status !== 200) {
@@ -2334,10 +2408,10 @@ export function waitForFileProcessingComplete(namespaceId, knowledgeBaseId, file
 
   while (elapsed < maxWaitSeconds) {
     // Check status FIRST, then sleep (don't waste the first interval)
-    // API CHANGE: Files are now top-level resources at /namespaces/{ns}/files/{file_id}
+    // API CHANGE: Use nested URLs /namespaces/{ns}/knowledge-bases/{kb}/files/{file_id}
     const statusRes = http.request(
       "GET",
-      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/files/${fileId}`,
+      `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`,
       null,
       headers
     );
@@ -2475,11 +2549,11 @@ export function waitForMultipleFilesProcessingComplete(namespaceId, knowledgeBas
     sleep(0.5);
 
     // Batch check all pending files
-    // API CHANGE: Files are now top-level resources at /namespaces/{ns}/files/{file_id}
+    // Files are nested under knowledge-bases: /namespaces/{ns}/knowledge-bases/{kb}/files/{file_id}
     const checks = Array.from(pending).map(fileId =>
       http.request(
         "GET",
-        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/files/${fileId}`,
+        `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${namespaceId}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`,
         null,
         headers
       )
@@ -2612,6 +2686,12 @@ export function uploadFileWithRetry(url, payload, headers, maxRetries = 3) {
  * @param {number} maxRetries - Maximum number of retry attempts (default: 3)
  * @returns {object|null} - HTTP response object with accessToken, or null if all retries failed
  */
+export function getBasicAuthHeader(username, password) {
+  const credentials = `${username}:${password}`;
+  const encodedCredentials = encoding.b64encode(credentials);
+  return `Basic ${encodedCredentials}`;
+}
+
 export function authenticateWithRetry(mgmtHost, username, password, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const response = http.request("POST", `${mgmtHost}/v1beta/auth/login`, JSON.stringify({
