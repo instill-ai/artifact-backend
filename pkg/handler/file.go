@@ -43,22 +43,22 @@ func (r filterRequestWrapper) GetFilter() string {
 	return r.filter
 }
 
-// parseKnowledgeBaseFromParent parses a parent resource name of format "namespaces/{namespace}/knowledgeBases/{kb}"
+// parseKnowledgeBaseFromParent parses a parent resource name of format "namespaces/{namespace}/knowledge-bases/{kb}"
 // and returns the namespace_id and knowledge_base_id
 func parseKnowledgeBaseFromParent(parent string) (namespaceID, kbID string, err error) {
 	parts := strings.Split(parent, "/")
-	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "knowledgeBases" {
-		return "", "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}/knowledgeBases/{knowledge_base}")
+	if len(parts) != 4 || parts[0] != "namespaces" || parts[2] != "knowledge-bases" {
+		return "", "", fmt.Errorf("invalid parent format, expected namespaces/{namespace}/knowledge-bases/{knowledge_base}")
 	}
 	return parts[1], parts[3], nil
 }
 
-// parseFileFromName parses a resource name of format "namespaces/{namespace}/knowledgeBases/{kb}/files/{file}"
+// parseFileFromName parses a resource name of format "namespaces/{namespace}/knowledge-bases/{kb}/files/{file}"
 // and returns the namespace_id, knowledge_base_id, and file_id
 func parseFileFromName(name string) (namespaceID, kbID, fileID string, err error) {
 	parts := strings.Split(name, "/")
-	if len(parts) != 6 || parts[0] != "namespaces" || parts[2] != "knowledgeBases" || parts[4] != "files" {
-		return "", "", "", fmt.Errorf("invalid file name format, expected namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}")
+	if len(parts) != 6 || parts[0] != "namespaces" || parts[2] != "knowledge-bases" || parts[4] != "files" {
+		return "", "", "", fmt.Errorf("invalid file name format, expected namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file}")
 	}
 	return parts[1], parts[3], parts[5], nil
 }
@@ -90,12 +90,12 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	}
 
 	// Parse namespace and knowledge base from parent
-	// Format: namespaces/{namespace}/knowledgeBases/{knowledge_base}
+	// Format: namespaces/{namespace}/knowledge-bases/{knowledge_base}
 	namespaceID, kbID, err := parseKnowledgeBaseFromParent(req.GetParent())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing parent: %w", err),
-			"Invalid parent format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}",
+			"Invalid parent format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}",
 		)
 	}
 
@@ -597,8 +597,8 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			OwnerName:          ns.Name(),
 			Owner:              owner,
 			Creator:            creator,
-			KnowledgeBases:     []string{fmt.Sprintf("namespaces/%s/knowledgeBases/%s", namespaceID, kb.ID)}, // Initial KB association
-			Name:               fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", namespaceID, kb.ID, res.ID),
+			KnowledgeBases:     []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)}, // Initial KB association
+			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kb.ID, res.ID),
 			DisplayName:        res.DisplayName,
 			Type:               req.File.Type,
 			CreateTime:         timestamppb.New(*res.CreateTime),
@@ -628,12 +628,12 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 	}
 
 	// Parse namespace and knowledge base from parent
-	// Format: namespaces/{namespace}/knowledgeBases/{knowledge_base}
+	// Format: namespaces/{namespace}/knowledge-bases/{knowledge_base}
 	namespaceID, kbID, err := parseKnowledgeBaseFromParent(req.GetParent())
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing parent: %w", err),
-			"Invalid parent format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}",
+			"Invalid parent format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}",
 		)
 	}
 
@@ -851,7 +851,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			Owner:              owner,
 			Creator:            creator,
 			KnowledgeBases:     knowledgeBaseIDs,
-			Name:               fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", namespaceID, kb.ID, fileID),
+			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kb.ID, fileID),
 			DisplayName:        kbFile.DisplayName,
 			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
 			CreateTime:         timestamppb.New(*kbFile.CreateTime),
@@ -902,7 +902,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing file name: %w", err),
-			"Invalid file name format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}",
+			"Invalid file name format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file}",
 		)
 	}
 
@@ -910,7 +910,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 	filterExpr := fmt.Sprintf(`id = "%s"`, fileID)
 	pageSize := int32(1)
 	files, err := ph.ListFiles(ctx, &artifactpb.ListFilesRequest{
-		Parent:   fmt.Sprintf("namespaces/%s/knowledgeBases/%s", namespaceID, kbID),
+		Parent:   fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kbID),
 		PageSize: &pageSize,
 		Filter:   &filterExpr,
 	})
@@ -1420,7 +1420,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing file name: %w", err),
-			"Invalid file name format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}",
+			"Invalid file name format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file}",
 		)
 	}
 	_ = kbID // KB ID is now in the path but we already get it from the file record
@@ -1711,7 +1711,7 @@ func (ph *PublicHandler) DeleteFile(ctx context.Context, req *artifactpb.DeleteF
 	}
 
 	return &artifactpb.DeleteFileResponse{
-		Name: fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", namespaceID, kbID, fUID.String()),
+		Name: fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kbID, fUID.String()),
 	}, nil
 
 }
@@ -1726,7 +1726,7 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing file name: %w", err),
-			"Invalid file name format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}",
+			"Invalid file name format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file}",
 		)
 	}
 
@@ -1918,7 +1918,7 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("parsing file name: %w", err),
-			"Invalid file name format. Expected: namespaces/{namespace}/knowledgeBases/{knowledge_base}/files/{file}",
+			"Invalid file name format. Expected: namespaces/{namespace}/knowledge-bases/{knowledge_base}/files/{file}",
 		)
 	}
 

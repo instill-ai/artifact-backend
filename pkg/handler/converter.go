@@ -84,7 +84,7 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 	// Handle optional fields
 	// Check if ActiveCollectionUID is not zero (nil UUID)
 	if kb.ActiveCollectionUID.String() != "00000000-0000-0000-0000-000000000000" {
-		knowledgeBase.ActiveCollection = fmt.Sprintf("namespaces/%s/knowledgeBases/%s/collections/%s", namespaceID, kb.ID, kb.ActiveCollectionUID.String())
+		knowledgeBase.ActiveCollection = fmt.Sprintf("namespaces/%s/knowledge-bases/%s/collections/%s", namespaceID, kb.ID, kb.ActiveCollectionUID.String())
 	}
 
 	return knowledgeBase
@@ -107,7 +107,7 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 	file := &artifactpb.File{
 		Id:               fileID,
 		Slug:             kbf.Slug,                                                                             // URL-friendly slug without prefix
-		Name:             fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", namespaceID, kb.ID, fileID), // Computed: namespaces/{namespace}/knowledgeBases/{kb}/files/{file}
+		Name:             fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kb.ID, fileID), // Computed: namespaces/{namespace}/knowledge-bases/{kb}/files/{file}
 		DisplayName:      kbf.DisplayName,
 		Description:      kbf.Description,
 		Type:             convertFileType(kbf.FileType),
@@ -116,7 +116,7 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 		OwnerName:        ownerName,
 		Owner:            owner,
 		Creator:          creator,
-		KnowledgeBases: []string{fmt.Sprintf("namespaces/%s/knowledgeBases/%s", namespaceID, kb.ID)}, // File associated with this KB
+		KnowledgeBases: []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)}, // File associated with this KB
 		Size:             kbf.Size,
 		ProcessStatus:    convertFileProcessStatus(kbf.ProcessStatus),
 		Aliases:          kbf.Aliases,

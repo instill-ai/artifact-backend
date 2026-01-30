@@ -294,7 +294,7 @@ func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.Up
 	logger, _ := logx.GetZapLogger(ctx)
 
 	// Parse namespace, KB, and file ID from file.name (AIP-134)
-	// Format: namespaces/{namespace}/knowledgeBases/{kb}/files/{file}
+	// Format: namespaces/{namespace}/knowledge-bases/{kb}/files/{file}
 	namespaceID, kbID, fileID, err := parseFileFromName(req.GetFile().GetName())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid file.name format: %v", err)
@@ -642,7 +642,7 @@ func (h *PrivateHandler) ReprocessFileAdmin(ctx context.Context, req *artifactpb
 	// Convert to protobuf response
 	updatedFile := updatedFiles[0]
 	pbFile := &artifactpb.File{
-		Name:          fmt.Sprintf("namespaces/%s/knowledgeBases/%s/files/%s", kb.NamespaceUID, kb.ID, updatedFile.ID),
+		Name:          fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", kb.NamespaceUID, kb.ID, updatedFile.ID),
 		Id:            updatedFile.ID,
 		DisplayName:   updatedFile.DisplayName,
 		Type:          artifactpb.File_Type(artifactpb.File_Type_value[updatedFile.FileType]),

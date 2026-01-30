@@ -183,7 +183,7 @@ func (ph *PublicHandler) CreateKnowledgeBase(ctx context.Context, req *artifactp
 		return nil, err
 	}
 
-	activeCollection := fmt.Sprintf("namespaces/%s/knowledgeBases/%s/collections/%s", namespaceID, dbData.ID, dbData.ActiveCollectionUID.String())
+	activeCollection := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/collections/%s", namespaceID, dbData.ID, dbData.ActiveCollectionUID.String())
 
 	// Fetch owner and creator objects
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
@@ -297,7 +297,7 @@ func (ph *PublicHandler) ListKnowledgeBases(ctx context.Context, req *artifactpb
 
 	kbs := make([]*artifactpb.KnowledgeBase, len(dbData))
 	for i, kb := range dbData {
-		activeCollection := fmt.Sprintf("namespaces/%s/knowledgeBases/%s/collections/%s", namespaceID, kb.ID, kb.ActiveCollectionUID.String())
+		activeCollection := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/collections/%s", namespaceID, kb.ID, kb.ActiveCollectionUID.String())
 
 		// Fetch creator object if creator_uid is set
 		var creator *mgmtpb.User
