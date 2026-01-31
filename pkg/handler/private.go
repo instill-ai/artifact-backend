@@ -288,7 +288,7 @@ func (h *PrivateHandler) UpdateKnowledgeBaseAdmin(ctx context.Context, req *arti
 
 // UpdateFileAdmin updates a file with system-reserved tags (admin only).
 // Unlike the public UpdateFile, this endpoint:
-// - Does NOT validate reserved tag prefixes (allows "agent:collection:{uid}" etc.)
+// - Does NOT validate reserved tag prefixes (allows "agent:collection:{id}" where {id} is hash-based like col-xxx)
 // - Does NOT require ACL checks (admin-only access)
 func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.UpdateFileAdminRequest) (*artifactpb.UpdateFileAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)

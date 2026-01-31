@@ -14,11 +14,11 @@ import (
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
+	"github.com/instill-ai/x/resource"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
-	"github.com/instill-ai/x/resource"
 )
 
 // parseChunkFromName parses a resource name of format:
@@ -529,6 +529,7 @@ func (ph *PublicHandler) SearchChunks(
 		ctx,
 		fileUids,
 		repository.FileColumn.UID,
+		repository.FileColumn.ID,
 		repository.FileColumn.DisplayName,
 	)
 	if err != nil {
@@ -538,8 +539,17 @@ func (ph *PublicHandler) SearchChunks(
 		)
 	}
 
+	// Build maps: FileUID -> DisplayName and FileUID -> hash-based ID
+	fileUIDMapID := make(map[types.FileUIDType]string)
 	for _, file := range files {
 		fileUIDMapDisplayName[file.UID] = file.DisplayName
+		// Use hash-based ID (e.g., "file-abc123") for resource names
+		// Fall back to UID string if ID is empty (legacy data)
+		if file.ID != "" {
+			fileUIDMapID[file.UID] = file.ID
+		} else {
+			fileUIDMapID[file.UID] = file.UID.String()
+		}
 	}
 
 	// Build response with new protobuf format
@@ -550,16 +560,33 @@ func (ph *PublicHandler) SearchChunks(
 			continue
 		}
 
-		// Build full resource names for chunk and file
-		chunkName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s/chunks/%s", namespaceID, kbID, chunk.FileUID.String(), chunk.ID)
-		fileName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kbID, chunk.FileUID.String())
+		// Get hash-based file ID for resource names (e.g., "file-abc123")
+		// This ensures the citation URLs use the canonical ID format expected by the API
+		fileID := fileUIDMapID[chunk.FileUID]
+		if fileID == "" {
+			// Fallback to UUID if not found (shouldn't happen normally)
+			fileID = chunk.FileUID.String()
+			logger.Warn("File ID not found in map, using UUID",
+				zap.String("fileUID", chunk.FileUID.String()),
+				zap.String("chunkUID", chunk.UID.String()))
+		}
+
+		// Debug log to verify hash-based ID is being used
+		logger.Debug("SearchChunks building resource name",
+			zap.String("fileUID", chunk.FileUID.String()),
+			zap.String("fileID", fileID),
+			zap.String("chunkID", chunk.ID))
+
+		// Build full resource names for chunk and file using hash-based file ID
+		chunkName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s/chunks/%s", namespaceID, kbID, fileID, chunk.ID)
+		fileName := fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kbID, fileID)
 
 		pbChunk := &artifactpb.SimilarityChunk{
 			Chunk:           chunkName,
 			SimilarityScore: float32(simChunksScores[i].Score),
 			TextContent:     string(chunkContents[i].Content),
 			File:            fileName,
-			ChunkMetadata:   convertToProtoChunk(chunk, namespaceID, kbID, chunk.FileUID.String()),
+			ChunkMetadata:   convertToProtoChunk(chunk, namespaceID, kbID, fileID),
 		}
 		simChunks = append(simChunks, pbChunk)
 	}

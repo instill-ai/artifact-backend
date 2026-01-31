@@ -1783,7 +1783,7 @@ export function TEST_24_ReservedTagsValidation(data) {
       displayName: data.dbIDPrefix + "agent-tag.txt",
       type: "TYPE_TEXT",
       content: constant.docSampleTxt,
-      tags: ["user-tag", "agent:collection:fake-uid-12345"]
+      tags: ["user-tag", "agent:collection:col-fake-id-12345"]
     };
 
     // API CHANGE: CreateFile now uses /files with knowledgeBaseId query param
@@ -1840,7 +1840,7 @@ export function TEST_24_ReservedTagsValidation(data) {
     // Note: uid removed in AIP refactoring - use id for identification
     if (normalFile && normalFile.id) {
       const updateBody = {
-        tags: ["user-tag", "agent:collection:another-fake-uid"]
+        tags: ["user-tag", "agent:collection:col-another-fake-id"]
       };
 
       // API CHANGE: UpdateFile now uses /files/{file_id}

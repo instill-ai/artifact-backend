@@ -27,7 +27,7 @@ service ArtifactPrivateService {
   // Update a file with system-reserved tags (admin only)
   //
   // Updates a file allowing system-reserved tag prefixes like "agent:".
-  // Used by agent-backend to set collection association tags (e.g., "agent:collection:{uid}").
+  // Used by agent-backend to set collection association tags (e.g., "agent:collection:{collectionID}").
   rpc UpdateFileAdmin(UpdateFileAdminRequest) returns (UpdateFileAdminResponse);
 
   // Get Object (admin only)
