@@ -621,7 +621,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			Object:             objectResourceName,
 			ConvertingPipeline: res.ConvertingPipeline(),
 			Tags:               res.Tags,
-			Collections:        extractCollectionUIDs(res.Tags),
+			Collections:        extractCollectionIDs(res.Tags),
 		},
 	}, nil
 }
@@ -913,7 +913,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		DownloadUrl:        downloadURL,
 		ConvertingPipeline: kbFile.ConvertingPipeline(),
 		Tags:               []string(kbFile.Tags),
-		Collections:        extractCollectionUIDs(kbFile.Tags),
+		Collections:        extractCollectionIDs(kbFile.Tags),
 	}
 
 		// Include status message (error or success message)

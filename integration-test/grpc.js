@@ -959,7 +959,7 @@ export function TEST_19_UpdateFileAdmin(data) {
       {
         file: {
           name: `namespaces/${constant.defaultUserId}/knowledge-bases/${testKbId}/files/${fileId}`,
-          tags: ["agent:collection:fake-uid-123", "user-tag"],
+          tags: ["agent:collection:col-fake-id-123", "user-tag"],
         },
         update_mask: { paths: ["tags"] },
       },
@@ -970,7 +970,7 @@ export function TEST_19_UpdateFileAdmin(data) {
       "UpdateFileAdmin returns file": (r) => !!r.message?.file,
       "UpdateFileAdmin can set agent: reserved tags": (r) => {
         const tags = r.message?.file?.tags || [];
-        return tags.includes("agent:collection:fake-uid-123");
+        return tags.includes("agent:collection:col-fake-id-123");
       },
     });
 

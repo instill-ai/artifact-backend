@@ -19,7 +19,7 @@ import (
 // Reserved tag prefixes that users cannot set directly.
 // These are managed by the system.
 var reservedTagPrefixes = []string{
-	"agent:",   // Reserved for agent-backend (e.g., agent:collection:{uid})
+	"agent:",   // Reserved for agent-backend (e.g., agent:collection:{id} where {id} is hash-based like col-xxx)
 	"instill-", // Reserved for internal system use
 }
 
@@ -36,19 +36,20 @@ func validateUserTags(tags []string) error {
 	return nil
 }
 
-// extractCollectionUIDs extracts collection UIDs from tags with prefix "agent:collection:".
-func extractCollectionUIDs(tags []string) []string {
+// extractCollectionIDs extracts collection IDs from tags with prefix "agent:collection:".
+// The IDs are hash-based resource IDs (e.g., col-xxx), not UUIDs.
+func extractCollectionIDs(tags []string) []string {
 	const collectionTagPrefix = "agent:collection:"
-	var collectionUIDs []string
+	var collectionIDs []string
 	for _, tag := range tags {
 		if strings.HasPrefix(tag, collectionTagPrefix) {
-			uid := strings.TrimPrefix(tag, collectionTagPrefix)
-			if uid != "" {
-				collectionUIDs = append(collectionUIDs, uid)
+			id := strings.TrimPrefix(tag, collectionTagPrefix)
+			if id != "" {
+				collectionIDs = append(collectionIDs, id)
 			}
 		}
 	}
-	return collectionUIDs
+	return collectionIDs
 }
 
 // convertKBToCatalogPB converts database KnowledgeBase to protobuf KnowledgeBase.
@@ -130,7 +131,7 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 	if len(kbf.Tags) > 0 {
 		file.Tags = kbf.Tags
 		// Extract collection UIDs from tags with prefix "agent:collection:"
-		file.Collections = extractCollectionUIDs(kbf.Tags)
+		file.Collections = extractCollectionIDs(kbf.Tags)
 	}
 
 	if kbf.ExternalMetadataUnmarshal != nil {
