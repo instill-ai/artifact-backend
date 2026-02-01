@@ -101,6 +101,10 @@ type File interface {
 	// Returns the number of new associations added (skips duplicates).
 	AddFilesToKnowledgeBase(ctx context.Context, targetKBUID types.KnowledgeBaseUIDType, fileIDs []string) (int64, error)
 
+	// ListKnowledgeBaseFilesAdmin lists files in a KB without ACL checks (admin only).
+	// Returns files, next page token, total count, and error.
+	ListKnowledgeBaseFilesAdmin(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) ([]FileModel, string, int32, error)
+
 	// Deprecated methods
 
 	// GetFileByKBUIDAndFileID returns the file by
@@ -673,6 +677,61 @@ func (r *repository) AddFilesToKnowledgeBase(ctx context.Context, targetKBUID ty
 	}
 
 	return result.RowsAffected, nil
+}
+
+// ListKnowledgeBaseFilesAdmin lists files in a KB without ACL checks (admin only).
+// Returns files, next page token, total count, and error.
+func (r *repository) ListKnowledgeBaseFilesAdmin(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) ([]FileModel, string, int32, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Default page size
+	if pageSize <= 0 {
+		pageSize = 100
+	}
+
+	// Get total count first
+	var totalCount int64
+	countQuery := r.db.WithContext(ctx).
+		Table("file f").
+		Joins("JOIN file_knowledge_base fkb ON f.uid = fkb.file_uid").
+		Where("fkb.kb_uid = ? AND f.delete_time IS NULL", kbUID)
+
+	if err := countQuery.Count(&totalCount).Error; err != nil {
+		return nil, "", 0, fmt.Errorf("failed to count files: %w", err)
+	}
+
+	// Build query for files
+	query := r.db.WithContext(ctx).
+		Table("file").
+		Joins("JOIN file_knowledge_base fkb ON file.uid = fkb.file_uid").
+		Where("fkb.kb_uid = ? AND file.delete_time IS NULL", kbUID).
+		Order("file.create_time DESC").
+		Limit(int(pageSize) + 1) // +1 to detect if there's a next page
+
+	// Apply page token (cursor-based pagination using create_time)
+	if pageToken != "" {
+		// Page token is the last create_time from previous page
+		query = query.Where("file.create_time < ?", pageToken)
+	}
+
+	var files []FileModel
+	if err := query.Find(&files).Error; err != nil {
+		return nil, "", 0, fmt.Errorf("failed to list files: %w", err)
+	}
+
+	// Determine next page token
+	var nextPageToken string
+	if len(files) > int(pageSize) {
+		// There's more data - use the last item's create_time as next token
+		nextPageToken = files[pageSize-1].CreateTime.Format("2006-01-02T15:04:05.999999Z07:00")
+		files = files[:pageSize] // Remove the extra item
+	}
+
+	logger.Debug("ListKnowledgeBaseFilesAdmin completed",
+		zap.Int("files_returned", len(files)),
+		zap.Int64("total_count", totalCount))
+
+	return files, nextPageToken, int32(totalCount), nil
 }
 
 // ProcessFiles updates the process status of the files

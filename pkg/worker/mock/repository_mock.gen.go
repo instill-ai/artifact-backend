@@ -738,6 +738,13 @@ type RepositoryMock struct {
 	beforeListFilesCounter uint64
 	ListFilesMock          mRepositoryMockListFiles
 
+	funcListKnowledgeBaseFilesAdmin          func(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) (fa1 []mm_repository.FileModel, s1 string, i1 int32, err error)
+	funcListKnowledgeBaseFilesAdminOrigin    string
+	inspectFuncListKnowledgeBaseFilesAdmin   func(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string)
+	afterListKnowledgeBaseFilesAdminCounter  uint64
+	beforeListKnowledgeBaseFilesAdminCounter uint64
+	ListKnowledgeBaseFilesAdminMock          mRepositoryMockListKnowledgeBaseFilesAdmin
+
 	funcListKnowledgeBases          func(ctx context.Context, ownerUID string) (ka1 []mm_repository.KnowledgeBaseModel, err error)
 	funcListKnowledgeBasesOrigin    string
 	inspectFuncListKnowledgeBases   func(ctx context.Context, ownerUID string)
@@ -1316,6 +1323,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.ListFilesMock = mRepositoryMockListFiles{mock: m}
 	m.ListFilesMock.callArgs = []*RepositoryMockListFilesParams{}
+
+	m.ListKnowledgeBaseFilesAdminMock = mRepositoryMockListKnowledgeBaseFilesAdmin{mock: m}
+	m.ListKnowledgeBaseFilesAdminMock.callArgs = []*RepositoryMockListKnowledgeBaseFilesAdminParams{}
 
 	m.ListKnowledgeBasesMock = mRepositoryMockListKnowledgeBases{mock: m}
 	m.ListKnowledgeBasesMock.callArgs = []*RepositoryMockListKnowledgeBasesParams{}
@@ -36791,6 +36801,413 @@ func (m *RepositoryMock) MinimockListFilesInspect() {
 	}
 }
 
+type mRepositoryMockListKnowledgeBaseFilesAdmin struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockListKnowledgeBaseFilesAdminExpectation
+	expectations       []*RepositoryMockListKnowledgeBaseFilesAdminExpectation
+
+	callArgs []*RepositoryMockListKnowledgeBaseFilesAdminParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockListKnowledgeBaseFilesAdminExpectation specifies expectation struct of the Repository.ListKnowledgeBaseFilesAdmin
+type RepositoryMockListKnowledgeBaseFilesAdminExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockListKnowledgeBaseFilesAdminParams
+	paramPtrs          *RepositoryMockListKnowledgeBaseFilesAdminParamPtrs
+	expectationOrigins RepositoryMockListKnowledgeBaseFilesAdminExpectationOrigins
+	results            *RepositoryMockListKnowledgeBaseFilesAdminResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockListKnowledgeBaseFilesAdminParams contains parameters of the Repository.ListKnowledgeBaseFilesAdmin
+type RepositoryMockListKnowledgeBaseFilesAdminParams struct {
+	ctx       context.Context
+	kbUID     types.KnowledgeBaseUIDType
+	pageSize  int32
+	pageToken string
+}
+
+// RepositoryMockListKnowledgeBaseFilesAdminParamPtrs contains pointers to parameters of the Repository.ListKnowledgeBaseFilesAdmin
+type RepositoryMockListKnowledgeBaseFilesAdminParamPtrs struct {
+	ctx       *context.Context
+	kbUID     *types.KnowledgeBaseUIDType
+	pageSize  *int32
+	pageToken *string
+}
+
+// RepositoryMockListKnowledgeBaseFilesAdminResults contains results of the Repository.ListKnowledgeBaseFilesAdmin
+type RepositoryMockListKnowledgeBaseFilesAdminResults struct {
+	fa1 []mm_repository.FileModel
+	s1  string
+	i1  int32
+	err error
+}
+
+// RepositoryMockListKnowledgeBaseFilesAdminOrigins contains origins of expectations of the Repository.ListKnowledgeBaseFilesAdmin
+type RepositoryMockListKnowledgeBaseFilesAdminExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originKbUID     string
+	originPageSize  string
+	originPageToken string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) Optional() *mRepositoryMockListKnowledgeBaseFilesAdmin {
+	mmListKnowledgeBaseFilesAdmin.optional = true
+	return mmListKnowledgeBaseFilesAdmin
+}
+
+// Expect sets up expected params for Repository.ListKnowledgeBaseFilesAdmin
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) Expect(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) *mRepositoryMockListKnowledgeBaseFilesAdmin {
+	if mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdmin != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation = &RepositoryMockListKnowledgeBaseFilesAdminExpectation{}
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by ExpectParams functions")
+	}
+
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.params = &RepositoryMockListKnowledgeBaseFilesAdminParams{ctx, kbUID, pageSize, pageToken}
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListKnowledgeBaseFilesAdmin.expectations {
+		if minimock.Equal(e.params, mmListKnowledgeBaseFilesAdmin.defaultExpectation.params) {
+			mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListKnowledgeBaseFilesAdmin.defaultExpectation.params)
+		}
+	}
+
+	return mmListKnowledgeBaseFilesAdmin
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.ListKnowledgeBaseFilesAdmin
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) ExpectCtxParam1(ctx context.Context) *mRepositoryMockListKnowledgeBaseFilesAdmin {
+	if mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdmin != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation = &RepositoryMockListKnowledgeBaseFilesAdminExpectation{}
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation.params != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBaseFilesAdminParamPtrs{}
+	}
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBaseFilesAdmin
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.ListKnowledgeBaseFilesAdmin
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) ExpectKbUIDParam2(kbUID types.KnowledgeBaseUIDType) *mRepositoryMockListKnowledgeBaseFilesAdmin {
+	if mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdmin != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation = &RepositoryMockListKnowledgeBaseFilesAdminExpectation{}
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation.params != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBaseFilesAdminParamPtrs{}
+	}
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBaseFilesAdmin
+}
+
+// ExpectPageSizeParam3 sets up expected param pageSize for Repository.ListKnowledgeBaseFilesAdmin
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) ExpectPageSizeParam3(pageSize int32) *mRepositoryMockListKnowledgeBaseFilesAdmin {
+	if mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdmin != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation = &RepositoryMockListKnowledgeBaseFilesAdminExpectation{}
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation.params != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBaseFilesAdminParamPtrs{}
+	}
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs.pageSize = &pageSize
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.expectationOrigins.originPageSize = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBaseFilesAdmin
+}
+
+// ExpectPageTokenParam4 sets up expected param pageToken for Repository.ListKnowledgeBaseFilesAdmin
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) ExpectPageTokenParam4(pageToken string) *mRepositoryMockListKnowledgeBaseFilesAdmin {
+	if mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdmin != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation = &RepositoryMockListKnowledgeBaseFilesAdminExpectation{}
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation.params != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Expect")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs = &RepositoryMockListKnowledgeBaseFilesAdminParamPtrs{}
+	}
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.paramPtrs.pageToken = &pageToken
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.expectationOrigins.originPageToken = minimock.CallerInfo(1)
+
+	return mmListKnowledgeBaseFilesAdmin
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.ListKnowledgeBaseFilesAdmin
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) Inspect(f func(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string)) *mRepositoryMockListKnowledgeBaseFilesAdmin {
+	if mmListKnowledgeBaseFilesAdmin.mock.inspectFuncListKnowledgeBaseFilesAdmin != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListKnowledgeBaseFilesAdmin")
+	}
+
+	mmListKnowledgeBaseFilesAdmin.mock.inspectFuncListKnowledgeBaseFilesAdmin = f
+
+	return mmListKnowledgeBaseFilesAdmin
+}
+
+// Return sets up results that will be returned by Repository.ListKnowledgeBaseFilesAdmin
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) Return(fa1 []mm_repository.FileModel, s1 string, i1 int32, err error) *RepositoryMock {
+	if mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdmin != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Set")
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation == nil {
+		mmListKnowledgeBaseFilesAdmin.defaultExpectation = &RepositoryMockListKnowledgeBaseFilesAdminExpectation{mock: mmListKnowledgeBaseFilesAdmin.mock}
+	}
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.results = &RepositoryMockListKnowledgeBaseFilesAdminResults{fa1, s1, i1, err}
+	mmListKnowledgeBaseFilesAdmin.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBaseFilesAdmin.mock
+}
+
+// Set uses given function f to mock the Repository.ListKnowledgeBaseFilesAdmin method
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) Set(f func(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) (fa1 []mm_repository.FileModel, s1 string, i1 int32, err error)) *RepositoryMock {
+	if mmListKnowledgeBaseFilesAdmin.defaultExpectation != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("Default expectation is already set for the Repository.ListKnowledgeBaseFilesAdmin method")
+	}
+
+	if len(mmListKnowledgeBaseFilesAdmin.expectations) > 0 {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("Some expectations are already set for the Repository.ListKnowledgeBaseFilesAdmin method")
+	}
+
+	mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdmin = f
+	mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdminOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBaseFilesAdmin.mock
+}
+
+// When sets expectation for the Repository.ListKnowledgeBaseFilesAdmin which will trigger the result defined by the following
+// Then helper
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) When(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) *RepositoryMockListKnowledgeBaseFilesAdminExpectation {
+	if mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdmin != nil {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("RepositoryMock.ListKnowledgeBaseFilesAdmin mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockListKnowledgeBaseFilesAdminExpectation{
+		mock:               mmListKnowledgeBaseFilesAdmin.mock,
+		params:             &RepositoryMockListKnowledgeBaseFilesAdminParams{ctx, kbUID, pageSize, pageToken},
+		expectationOrigins: RepositoryMockListKnowledgeBaseFilesAdminExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmListKnowledgeBaseFilesAdmin.expectations = append(mmListKnowledgeBaseFilesAdmin.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.ListKnowledgeBaseFilesAdmin return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockListKnowledgeBaseFilesAdminExpectation) Then(fa1 []mm_repository.FileModel, s1 string, i1 int32, err error) *RepositoryMock {
+	e.results = &RepositoryMockListKnowledgeBaseFilesAdminResults{fa1, s1, i1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.ListKnowledgeBaseFilesAdmin should be invoked
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) Times(n uint64) *mRepositoryMockListKnowledgeBaseFilesAdmin {
+	if n == 0 {
+		mmListKnowledgeBaseFilesAdmin.mock.t.Fatalf("Times of RepositoryMock.ListKnowledgeBaseFilesAdmin mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListKnowledgeBaseFilesAdmin.expectedInvocations, n)
+	mmListKnowledgeBaseFilesAdmin.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListKnowledgeBaseFilesAdmin
+}
+
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) invocationsDone() bool {
+	if len(mmListKnowledgeBaseFilesAdmin.expectations) == 0 && mmListKnowledgeBaseFilesAdmin.defaultExpectation == nil && mmListKnowledgeBaseFilesAdmin.mock.funcListKnowledgeBaseFilesAdmin == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBaseFilesAdmin.mock.afterListKnowledgeBaseFilesAdminCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListKnowledgeBaseFilesAdmin.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListKnowledgeBaseFilesAdmin implements mm_repository.Repository
+func (mmListKnowledgeBaseFilesAdmin *RepositoryMock) ListKnowledgeBaseFilesAdmin(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) (fa1 []mm_repository.FileModel, s1 string, i1 int32, err error) {
+	mm_atomic.AddUint64(&mmListKnowledgeBaseFilesAdmin.beforeListKnowledgeBaseFilesAdminCounter, 1)
+	defer mm_atomic.AddUint64(&mmListKnowledgeBaseFilesAdmin.afterListKnowledgeBaseFilesAdminCounter, 1)
+
+	mmListKnowledgeBaseFilesAdmin.t.Helper()
+
+	if mmListKnowledgeBaseFilesAdmin.inspectFuncListKnowledgeBaseFilesAdmin != nil {
+		mmListKnowledgeBaseFilesAdmin.inspectFuncListKnowledgeBaseFilesAdmin(ctx, kbUID, pageSize, pageToken)
+	}
+
+	mm_params := RepositoryMockListKnowledgeBaseFilesAdminParams{ctx, kbUID, pageSize, pageToken}
+
+	// Record call args
+	mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.mutex.Lock()
+	mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.callArgs = append(mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.callArgs, &mm_params)
+	mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.mutex.Unlock()
+
+	for _, e := range mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.fa1, e.results.s1, e.results.i1, e.results.err
+		}
+	}
+
+	if mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation.Counter, 1)
+		mm_want := mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation.params
+		mm_want_ptrs := mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockListKnowledgeBaseFilesAdminParams{ctx, kbUID, pageSize, pageToken}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListKnowledgeBaseFilesAdmin.t.Errorf("RepositoryMock.ListKnowledgeBaseFilesAdmin got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmListKnowledgeBaseFilesAdmin.t.Errorf("RepositoryMock.ListKnowledgeBaseFilesAdmin got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.pageSize != nil && !minimock.Equal(*mm_want_ptrs.pageSize, mm_got.pageSize) {
+				mmListKnowledgeBaseFilesAdmin.t.Errorf("RepositoryMock.ListKnowledgeBaseFilesAdmin got unexpected parameter pageSize, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation.expectationOrigins.originPageSize, *mm_want_ptrs.pageSize, mm_got.pageSize, minimock.Diff(*mm_want_ptrs.pageSize, mm_got.pageSize))
+			}
+
+			if mm_want_ptrs.pageToken != nil && !minimock.Equal(*mm_want_ptrs.pageToken, mm_got.pageToken) {
+				mmListKnowledgeBaseFilesAdmin.t.Errorf("RepositoryMock.ListKnowledgeBaseFilesAdmin got unexpected parameter pageToken, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation.expectationOrigins.originPageToken, *mm_want_ptrs.pageToken, mm_got.pageToken, minimock.Diff(*mm_want_ptrs.pageToken, mm_got.pageToken))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListKnowledgeBaseFilesAdmin.t.Errorf("RepositoryMock.ListKnowledgeBaseFilesAdmin got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListKnowledgeBaseFilesAdmin.ListKnowledgeBaseFilesAdminMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListKnowledgeBaseFilesAdmin.t.Fatal("No results are set for the RepositoryMock.ListKnowledgeBaseFilesAdmin")
+		}
+		return (*mm_results).fa1, (*mm_results).s1, (*mm_results).i1, (*mm_results).err
+	}
+	if mmListKnowledgeBaseFilesAdmin.funcListKnowledgeBaseFilesAdmin != nil {
+		return mmListKnowledgeBaseFilesAdmin.funcListKnowledgeBaseFilesAdmin(ctx, kbUID, pageSize, pageToken)
+	}
+	mmListKnowledgeBaseFilesAdmin.t.Fatalf("Unexpected call to RepositoryMock.ListKnowledgeBaseFilesAdmin. %v %v %v %v", ctx, kbUID, pageSize, pageToken)
+	return
+}
+
+// ListKnowledgeBaseFilesAdminAfterCounter returns a count of finished RepositoryMock.ListKnowledgeBaseFilesAdmin invocations
+func (mmListKnowledgeBaseFilesAdmin *RepositoryMock) ListKnowledgeBaseFilesAdminAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBaseFilesAdmin.afterListKnowledgeBaseFilesAdminCounter)
+}
+
+// ListKnowledgeBaseFilesAdminBeforeCounter returns a count of RepositoryMock.ListKnowledgeBaseFilesAdmin invocations
+func (mmListKnowledgeBaseFilesAdmin *RepositoryMock) ListKnowledgeBaseFilesAdminBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListKnowledgeBaseFilesAdmin.beforeListKnowledgeBaseFilesAdminCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.ListKnowledgeBaseFilesAdmin.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListKnowledgeBaseFilesAdmin *mRepositoryMockListKnowledgeBaseFilesAdmin) Calls() []*RepositoryMockListKnowledgeBaseFilesAdminParams {
+	mmListKnowledgeBaseFilesAdmin.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockListKnowledgeBaseFilesAdminParams, len(mmListKnowledgeBaseFilesAdmin.callArgs))
+	copy(argCopy, mmListKnowledgeBaseFilesAdmin.callArgs)
+
+	mmListKnowledgeBaseFilesAdmin.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListKnowledgeBaseFilesAdminDone returns true if the count of the ListKnowledgeBaseFilesAdmin invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockListKnowledgeBaseFilesAdminDone() bool {
+	if m.ListKnowledgeBaseFilesAdminMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ListKnowledgeBaseFilesAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListKnowledgeBaseFilesAdminMock.invocationsDone()
+}
+
+// MinimockListKnowledgeBaseFilesAdminInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockListKnowledgeBaseFilesAdminInspect() {
+	for _, e := range m.ListKnowledgeBaseFilesAdminMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBaseFilesAdmin at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterListKnowledgeBaseFilesAdminCounter := mm_atomic.LoadUint64(&m.afterListKnowledgeBaseFilesAdminCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListKnowledgeBaseFilesAdminMock.defaultExpectation != nil && afterListKnowledgeBaseFilesAdminCounter < 1 {
+		if m.ListKnowledgeBaseFilesAdminMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBaseFilesAdmin at\n%s", m.ListKnowledgeBaseFilesAdminMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBaseFilesAdmin at\n%s with params: %#v", m.ListKnowledgeBaseFilesAdminMock.defaultExpectation.expectationOrigins.origin, *m.ListKnowledgeBaseFilesAdminMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListKnowledgeBaseFilesAdmin != nil && afterListKnowledgeBaseFilesAdminCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.ListKnowledgeBaseFilesAdmin at\n%s", m.funcListKnowledgeBaseFilesAdminOrigin)
+	}
+
+	if !m.ListKnowledgeBaseFilesAdminMock.invocationsDone() && afterListKnowledgeBaseFilesAdminCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.ListKnowledgeBaseFilesAdmin at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListKnowledgeBaseFilesAdminMock.expectedInvocations), m.ListKnowledgeBaseFilesAdminMock.expectedInvocationsOrigin, afterListKnowledgeBaseFilesAdminCounter)
+	}
+}
+
 type mRepositoryMockListKnowledgeBases struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -51683,6 +52100,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockListFilesInspect()
 
+			m.MinimockListKnowledgeBaseFilesAdminInspect()
+
 			m.MinimockListKnowledgeBasesInspect()
 
 			m.MinimockListKnowledgeBasesByTypeInspect()
@@ -51883,6 +52302,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockListAllObjectsDone() &&
 		m.MinimockListEmbeddingsByKBFileUIDDone() &&
 		m.MinimockListFilesDone() &&
+		m.MinimockListKnowledgeBaseFilesAdminDone() &&
 		m.MinimockListKnowledgeBasesDone() &&
 		m.MinimockListKnowledgeBasesByTypeDone() &&
 		m.MinimockListKnowledgeBasesByTypeWithConfigDone() &&
