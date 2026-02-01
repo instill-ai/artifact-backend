@@ -236,13 +236,25 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	logger, _ := logx.GetZapLogger(ctx)
 	logger = logger.With(zap.String("collection_name", collectionName))
 
-	// Check if the collection exists
+	if len(embeddings) == 0 {
+		return fmt.Errorf("no embeddings to insert")
+	}
+
+	// Auto-create collection if it doesn't exist
+	// This handles cases where the collection was dropped (e.g., during KB reset for BM25 migration)
 	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionName))
 	if err != nil {
 		return fmt.Errorf("checking collection existence: %w", err)
 	}
 	if !has {
-		return fmt.Errorf("collection does not exist: %w", errorsx.ErrNotFound)
+		// Determine vector dimension from the first embedding
+		vectorDim := uint32(len(embeddings[0].Vector))
+		logger.Info("Collection does not exist, auto-creating with BM25 support",
+			zap.Uint32("vector_dimension", vectorDim))
+
+		if err := m.CreateCollection(ctx, collectionName, vectorDim); err != nil {
+			return fmt.Errorf("auto-creating collection: %w", err)
+		}
 	}
 
 	// Get collection schema to determine vector dimension
