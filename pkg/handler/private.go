@@ -1049,3 +1049,119 @@ func (h *PrivateHandler) ResetKnowledgeBaseEmbeddingsAdmin(ctx context.Context, 
 		FilesToReembed: int32(fileCount),
 	}, nil
 }
+
+// AddFilesToKnowledgeBaseAdmin adds file associations to a target KB by file resource names (admin only).
+// Files can belong to multiple KBs (many-to-many relationship).
+func (h *PrivateHandler) AddFilesToKnowledgeBaseAdmin(ctx context.Context, req *artifactpb.AddFilesToKnowledgeBaseAdminRequest) (*artifactpb.AddFilesToKnowledgeBaseAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Parse target KB from name (format: namespaces/{namespace}/knowledge-bases/{kb})
+	targetNamespaceID, targetKBID, err := parseKnowledgeBaseFromName(req.GetTargetKnowledgeBase())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid target_knowledge_base format: %v", err)
+	}
+
+	logger.Info("AddFilesToKnowledgeBaseAdmin called",
+		zap.String("target_namespace_id", targetNamespaceID),
+		zap.String("target_kb_id", targetKBID),
+		zap.Int("file_count", len(req.GetFiles())))
+
+	// Get target namespace
+	targetNs, err := h.service.GetNamespaceByNsID(ctx, targetNamespaceID)
+	if err != nil {
+		logger.Error("failed to get target namespace", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "target namespace not found: %v", err)
+	}
+
+	// Get target knowledge base
+	targetKB, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, targetNs.NsUID, targetKBID)
+	if err != nil {
+		logger.Error("failed to get target knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "target knowledge base not found: %v", err)
+	}
+
+	// Parse file resource names to extract file IDs
+	// Format: namespaces/{namespace}/files/{file}
+	fileIDs := make([]string, 0, len(req.GetFiles()))
+	for _, fileName := range req.GetFiles() {
+		_, _, fileID, err := parseFileFromName(fileName)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid file resource name format: %s", fileName)
+		}
+		fileIDs = append(fileIDs, fileID)
+	}
+
+	// Add file associations
+	filesAdded, err := h.service.Repository().AddFilesToKnowledgeBase(ctx, types.KnowledgeBaseUIDType(targetKB.UID), fileIDs)
+	if err != nil {
+		logger.Error("failed to add files to knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to add files: %v", err)
+	}
+
+	logger.Info("AddFilesToKnowledgeBaseAdmin completed",
+		zap.String("target_kb_uid", targetKB.UID.String()),
+		zap.Int64("files_added", filesAdded))
+
+	return &artifactpb.AddFilesToKnowledgeBaseAdminResponse{
+		FilesAdded: int32(filesAdded),
+	}, nil
+}
+
+// DeleteKnowledgeBaseAdmin force-deletes a knowledge base (admin only).
+// CASCADE removes file-KB associations from junction table. Files remain orphaned.
+// Also cleans up the Milvus collection.
+func (h *PrivateHandler) DeleteKnowledgeBaseAdmin(ctx context.Context, req *artifactpb.DeleteKnowledgeBaseAdminRequest) (*artifactpb.DeleteKnowledgeBaseAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Parse namespace and KB ID from name (format: namespaces/{namespace}/knowledge-bases/{kb})
+	namespaceID, knowledgeBaseID, err := parseKnowledgeBaseFromName(req.GetName())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid name format: %v", err)
+	}
+
+	logger.Info("DeleteKnowledgeBaseAdmin called",
+		zap.String("namespace_id", namespaceID),
+		zap.String("knowledge_base_id", knowledgeBaseID))
+
+	// Get namespace
+	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
+	if err != nil {
+		logger.Error("failed to get namespace", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
+	}
+
+	// Get knowledge base
+	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, knowledgeBaseID)
+	if err != nil {
+		logger.Error("failed to get knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
+	}
+
+	collectionName := constant.KBCollectionName(kb.ActiveCollectionUID)
+
+	// Step 1: Drop Milvus collection if it exists
+	if err := h.service.Repository().DropCollection(ctx, collectionName); err != nil {
+		// Log but continue - collection might not exist
+		logger.Warn("Failed to drop Milvus collection (may not exist)", zap.Error(err), zap.String("collection", collectionName))
+	} else {
+		logger.Info("Dropped Milvus collection", zap.String("collection", collectionName))
+	}
+
+	// Step 2: Remove ACL entry
+	if err := h.service.ACLClient().Purge(ctx, "knowledgebase", kb.UID); err != nil {
+		// Log but continue - ACL entry might not exist
+		logger.Warn("Failed to purge ACL entry", zap.Error(err))
+	}
+
+	// Step 3: Hard delete the knowledge base (CASCADE will remove file_knowledge_base associations)
+	if err := h.service.Repository().HardDeleteKnowledgeBase(ctx, kb.UID.String()); err != nil {
+		logger.Error("failed to delete knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to delete knowledge base: %v", err)
+	}
+
+	logger.Info("DeleteKnowledgeBaseAdmin completed",
+		zap.String("kb_uid", kb.UID.String()),
+		zap.String("kb_id", kb.ID))
+
+	return &artifactpb.DeleteKnowledgeBaseAdminResponse{}, nil
+}
