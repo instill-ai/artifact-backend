@@ -100,6 +100,10 @@ type KnowledgeBase interface {
 	// DeleteKnowledgeBaseTx soft-deletes a KB within a transaction
 	DeleteKnowledgeBaseTx(ctx context.Context, tx *gorm.DB, owner, kbID string) error
 
+	// HardDeleteKnowledgeBase permanently deletes a KB and CASCADE removes file_knowledge_base associations
+	// Used by admin consolidation operations to remove duplicate KBs after moving files
+	HardDeleteKnowledgeBase(ctx context.Context, kbUID string) error
+
 	// UpdateKnowledgeBaseResources updates kb_uid references in all resource tables
 	// This is critical for atomic swap to ensure resources follow their knowledge bases
 	UpdateKnowledgeBaseResources(ctx context.Context, fromKBUID, toKBUID types.KBUIDType) error
@@ -586,6 +590,20 @@ func (r *repository) DeleteKnowledgeBaseTx(ctx context.Context, tx *gorm.DB, own
 		return err
 	}
 
+	return nil
+}
+
+// HardDeleteKnowledgeBase permanently deletes a KB and CASCADE removes file_knowledge_base associations
+// Used by admin consolidation operations to remove duplicate KBs after moving files
+func (r *repository) HardDeleteKnowledgeBase(ctx context.Context, kbUID string) error {
+	// Use Unscoped to bypass soft delete and perform actual DELETE
+	result := r.db.WithContext(ctx).Unscoped().Delete(&KnowledgeBaseModel{}, "uid = ?", kbUID)
+	if result.Error != nil {
+		return fmt.Errorf("hard deleting knowledge base: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("knowledge base not found: %s", kbUID)
+	}
 	return nil
 }
 

@@ -96,6 +96,11 @@ type File interface {
 	// Returns the number of files affected.
 	ResetFileStatusesByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error)
 
+	// AddFilesToKnowledgeBase adds file associations to a target KB by file IDs.
+	// Files can belong to multiple KBs (many-to-many relationship).
+	// Returns the number of new associations added (skips duplicates).
+	AddFilesToKnowledgeBase(ctx context.Context, targetKBUID types.KnowledgeBaseUIDType, fileIDs []string) (int64, error)
+
 	// Deprecated methods
 
 	// GetFileByKBUIDAndFileID returns the file by
@@ -638,6 +643,33 @@ func (r *repository) ResetFileStatusesByKBUID(ctx context.Context, kbUID types.K
 
 	if result.Error != nil {
 		return 0, fmt.Errorf("failed to reset file statuses: %w", result.Error)
+	}
+
+	return result.RowsAffected, nil
+}
+
+// AddFilesToKnowledgeBase adds file associations to a target KB by file IDs.
+// Files can belong to multiple KBs (many-to-many relationship).
+// Returns the number of new associations added (skips duplicates).
+func (r *repository) AddFilesToKnowledgeBase(ctx context.Context, targetKBUID types.KnowledgeBaseUIDType, fileIDs []string) (int64, error) {
+	if len(fileIDs) == 0 {
+		return 0, nil
+	}
+
+	// Use raw SQL to:
+	// 1. Look up file UIDs from the file table by their IDs
+	// 2. Insert into junction table, skipping duplicates
+	sql := `
+		INSERT INTO file_knowledge_base (file_uid, kb_uid, created_at)
+		SELECT f.uid, ?, NOW()
+		FROM file f
+		WHERE f.id = ANY(?)
+		ON CONFLICT (file_uid, kb_uid) DO NOTHING
+	`
+
+	result := r.db.WithContext(ctx).Exec(sql, targetKBUID, fileIDs)
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to add files to knowledge base: %w", result.Error)
 	}
 
 	return result.RowsAffected, nil
