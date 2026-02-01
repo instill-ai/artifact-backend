@@ -186,6 +186,13 @@ type ServiceMock struct {
 	beforeGetNamespaceByNsIDCounter uint64
 	GetNamespaceByNsIDMock          mServiceMockGetNamespaceByNsID
 
+	funcGetObject          func(ctx context.Context, n1 types.NamespaceUIDType, s1 string) (op1 *artifactpb.Object, err error)
+	funcGetObjectOrigin    string
+	inspectFuncGetObject   func(ctx context.Context, n1 types.NamespaceUIDType, s1 string)
+	afterGetObjectCounter  uint64
+	beforeGetObjectCounter uint64
+	GetObjectMock          mServiceMockGetObject
+
 	funcGetOrCreateFileCache          func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string, s2 string, f2 artifactpb.File_Type, s3 string) (cp1 *repository.CacheMetadata, err error)
 	funcGetOrCreateFileCacheOrigin    string
 	inspectFuncGetOrCreateFileCache   func(ctx context.Context, k1 types.KBUIDType, f1 types.FileUIDType, s1 string, s2 string, f2 artifactpb.File_Type, s3 string)
@@ -388,6 +395,9 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 
 	m.GetNamespaceByNsIDMock = mServiceMockGetNamespaceByNsID{mock: m}
 	m.GetNamespaceByNsIDMock.callArgs = []*ServiceMockGetNamespaceByNsIDParams{}
+
+	m.GetObjectMock = mServiceMockGetObject{mock: m}
+	m.GetObjectMock.callArgs = []*ServiceMockGetObjectParams{}
 
 	m.GetOrCreateFileCacheMock = mServiceMockGetOrCreateFileCache{mock: m}
 	m.GetOrCreateFileCacheMock.callArgs = []*ServiceMockGetOrCreateFileCacheParams{}
@@ -8735,6 +8745,380 @@ func (m *ServiceMock) MinimockGetNamespaceByNsIDInspect() {
 	}
 }
 
+type mServiceMockGetObject struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockGetObjectExpectation
+	expectations       []*ServiceMockGetObjectExpectation
+
+	callArgs []*ServiceMockGetObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockGetObjectExpectation specifies expectation struct of the Service.GetObject
+type ServiceMockGetObjectExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockGetObjectParams
+	paramPtrs          *ServiceMockGetObjectParamPtrs
+	expectationOrigins ServiceMockGetObjectExpectationOrigins
+	results            *ServiceMockGetObjectResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockGetObjectParams contains parameters of the Service.GetObject
+type ServiceMockGetObjectParams struct {
+	ctx context.Context
+	n1  types.NamespaceUIDType
+	s1  string
+}
+
+// ServiceMockGetObjectParamPtrs contains pointers to parameters of the Service.GetObject
+type ServiceMockGetObjectParamPtrs struct {
+	ctx *context.Context
+	n1  *types.NamespaceUIDType
+	s1  *string
+}
+
+// ServiceMockGetObjectResults contains results of the Service.GetObject
+type ServiceMockGetObjectResults struct {
+	op1 *artifactpb.Object
+	err error
+}
+
+// ServiceMockGetObjectOrigins contains origins of expectations of the Service.GetObject
+type ServiceMockGetObjectExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originN1  string
+	originS1  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetObject *mServiceMockGetObject) Optional() *mServiceMockGetObject {
+	mmGetObject.optional = true
+	return mmGetObject
+}
+
+// Expect sets up expected params for Service.GetObject
+func (mmGetObject *mServiceMockGetObject) Expect(ctx context.Context, n1 types.NamespaceUIDType, s1 string) *mServiceMockGetObject {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &ServiceMockGetObjectExpectation{}
+	}
+
+	if mmGetObject.defaultExpectation.paramPtrs != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by ExpectParams functions")
+	}
+
+	mmGetObject.defaultExpectation.params = &ServiceMockGetObjectParams{ctx, n1, s1}
+	mmGetObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetObject.expectations {
+		if minimock.Equal(e.params, mmGetObject.defaultExpectation.params) {
+			mmGetObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetObject.defaultExpectation.params)
+		}
+	}
+
+	return mmGetObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.GetObject
+func (mmGetObject *mServiceMockGetObject) ExpectCtxParam1(ctx context.Context) *mServiceMockGetObject {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &ServiceMockGetObjectExpectation{}
+	}
+
+	if mmGetObject.defaultExpectation.params != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Expect")
+	}
+
+	if mmGetObject.defaultExpectation.paramPtrs == nil {
+		mmGetObject.defaultExpectation.paramPtrs = &ServiceMockGetObjectParamPtrs{}
+	}
+	mmGetObject.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetObject.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetObject
+}
+
+// ExpectN1Param2 sets up expected param n1 for Service.GetObject
+func (mmGetObject *mServiceMockGetObject) ExpectN1Param2(n1 types.NamespaceUIDType) *mServiceMockGetObject {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &ServiceMockGetObjectExpectation{}
+	}
+
+	if mmGetObject.defaultExpectation.params != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Expect")
+	}
+
+	if mmGetObject.defaultExpectation.paramPtrs == nil {
+		mmGetObject.defaultExpectation.paramPtrs = &ServiceMockGetObjectParamPtrs{}
+	}
+	mmGetObject.defaultExpectation.paramPtrs.n1 = &n1
+	mmGetObject.defaultExpectation.expectationOrigins.originN1 = minimock.CallerInfo(1)
+
+	return mmGetObject
+}
+
+// ExpectS1Param3 sets up expected param s1 for Service.GetObject
+func (mmGetObject *mServiceMockGetObject) ExpectS1Param3(s1 string) *mServiceMockGetObject {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &ServiceMockGetObjectExpectation{}
+	}
+
+	if mmGetObject.defaultExpectation.params != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Expect")
+	}
+
+	if mmGetObject.defaultExpectation.paramPtrs == nil {
+		mmGetObject.defaultExpectation.paramPtrs = &ServiceMockGetObjectParamPtrs{}
+	}
+	mmGetObject.defaultExpectation.paramPtrs.s1 = &s1
+	mmGetObject.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmGetObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.GetObject
+func (mmGetObject *mServiceMockGetObject) Inspect(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string)) *mServiceMockGetObject {
+	if mmGetObject.mock.inspectFuncGetObject != nil {
+		mmGetObject.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetObject")
+	}
+
+	mmGetObject.mock.inspectFuncGetObject = f
+
+	return mmGetObject
+}
+
+// Return sets up results that will be returned by Service.GetObject
+func (mmGetObject *mServiceMockGetObject) Return(op1 *artifactpb.Object, err error) *ServiceMock {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &ServiceMockGetObjectExpectation{mock: mmGetObject.mock}
+	}
+	mmGetObject.defaultExpectation.results = &ServiceMockGetObjectResults{op1, err}
+	mmGetObject.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetObject.mock
+}
+
+// Set uses given function f to mock the Service.GetObject method
+func (mmGetObject *mServiceMockGetObject) Set(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string) (op1 *artifactpb.Object, err error)) *ServiceMock {
+	if mmGetObject.defaultExpectation != nil {
+		mmGetObject.mock.t.Fatalf("Default expectation is already set for the Service.GetObject method")
+	}
+
+	if len(mmGetObject.expectations) > 0 {
+		mmGetObject.mock.t.Fatalf("Some expectations are already set for the Service.GetObject method")
+	}
+
+	mmGetObject.mock.funcGetObject = f
+	mmGetObject.mock.funcGetObjectOrigin = minimock.CallerInfo(1)
+	return mmGetObject.mock
+}
+
+// When sets expectation for the Service.GetObject which will trigger the result defined by the following
+// Then helper
+func (mmGetObject *mServiceMockGetObject) When(ctx context.Context, n1 types.NamespaceUIDType, s1 string) *ServiceMockGetObjectExpectation {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Set")
+	}
+
+	expectation := &ServiceMockGetObjectExpectation{
+		mock:               mmGetObject.mock,
+		params:             &ServiceMockGetObjectParams{ctx, n1, s1},
+		expectationOrigins: ServiceMockGetObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetObject.expectations = append(mmGetObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.GetObject return parameters for the expectation previously defined by the When method
+func (e *ServiceMockGetObjectExpectation) Then(op1 *artifactpb.Object, err error) *ServiceMock {
+	e.results = &ServiceMockGetObjectResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.GetObject should be invoked
+func (mmGetObject *mServiceMockGetObject) Times(n uint64) *mServiceMockGetObject {
+	if n == 0 {
+		mmGetObject.mock.t.Fatalf("Times of ServiceMock.GetObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetObject.expectedInvocations, n)
+	mmGetObject.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetObject
+}
+
+func (mmGetObject *mServiceMockGetObject) invocationsDone() bool {
+	if len(mmGetObject.expectations) == 0 && mmGetObject.defaultExpectation == nil && mmGetObject.mock.funcGetObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetObject.mock.afterGetObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetObject implements mm_service.Service
+func (mmGetObject *ServiceMock) GetObject(ctx context.Context, n1 types.NamespaceUIDType, s1 string) (op1 *artifactpb.Object, err error) {
+	mm_atomic.AddUint64(&mmGetObject.beforeGetObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetObject.afterGetObjectCounter, 1)
+
+	mmGetObject.t.Helper()
+
+	if mmGetObject.inspectFuncGetObject != nil {
+		mmGetObject.inspectFuncGetObject(ctx, n1, s1)
+	}
+
+	mm_params := ServiceMockGetObjectParams{ctx, n1, s1}
+
+	// Record call args
+	mmGetObject.GetObjectMock.mutex.Lock()
+	mmGetObject.GetObjectMock.callArgs = append(mmGetObject.GetObjectMock.callArgs, &mm_params)
+	mmGetObject.GetObjectMock.mutex.Unlock()
+
+	for _, e := range mmGetObject.GetObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmGetObject.GetObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetObject.GetObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetObject.GetObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmGetObject.GetObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockGetObjectParams{ctx, n1, s1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetObject.t.Errorf("ServiceMock.GetObject got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.n1 != nil && !minimock.Equal(*mm_want_ptrs.n1, mm_got.n1) {
+				mmGetObject.t.Errorf("ServiceMock.GetObject got unexpected parameter n1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.originN1, *mm_want_ptrs.n1, mm_got.n1, minimock.Diff(*mm_want_ptrs.n1, mm_got.n1))
+			}
+
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmGetObject.t.Errorf("ServiceMock.GetObject got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetObject.t.Errorf("ServiceMock.GetObject got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetObject.GetObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetObject.t.Fatal("No results are set for the ServiceMock.GetObject")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmGetObject.funcGetObject != nil {
+		return mmGetObject.funcGetObject(ctx, n1, s1)
+	}
+	mmGetObject.t.Fatalf("Unexpected call to ServiceMock.GetObject. %v %v %v", ctx, n1, s1)
+	return
+}
+
+// GetObjectAfterCounter returns a count of finished ServiceMock.GetObject invocations
+func (mmGetObject *ServiceMock) GetObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObject.afterGetObjectCounter)
+}
+
+// GetObjectBeforeCounter returns a count of ServiceMock.GetObject invocations
+func (mmGetObject *ServiceMock) GetObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObject.beforeGetObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.GetObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetObject *mServiceMockGetObject) Calls() []*ServiceMockGetObjectParams {
+	mmGetObject.mutex.RLock()
+
+	argCopy := make([]*ServiceMockGetObjectParams, len(mmGetObject.callArgs))
+	copy(argCopy, mmGetObject.callArgs)
+
+	mmGetObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetObjectDone returns true if the count of the GetObject invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockGetObjectDone() bool {
+	if m.GetObjectMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetObjectMock.invocationsDone()
+}
+
+// MinimockGetObjectInspect logs each unmet expectation
+func (m *ServiceMock) MinimockGetObjectInspect() {
+	for _, e := range m.GetObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.GetObject at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetObjectCounter := mm_atomic.LoadUint64(&m.afterGetObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetObjectMock.defaultExpectation != nil && afterGetObjectCounter < 1 {
+		if m.GetObjectMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.GetObject at\n%s", m.GetObjectMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.GetObject at\n%s with params: %#v", m.GetObjectMock.defaultExpectation.expectationOrigins.origin, *m.GetObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetObject != nil && afterGetObjectCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.GetObject at\n%s", m.funcGetObjectOrigin)
+	}
+
+	if !m.GetObjectMock.invocationsDone() && afterGetObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.GetObject at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetObjectMock.expectedInvocations), m.GetObjectMock.expectedInvocationsOrigin, afterGetObjectCounter)
+	}
+}
+
 type mServiceMockGetOrCreateFileCache struct {
 	optional           bool
 	mock               *ServiceMock
@@ -15261,6 +15645,8 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockGetNamespaceByNsIDInspect()
 
+			m.MinimockGetObjectInspect()
+
 			m.MinimockGetOrCreateFileCacheInspect()
 
 			m.MinimockGetSystemAdminInspect()
@@ -15342,6 +15728,7 @@ func (m *ServiceMock) minimockDone() bool {
 		m.MinimockGetKnowledgeBaseUpdateStatusAdminDone() &&
 		m.MinimockGetNamespaceAndCheckPermissionDone() &&
 		m.MinimockGetNamespaceByNsIDDone() &&
+		m.MinimockGetObjectDone() &&
 		m.MinimockGetOrCreateFileCacheDone() &&
 		m.MinimockGetSystemAdminDone() &&
 		m.MinimockGetTextChunkFilePathsByFileUIDDone() &&

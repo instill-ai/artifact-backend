@@ -794,6 +794,13 @@ type RepositoryMock struct {
 	beforeRenewCacheMetadataTTLCounter uint64
 	RenewCacheMetadataTTLMock          mRepositoryMockRenewCacheMetadataTTL
 
+	funcResetFileStatusesByKBUID          func(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error)
+	funcResetFileStatusesByKBUIDOrigin    string
+	inspectFuncResetFileStatusesByKBUID   func(ctx context.Context, kbUID types.KBUIDType)
+	afterResetFileStatusesByKBUIDCounter  uint64
+	beforeResetFileStatusesByKBUIDCounter uint64
+	ResetFileStatusesByKBUIDMock          mRepositoryMockResetFileStatusesByKBUID
+
 	funcScanGCSFilesForCleanup          func(ctx context.Context, maxCount int64) (ga1 []mm_repository.GCSFileInfo, err error)
 	funcScanGCSFilesForCleanupOrigin    string
 	inspectFuncScanGCSFilesForCleanup   func(ctx context.Context, maxCount int64)
@@ -1319,6 +1326,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.RenewCacheMetadataTTLMock = mRepositoryMockRenewCacheMetadataTTL{mock: m}
 	m.RenewCacheMetadataTTLMock.callArgs = []*RepositoryMockRenewCacheMetadataTTLParams{}
+
+	m.ResetFileStatusesByKBUIDMock = mRepositoryMockResetFileStatusesByKBUID{mock: m}
+	m.ResetFileStatusesByKBUIDMock.callArgs = []*RepositoryMockResetFileStatusesByKBUIDParams{}
 
 	m.ScanGCSFilesForCleanupMock = mRepositoryMockScanGCSFilesForCleanup{mock: m}
 	m.ScanGCSFilesForCleanupMock.callArgs = []*RepositoryMockScanGCSFilesForCleanupParams{}
@@ -39690,6 +39700,349 @@ func (m *RepositoryMock) MinimockRenewCacheMetadataTTLInspect() {
 	}
 }
 
+type mRepositoryMockResetFileStatusesByKBUID struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockResetFileStatusesByKBUIDExpectation
+	expectations       []*RepositoryMockResetFileStatusesByKBUIDExpectation
+
+	callArgs []*RepositoryMockResetFileStatusesByKBUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockResetFileStatusesByKBUIDExpectation specifies expectation struct of the Repository.ResetFileStatusesByKBUID
+type RepositoryMockResetFileStatusesByKBUIDExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockResetFileStatusesByKBUIDParams
+	paramPtrs          *RepositoryMockResetFileStatusesByKBUIDParamPtrs
+	expectationOrigins RepositoryMockResetFileStatusesByKBUIDExpectationOrigins
+	results            *RepositoryMockResetFileStatusesByKBUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockResetFileStatusesByKBUIDParams contains parameters of the Repository.ResetFileStatusesByKBUID
+type RepositoryMockResetFileStatusesByKBUIDParams struct {
+	ctx   context.Context
+	kbUID types.KBUIDType
+}
+
+// RepositoryMockResetFileStatusesByKBUIDParamPtrs contains pointers to parameters of the Repository.ResetFileStatusesByKBUID
+type RepositoryMockResetFileStatusesByKBUIDParamPtrs struct {
+	ctx   *context.Context
+	kbUID *types.KBUIDType
+}
+
+// RepositoryMockResetFileStatusesByKBUIDResults contains results of the Repository.ResetFileStatusesByKBUID
+type RepositoryMockResetFileStatusesByKBUIDResults struct {
+	i1  int64
+	err error
+}
+
+// RepositoryMockResetFileStatusesByKBUIDOrigins contains origins of expectations of the Repository.ResetFileStatusesByKBUID
+type RepositoryMockResetFileStatusesByKBUIDExpectationOrigins struct {
+	origin      string
+	originCtx   string
+	originKbUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) Optional() *mRepositoryMockResetFileStatusesByKBUID {
+	mmResetFileStatusesByKBUID.optional = true
+	return mmResetFileStatusesByKBUID
+}
+
+// Expect sets up expected params for Repository.ResetFileStatusesByKBUID
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) Expect(ctx context.Context, kbUID types.KBUIDType) *mRepositoryMockResetFileStatusesByKBUID {
+	if mmResetFileStatusesByKBUID.mock.funcResetFileStatusesByKBUID != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("RepositoryMock.ResetFileStatusesByKBUID mock is already set by Set")
+	}
+
+	if mmResetFileStatusesByKBUID.defaultExpectation == nil {
+		mmResetFileStatusesByKBUID.defaultExpectation = &RepositoryMockResetFileStatusesByKBUIDExpectation{}
+	}
+
+	if mmResetFileStatusesByKBUID.defaultExpectation.paramPtrs != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("RepositoryMock.ResetFileStatusesByKBUID mock is already set by ExpectParams functions")
+	}
+
+	mmResetFileStatusesByKBUID.defaultExpectation.params = &RepositoryMockResetFileStatusesByKBUIDParams{ctx, kbUID}
+	mmResetFileStatusesByKBUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmResetFileStatusesByKBUID.expectations {
+		if minimock.Equal(e.params, mmResetFileStatusesByKBUID.defaultExpectation.params) {
+			mmResetFileStatusesByKBUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmResetFileStatusesByKBUID.defaultExpectation.params)
+		}
+	}
+
+	return mmResetFileStatusesByKBUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.ResetFileStatusesByKBUID
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockResetFileStatusesByKBUID {
+	if mmResetFileStatusesByKBUID.mock.funcResetFileStatusesByKBUID != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("RepositoryMock.ResetFileStatusesByKBUID mock is already set by Set")
+	}
+
+	if mmResetFileStatusesByKBUID.defaultExpectation == nil {
+		mmResetFileStatusesByKBUID.defaultExpectation = &RepositoryMockResetFileStatusesByKBUIDExpectation{}
+	}
+
+	if mmResetFileStatusesByKBUID.defaultExpectation.params != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("RepositoryMock.ResetFileStatusesByKBUID mock is already set by Expect")
+	}
+
+	if mmResetFileStatusesByKBUID.defaultExpectation.paramPtrs == nil {
+		mmResetFileStatusesByKBUID.defaultExpectation.paramPtrs = &RepositoryMockResetFileStatusesByKBUIDParamPtrs{}
+	}
+	mmResetFileStatusesByKBUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmResetFileStatusesByKBUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmResetFileStatusesByKBUID
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.ResetFileStatusesByKBUID
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockResetFileStatusesByKBUID {
+	if mmResetFileStatusesByKBUID.mock.funcResetFileStatusesByKBUID != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("RepositoryMock.ResetFileStatusesByKBUID mock is already set by Set")
+	}
+
+	if mmResetFileStatusesByKBUID.defaultExpectation == nil {
+		mmResetFileStatusesByKBUID.defaultExpectation = &RepositoryMockResetFileStatusesByKBUIDExpectation{}
+	}
+
+	if mmResetFileStatusesByKBUID.defaultExpectation.params != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("RepositoryMock.ResetFileStatusesByKBUID mock is already set by Expect")
+	}
+
+	if mmResetFileStatusesByKBUID.defaultExpectation.paramPtrs == nil {
+		mmResetFileStatusesByKBUID.defaultExpectation.paramPtrs = &RepositoryMockResetFileStatusesByKBUIDParamPtrs{}
+	}
+	mmResetFileStatusesByKBUID.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmResetFileStatusesByKBUID.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmResetFileStatusesByKBUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.ResetFileStatusesByKBUID
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) Inspect(f func(ctx context.Context, kbUID types.KBUIDType)) *mRepositoryMockResetFileStatusesByKBUID {
+	if mmResetFileStatusesByKBUID.mock.inspectFuncResetFileStatusesByKBUID != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ResetFileStatusesByKBUID")
+	}
+
+	mmResetFileStatusesByKBUID.mock.inspectFuncResetFileStatusesByKBUID = f
+
+	return mmResetFileStatusesByKBUID
+}
+
+// Return sets up results that will be returned by Repository.ResetFileStatusesByKBUID
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) Return(i1 int64, err error) *RepositoryMock {
+	if mmResetFileStatusesByKBUID.mock.funcResetFileStatusesByKBUID != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("RepositoryMock.ResetFileStatusesByKBUID mock is already set by Set")
+	}
+
+	if mmResetFileStatusesByKBUID.defaultExpectation == nil {
+		mmResetFileStatusesByKBUID.defaultExpectation = &RepositoryMockResetFileStatusesByKBUIDExpectation{mock: mmResetFileStatusesByKBUID.mock}
+	}
+	mmResetFileStatusesByKBUID.defaultExpectation.results = &RepositoryMockResetFileStatusesByKBUIDResults{i1, err}
+	mmResetFileStatusesByKBUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmResetFileStatusesByKBUID.mock
+}
+
+// Set uses given function f to mock the Repository.ResetFileStatusesByKBUID method
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) Set(f func(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error)) *RepositoryMock {
+	if mmResetFileStatusesByKBUID.defaultExpectation != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("Default expectation is already set for the Repository.ResetFileStatusesByKBUID method")
+	}
+
+	if len(mmResetFileStatusesByKBUID.expectations) > 0 {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("Some expectations are already set for the Repository.ResetFileStatusesByKBUID method")
+	}
+
+	mmResetFileStatusesByKBUID.mock.funcResetFileStatusesByKBUID = f
+	mmResetFileStatusesByKBUID.mock.funcResetFileStatusesByKBUIDOrigin = minimock.CallerInfo(1)
+	return mmResetFileStatusesByKBUID.mock
+}
+
+// When sets expectation for the Repository.ResetFileStatusesByKBUID which will trigger the result defined by the following
+// Then helper
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) When(ctx context.Context, kbUID types.KBUIDType) *RepositoryMockResetFileStatusesByKBUIDExpectation {
+	if mmResetFileStatusesByKBUID.mock.funcResetFileStatusesByKBUID != nil {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("RepositoryMock.ResetFileStatusesByKBUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockResetFileStatusesByKBUIDExpectation{
+		mock:               mmResetFileStatusesByKBUID.mock,
+		params:             &RepositoryMockResetFileStatusesByKBUIDParams{ctx, kbUID},
+		expectationOrigins: RepositoryMockResetFileStatusesByKBUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmResetFileStatusesByKBUID.expectations = append(mmResetFileStatusesByKBUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.ResetFileStatusesByKBUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockResetFileStatusesByKBUIDExpectation) Then(i1 int64, err error) *RepositoryMock {
+	e.results = &RepositoryMockResetFileStatusesByKBUIDResults{i1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.ResetFileStatusesByKBUID should be invoked
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) Times(n uint64) *mRepositoryMockResetFileStatusesByKBUID {
+	if n == 0 {
+		mmResetFileStatusesByKBUID.mock.t.Fatalf("Times of RepositoryMock.ResetFileStatusesByKBUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmResetFileStatusesByKBUID.expectedInvocations, n)
+	mmResetFileStatusesByKBUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmResetFileStatusesByKBUID
+}
+
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) invocationsDone() bool {
+	if len(mmResetFileStatusesByKBUID.expectations) == 0 && mmResetFileStatusesByKBUID.defaultExpectation == nil && mmResetFileStatusesByKBUID.mock.funcResetFileStatusesByKBUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmResetFileStatusesByKBUID.mock.afterResetFileStatusesByKBUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmResetFileStatusesByKBUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ResetFileStatusesByKBUID implements mm_repository.Repository
+func (mmResetFileStatusesByKBUID *RepositoryMock) ResetFileStatusesByKBUID(ctx context.Context, kbUID types.KBUIDType) (i1 int64, err error) {
+	mm_atomic.AddUint64(&mmResetFileStatusesByKBUID.beforeResetFileStatusesByKBUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmResetFileStatusesByKBUID.afterResetFileStatusesByKBUIDCounter, 1)
+
+	mmResetFileStatusesByKBUID.t.Helper()
+
+	if mmResetFileStatusesByKBUID.inspectFuncResetFileStatusesByKBUID != nil {
+		mmResetFileStatusesByKBUID.inspectFuncResetFileStatusesByKBUID(ctx, kbUID)
+	}
+
+	mm_params := RepositoryMockResetFileStatusesByKBUIDParams{ctx, kbUID}
+
+	// Record call args
+	mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.mutex.Lock()
+	mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.callArgs = append(mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.callArgs, &mm_params)
+	mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.mutex.Unlock()
+
+	for _, e := range mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.i1, e.results.err
+		}
+	}
+
+	if mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockResetFileStatusesByKBUIDParams{ctx, kbUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmResetFileStatusesByKBUID.t.Errorf("RepositoryMock.ResetFileStatusesByKBUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmResetFileStatusesByKBUID.t.Errorf("RepositoryMock.ResetFileStatusesByKBUID got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmResetFileStatusesByKBUID.t.Errorf("RepositoryMock.ResetFileStatusesByKBUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmResetFileStatusesByKBUID.ResetFileStatusesByKBUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmResetFileStatusesByKBUID.t.Fatal("No results are set for the RepositoryMock.ResetFileStatusesByKBUID")
+		}
+		return (*mm_results).i1, (*mm_results).err
+	}
+	if mmResetFileStatusesByKBUID.funcResetFileStatusesByKBUID != nil {
+		return mmResetFileStatusesByKBUID.funcResetFileStatusesByKBUID(ctx, kbUID)
+	}
+	mmResetFileStatusesByKBUID.t.Fatalf("Unexpected call to RepositoryMock.ResetFileStatusesByKBUID. %v %v", ctx, kbUID)
+	return
+}
+
+// ResetFileStatusesByKBUIDAfterCounter returns a count of finished RepositoryMock.ResetFileStatusesByKBUID invocations
+func (mmResetFileStatusesByKBUID *RepositoryMock) ResetFileStatusesByKBUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmResetFileStatusesByKBUID.afterResetFileStatusesByKBUIDCounter)
+}
+
+// ResetFileStatusesByKBUIDBeforeCounter returns a count of RepositoryMock.ResetFileStatusesByKBUID invocations
+func (mmResetFileStatusesByKBUID *RepositoryMock) ResetFileStatusesByKBUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmResetFileStatusesByKBUID.beforeResetFileStatusesByKBUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.ResetFileStatusesByKBUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmResetFileStatusesByKBUID *mRepositoryMockResetFileStatusesByKBUID) Calls() []*RepositoryMockResetFileStatusesByKBUIDParams {
+	mmResetFileStatusesByKBUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockResetFileStatusesByKBUIDParams, len(mmResetFileStatusesByKBUID.callArgs))
+	copy(argCopy, mmResetFileStatusesByKBUID.callArgs)
+
+	mmResetFileStatusesByKBUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockResetFileStatusesByKBUIDDone returns true if the count of the ResetFileStatusesByKBUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockResetFileStatusesByKBUIDDone() bool {
+	if m.ResetFileStatusesByKBUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ResetFileStatusesByKBUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ResetFileStatusesByKBUIDMock.invocationsDone()
+}
+
+// MinimockResetFileStatusesByKBUIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockResetFileStatusesByKBUIDInspect() {
+	for _, e := range m.ResetFileStatusesByKBUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.ResetFileStatusesByKBUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterResetFileStatusesByKBUIDCounter := mm_atomic.LoadUint64(&m.afterResetFileStatusesByKBUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ResetFileStatusesByKBUIDMock.defaultExpectation != nil && afterResetFileStatusesByKBUIDCounter < 1 {
+		if m.ResetFileStatusesByKBUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.ResetFileStatusesByKBUID at\n%s", m.ResetFileStatusesByKBUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.ResetFileStatusesByKBUID at\n%s with params: %#v", m.ResetFileStatusesByKBUIDMock.defaultExpectation.expectationOrigins.origin, *m.ResetFileStatusesByKBUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcResetFileStatusesByKBUID != nil && afterResetFileStatusesByKBUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.ResetFileStatusesByKBUID at\n%s", m.funcResetFileStatusesByKBUIDOrigin)
+	}
+
+	if !m.ResetFileStatusesByKBUIDMock.invocationsDone() && afterResetFileStatusesByKBUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.ResetFileStatusesByKBUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ResetFileStatusesByKBUIDMock.expectedInvocations), m.ResetFileStatusesByKBUIDMock.expectedInvocationsOrigin, afterResetFileStatusesByKBUIDCounter)
+	}
+}
+
 type mRepositoryMockScanGCSFilesForCleanup struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -50610,6 +50963,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockRenewCacheMetadataTTLInspect()
 
+			m.MinimockResetFileStatusesByKBUIDInspect()
+
 			m.MinimockScanGCSFilesForCleanupInspect()
 
 			m.MinimockSearchVectorsInCollectionInspect()
@@ -50796,6 +51151,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockProcessFilesDone() &&
 		m.MinimockRenameSystemByIDDone() &&
 		m.MinimockRenewCacheMetadataTTLDone() &&
+		m.MinimockResetFileStatusesByKBUIDDone() &&
 		m.MinimockScanGCSFilesForCleanupDone() &&
 		m.MinimockSearchVectorsInCollectionDone() &&
 		m.MinimockSeedDefaultSystemsDone() &&

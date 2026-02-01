@@ -968,3 +968,84 @@ func (h *PrivateHandler) resolveOwnerUID(ctx context.Context, namespaceID string
 	// Use the namespace's UID directly (NsUID is the owner UID)
 	return types.OwnerUIDType(ns.NsUID), nil
 }
+
+// ResetKnowledgeBaseEmbeddingsAdmin resets all embeddings for a knowledge base (admin only).
+func (h *PrivateHandler) ResetKnowledgeBaseEmbeddingsAdmin(ctx context.Context, req *artifactpb.ResetKnowledgeBaseEmbeddingsAdminRequest) (*artifactpb.ResetKnowledgeBaseEmbeddingsAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Parse namespace and KB ID from name (format: namespaces/{namespace}/knowledge-bases/{kb})
+	namespaceID, knowledgeBaseID, err := parseKnowledgeBaseFromName(req.GetName())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid name format: %v", err)
+	}
+
+	logger.Info("ResetKnowledgeBaseEmbeddingsAdmin called",
+		zap.String("namespace_id", namespaceID),
+		zap.String("knowledge_base_id", knowledgeBaseID))
+
+	// Get namespace
+	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
+	if err != nil {
+		logger.Error("failed to get namespace", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
+	}
+
+	// Get knowledge base
+	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, knowledgeBaseID)
+	if err != nil {
+		logger.Error("failed to get knowledge base", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
+	}
+
+	kbUID := types.KBUIDType(kb.UID)
+	collectionName := constant.KBCollectionName(kb.ActiveCollectionUID)
+
+	logger.Info("Resetting KB embeddings for BM25 support",
+		zap.String("kbUID", kb.UID.String()),
+		zap.String("collectionName", collectionName))
+
+	// Step 1: Drop Milvus collection (removes old schema without BM25 fields)
+	if err := h.service.Repository().DropCollection(ctx, collectionName); err != nil {
+		// Log but continue - collection might not exist yet
+		logger.Warn("Failed to drop Milvus collection (may not exist)", zap.Error(err))
+	} else {
+		logger.Info("Dropped Milvus collection", zap.String("collection", collectionName))
+	}
+
+	// Step 2: Delete embeddings from PostgreSQL
+	if err := h.service.Repository().HardDeleteEmbeddingsByKBUID(ctx, kbUID); err != nil {
+		logger.Error("Failed to delete embeddings", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to delete embeddings: %v", err)
+	}
+
+	// Step 3: Delete chunks from PostgreSQL
+	if err := h.service.Repository().HardDeleteTextChunksByKBUID(ctx, kbUID); err != nil {
+		logger.Error("Failed to delete chunks", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to delete chunks: %v", err)
+	}
+
+	// Step 4: Delete converted files from PostgreSQL
+	if err := h.service.Repository().DeleteAllConvertedFilesInKb(ctx, kbUID); err != nil {
+		logger.Error("Failed to delete converted files", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to delete converted files: %v", err)
+	}
+
+	// Step 5: Reset all file statuses to NOTSTARTED
+	fileCount, err := h.service.Repository().ResetFileStatusesByKBUID(ctx, kbUID)
+	if err != nil {
+		logger.Error("Failed to reset file statuses", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to reset file statuses: %v", err)
+	}
+
+	logger.Info("KB embeddings reset completed",
+		zap.String("kbUID", kb.UID.String()),
+		zap.Int64("filesToReembed", fileCount))
+
+	// Fetch owner for response
+	owner, _ := h.service.FetchOwnerByNamespace(ctx, ns)
+
+	return &artifactpb.ResetKnowledgeBaseEmbeddingsAdminResponse{
+		KnowledgeBase:  convertKBToCatalogPB(kb, ns, owner, nil),
+		FilesToReembed: int32(fileCount),
+	}, nil
+}
