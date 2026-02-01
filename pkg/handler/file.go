@@ -22,6 +22,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/repository/object"
+	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
@@ -987,7 +988,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 	}
 
 	// Get namespace for MinIO/cache access (validate it exists)
-	_, err = ph.service.GetNamespaceByNsID(ctx, namespaceID)
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
 	if err != nil {
 		logger.Warn("failed to get namespace for view content", zap.Error(err))
 		return &artifactpb.GetFileResponse{File: file}, nil
@@ -1225,6 +1226,19 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			}
 		} else {
 			logger.Info("summary not available for file", zap.String("fileUID", kbFile.UID.String()))
+
+			// Fallback: Trigger reprocessing if file processing failed or didn't complete
+			if shouldTriggerReprocessing(kbFile.ProcessStatus) {
+				logger.Info("Triggering automatic reprocessing for file with missing summary",
+					zap.String("fileUID", kbFile.UID.String()),
+					zap.String("processStatus", kbFile.ProcessStatus))
+
+				if err := ph.triggerFileReprocessing(ctx, kbFile, kb, ns); err != nil {
+					logger.Warn("Failed to trigger automatic reprocessing",
+						zap.Error(err),
+						zap.String("fileUID", kbFile.UID.String()))
+				}
+			}
 		}
 
 	case artifactpb.File_VIEW_CONTENT:
@@ -1254,6 +1268,19 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 			}
 		} else {
 			logger.Info("content not available for file", zap.String("fileUID", kbFile.UID.String()))
+
+			// Fallback: Trigger reprocessing if file processing failed or didn't complete
+			if shouldTriggerReprocessing(kbFile.ProcessStatus) {
+				logger.Info("Triggering automatic reprocessing for file with missing content",
+					zap.String("fileUID", kbFile.UID.String()),
+					zap.String("processStatus", kbFile.ProcessStatus))
+
+				if err := ph.triggerFileReprocessing(ctx, kbFile, kb, ns); err != nil {
+					logger.Warn("Failed to trigger automatic reprocessing",
+						zap.Error(err),
+						zap.String("fileUID", kbFile.UID.String()))
+				}
+			}
 		}
 
 	case artifactpb.File_VIEW_STANDARD_FILE_TYPE:
@@ -2134,6 +2161,75 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 // ========================================================================
 // HELPER FUNCTIONS
 // ========================================================================
+
+// shouldTriggerReprocessing determines if a file should be automatically reprocessed
+// based on its current process status. Returns true if the file processing failed
+// or didn't complete successfully.
+func shouldTriggerReprocessing(processStatus string) bool {
+	switch processStatus {
+	case artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED.String(),
+		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
+		artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED.String():
+		return true
+	default:
+		// Don't trigger for PROCESSING, CHUNKING, EMBEDDING (already in progress)
+		// or COMPLETED (should have content)
+		return false
+	}
+}
+
+// triggerFileReprocessing triggers the ProcessFileWorkflow for a file that failed
+// or didn't complete processing. This is used as a fallback when derived content
+// (summary, content) is requested but not available.
+func (ph *PublicHandler) triggerFileReprocessing(
+	ctx context.Context,
+	kbFile repository.FileModel,
+	kb *repository.KnowledgeBaseModel,
+	ns *resource.Namespace,
+) error {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Block reprocessing during validation phase (same as file upload)
+	if kb.UpdateStatus == artifactpb.KnowledgeBaseUpdateStatus_KNOWLEDGE_BASE_UPDATE_STATUS_VALIDATING.String() {
+		logger.Info("Skipping automatic reprocessing - KB is in validation phase",
+			zap.String("fileUID", kbFile.UID.String()),
+			zap.String("kbUID", kb.UID.String()))
+		return nil
+	}
+
+	// Use namespace UID as owner UID and file's requester UID (or creator UID as fallback)
+	ownerUID := types.UserUIDType(ns.NsUID)
+	requesterUID := kbFile.RequesterUID
+	if requesterUID == types.RequesterUIDType(uuid.Nil) {
+		requesterUID = types.RequesterUIDType(kbFile.CreatorUID)
+	}
+
+	// Update file status to PROCESSING before triggering the workflow
+	_, err := ph.service.Repository().ProcessFiles(ctx, []string{kbFile.UID.String()}, requesterUID)
+	if err != nil {
+		logger.Warn("Failed to update file status to PROCESSING for automatic reprocessing",
+			zap.Error(err),
+			zap.String("fileUID", kbFile.UID.String()))
+		return fmt.Errorf("failed to update file status: %w", err)
+	}
+
+	// Trigger file processing workflow asynchronously
+	err = ph.service.ProcessFile(ctx, kb.UID, []types.FileUIDType{kbFile.UID}, ownerUID, requesterUID)
+	if err != nil {
+		logger.Warn("Failed to trigger ProcessFileWorkflow for automatic reprocessing",
+			zap.Error(err),
+			zap.String("fileUID", kbFile.UID.String()),
+			zap.String("kbUID", kb.UID.String()))
+		return fmt.Errorf("failed to trigger file processing: %w", err)
+	}
+
+	logger.Info("Automatic reprocessing triggered successfully",
+		zap.String("fileUID", kbFile.UID.String()),
+		zap.String("kbUID", kb.UID.String()),
+		zap.String("previousStatus", kbFile.ProcessStatus))
+
+	return nil
+}
 
 // appendRequestMetadata appends the gRPC metadata present in the context to
 // the provided ExternalMetadata under the key constant.MetadataRequestKey.
