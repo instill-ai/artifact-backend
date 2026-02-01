@@ -22,13 +22,15 @@ CREATE INDEX IF NOT EXISTS idx_file_knowledge_base_kb ON file_knowledge_base(kb_
 COMMENT ON TABLE file_knowledge_base IS 'Junction table for many-to-many relationship between files and knowledge bases';
 -- ============================================================================
 -- Step 2: Migrate existing file-kb relationships to junction table
+-- Only migrate files that reference existing knowledge bases (skip orphaned files)
 -- ============================================================================
 INSERT INTO file_knowledge_base (file_uid, kb_uid, created_at)
-SELECT uid,
-    kb_uid,
-    COALESCE(create_time, NOW())
-FROM file
-WHERE kb_uid IS NOT NULL ON CONFLICT (file_uid, kb_uid) DO NOTHING;
+SELECT f.uid,
+    f.kb_uid,
+    COALESCE(f.create_time, NOW())
+FROM file f
+INNER JOIN knowledge_base kb ON f.kb_uid = kb.uid
+WHERE f.kb_uid IS NOT NULL ON CONFLICT (file_uid, kb_uid) DO NOTHING;
 -- ============================================================================
 -- Step 3: Drop old unique constraint (kb_uid, id)
 -- ============================================================================

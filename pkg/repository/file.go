@@ -92,6 +92,10 @@ type File interface {
 	// GetKnowledgeBaseIDsForFiles returns a map of file UID to KB IDs (hash-based IDs) for batch lookup
 	GetKnowledgeBaseIDsForFiles(ctx context.Context, fileUIDs []types.FileUIDType) (map[types.FileUIDType][]string, error)
 
+	// ResetFileStatusesByKBUID resets all files in a KB to NOTSTARTED status for re-embedding.
+	// Returns the number of files affected.
+	ResetFileStatusesByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error)
+
 	// Deprecated methods
 
 	// GetFileByKBUIDAndFileID returns the file by
@@ -616,6 +620,27 @@ func (r *repository) DeleteAllFiles(ctx context.Context, kbUID string) error {
 		return err
 	}
 	return nil
+}
+
+// ResetFileStatusesByKBUID resets all files in a KB to NOTSTARTED status for re-embedding.
+// This is used when resetting a KB's embeddings to enable BM25 support.
+// Returns the number of files affected.
+func (r *repository) ResetFileStatusesByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error) {
+	// Use subquery to find file UIDs associated with the KB
+	subQuery := r.db.Table("file_knowledge_base").Select("file_uid").Where("kb_uid = ?", kbUID)
+
+	result := r.db.WithContext(ctx).
+		Model(&FileModel{}).
+		Where("uid IN (?) AND delete_time IS NULL", subQuery).
+		Updates(map[string]any{
+			"process_status": artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
+		})
+
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to reset file statuses: %w", result.Error)
+	}
+
+	return result.RowsAffected, nil
 }
 
 // ProcessFiles updates the process status of the files

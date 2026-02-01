@@ -821,26 +821,38 @@ func (m *milvusClient) checkMetadataFields(ctx context.Context, collectionName s
 	return hasMetadata, hasFileUID, hasTags, nil
 }
 
-// checkNativeBM25Support checks if the collection uses native Milvus BM25 (has text field with BM25 function).
+// checkNativeBM25Support checks if the collection uses native Milvus BM25 (has text and sparse_embedding fields).
 // Native BM25 collections have:
 // - A text VARCHAR field with enable_analyzer=true
+// - A sparse_embedding SparseVector field
 // - A BM25 Function that auto-generates sparse vectors from text
+//
+// NOTE: We check for both text and sparse_embedding field existence, not the BM25 function.
+// This is because:
+// 1. Zilliz Cloud may not report functions in the same way as self-hosted Milvus
+// 2. If these fields exist, Milvus REQUIRES data for them and BM25 search should work
+// 3. These fields are always created together with the BM25 function in CreateCollection
 func (m *milvusClient) checkNativeBM25Support(ctx context.Context, collectionName string) (bool, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
 	collDesc, err := m.c.DescribeCollection(ctx, milvusclient.NewDescribeCollectionOption(collectionName))
 	if err != nil {
 		return false, fmt.Errorf("describing collection: %w", err)
 	}
 
-	// Check for text field with analyzer enabled
+	// Check for text field and sparse_embedding field
 	hasTextField := false
+	hasSparseField := false
 	for _, field := range collDesc.Schema.Fields {
 		if field.Name == kbCollectionFieldText {
 			hasTextField = true
-			break
+		}
+		if field.Name == kbCollectionFieldSparseEmbedding {
+			hasSparseField = true
 		}
 	}
 
-	// Check for BM25 function
+	// Check for BM25 function (for logging/debugging purposes)
 	hasBM25Function := false
 	for _, fn := range collDesc.Schema.Functions {
 		if fn.Name == bm25FunctionName && fn.Type == entity.FunctionTypeBM25 {
@@ -849,8 +861,18 @@ func (m *milvusClient) checkNativeBM25Support(ctx context.Context, collectionNam
 		}
 	}
 
-	// Native BM25 requires both text field and BM25 function
-	return hasTextField && hasBM25Function, nil
+	// Log the detected configuration for debugging
+	logger.Debug("Native BM25 support check",
+		zap.String("collection", collectionName),
+		zap.Bool("hasTextField", hasTextField),
+		zap.Bool("hasSparseField", hasSparseField),
+		zap.Bool("hasBM25Function", hasBM25Function))
+
+	// Return true if both text and sparse_embedding fields exist
+	// These fields are always created together with the BM25 function,
+	// so their presence indicates BM25 is supported even if Zilliz Cloud
+	// doesn't report the function metadata
+	return hasTextField && hasSparseField, nil
 }
 
 func getStringData(col column.Column) ([]string, error) {
@@ -953,6 +975,12 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 		}
 	}
 
+	// Check if collection supports native BM25 (has text field)
+	hasNativeBM25, err := m.checkNativeBM25Support(ctx, collectionID)
+	if err != nil {
+		return fmt.Errorf("checking native BM25 support: %w", err)
+	}
+
 	// Query ALL fields for embeddings of this file (Milvus upsert is delete+insert)
 	// We must preserve all existing data when updating tags
 	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
@@ -969,6 +997,10 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 	}
 	if hasFileUID {
 		outputFields = append(outputFields, kbCollectionFieldFileUID)
+	}
+	// Include text field if native BM25 is supported
+	if hasNativeBM25 {
+		outputFields = append(outputFields, kbCollectionFieldText)
 	}
 
 	queryOpt := milvusclient.NewQueryOption(collectionID).
@@ -1001,7 +1033,7 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 	vectors, _ := getFloatVectorData(searchResult.GetColumn(kbCollectionFieldDenseEmbedding))
 
 	// Optional fields
-	var fileNames, fileTypes, contentTypes, fileUIDs []string
+	var fileNames, fileTypes, contentTypes, fileUIDs, texts []string
 	if hasMetadata {
 		fileNames, _ = getStringData(searchResult.GetColumn(kbCollectionFieldFileName))
 		fileTypes, _ = getStringData(searchResult.GetColumn(kbCollectionFieldFileType))
@@ -1010,9 +1042,14 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 	if hasFileUID {
 		fileUIDs, _ = getStringData(searchResult.GetColumn(kbCollectionFieldFileUID))
 	}
+	// Extract text field for native BM25 collections
+	if hasNativeBM25 {
+		texts, _ = getStringData(searchResult.GetColumn(kbCollectionFieldText))
+	}
 
 	logger.Info("UpdateEmbeddingTags: Found embeddings to update",
-		zap.Int("count", len(embeddingUIDs)))
+		zap.Int("count", len(embeddingUIDs)),
+		zap.Bool("hasNativeBM25", hasNativeBM25))
 
 	// Build upsert option with ALL fields to preserve existing data
 	// CRITICAL: Milvus upsert is delete+insert, so we must include all fields
@@ -1035,6 +1072,11 @@ func (m *milvusClient) UpdateEmbeddingTags(ctx context.Context, collectionID str
 
 	if hasFileUID {
 		upsertOpt.WithVarcharColumn(kbCollectionFieldFileUID, fileUIDs)
+	}
+
+	// Include text field for native BM25 collections (required for upsert)
+	if hasNativeBM25 && len(texts) > 0 {
+		upsertOpt.WithVarcharColumn(kbCollectionFieldText, texts)
 	}
 
 	// Add updated tags for all embeddings
