@@ -580,12 +580,16 @@ func (r *repository) ListFiles(ctx context.Context, params KnowledgeBaseFileList
 			return nil, fmt.Errorf("invalid next page token")
 		}
 
-		q = q.Where("file.update_time <= ?", kbfs[0].UpdateTime)
+		// Use tuple comparison for deterministic pagination.
+		// This ensures files with the same update_time are ordered by UID,
+		// preventing infinite loops when paginating through files with identical timestamps.
+		q = q.Where("(file.update_time, file.uid) <= (?, ?)", kbfs[0].UpdateTime, kbfs[0].UID)
 	}
 
 	// TODO INS-8162: the repository method (and the upstream handler) should
 	// take an `ordering` parameter so clients can choose the sorting.
-	q = q.Order("file.update_time DESC")
+	// Secondary sort by UID ensures deterministic ordering for pagination.
+	q = q.Order("file.update_time DESC, file.uid DESC")
 
 	// Fetch the records
 	if err := q.Find(&files).Error; err != nil {
