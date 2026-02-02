@@ -83,6 +83,10 @@ var ConvertedFileColumn = ConvertedFileColumns{
 // CreateConvertedFileWithDestination creates a converted file record with a known destination.
 // This method properly decouples database operations from external storage operations.
 // Note: Old converted files should be cleaned up by DeleteOldConvertedFilesActivity before calling this.
+//
+// This method is idempotent for Temporal activity retries:
+// - If a record with the same (file_uid, converted_type) already exists, it returns that record
+// - This handles the case where a previous attempt succeeded in inserting but failed before returning
 func (r *repository) CreateConvertedFileWithDestination(ctx context.Context, cf ConvertedFileModel) (*ConvertedFileModel, error) {
 	// Validate required fields before attempting to persist
 	if cf.FileUID.IsNil() {
@@ -101,15 +105,29 @@ func (r *repository) CreateConvertedFileWithDestination(ctx context.Context, cf 
 		return nil, fmt.Errorf("converted_type is required and cannot be empty")
 	}
 
-	err := r.db.Transaction(func(tx *gorm.DB) error {
+	var result ConvertedFileModel
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Note: Cleanup of old converted files is handled by DeleteOldConvertedFilesActivity in the workflow
 		// This ensures all old files (content + summary) are deleted before new ones are created,
 		// preventing race conditions and allowing content and summary files to coexist
 
-		// Create the new ConvertedFileModel with the provided destination
+		// Check if record already exists (idempotency for Temporal activity retries)
+		where := fmt.Sprintf("%s = ? AND %s = ?", ConvertedFileColumn.FileUID, ConvertedFileColumn.ConvertedType)
+		err := tx.Where(where, cf.FileUID, cf.ConvertedType).First(&result).Error
+		if err == nil {
+			// Record already exists - return it (idempotent retry case)
+			return nil
+		}
+		if err != gorm.ErrRecordNotFound {
+			// Unexpected error
+			return err
+		}
+
+		// Record doesn't exist - create it
 		if err := tx.Create(&cf).Error; err != nil {
 			return err
 		}
+		result = cf
 
 		return nil
 	})
@@ -117,7 +135,7 @@ func (r *repository) CreateConvertedFileWithDestination(ctx context.Context, cf 
 	if err != nil {
 		return nil, err
 	}
-	return &cf, nil
+	return &result, nil
 }
 
 // GetConvertedFileByFileUID returns the converted file by file UID
