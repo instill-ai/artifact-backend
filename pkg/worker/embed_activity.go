@@ -340,16 +340,11 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 			zap.Int("batchSize", len(batch)))
 	}
 
-	// Step 10: Flush collection to ensure immediate search availability
-	w.log.Info("Flushing collection after embedding save")
-	if err := w.repository.FlushCollection(ctx, collection); err != nil {
-		w.log.Error("Failed to flush collection", zap.Error(err))
-		return nil, activityErrorWithMessage(
-			"Unable to flush vector database collection. Please try again.",
-			embedAndSaveChunksActivityError,
-			err,
-		)
-	}
+	// Step 10: Skip explicit flush - Zilliz Cloud auto-flushes data automatically
+	// Explicit flush calls cause rate limit errors when processing multiple files concurrently.
+	// Zilliz's auto-flush (typically within 1 second) ensures data is searchable shortly after insert.
+	// See: https://docs.zilliz.com/docs/data-flush
+	w.log.Info("Skipping explicit flush - relying on Zilliz auto-flush")
 
 	result.EmbeddingCount = len(embeddings)
 	w.log.Info("EmbedAndSaveChunksActivity completed successfully",
