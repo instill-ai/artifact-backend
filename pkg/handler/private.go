@@ -202,6 +202,7 @@ func (h *PrivateHandler) ListKnowledgeBasesAdmin(ctx context.Context, req *artif
 		pbKBs = append(pbKBs, &artifactpb.KnowledgeBase{
 			Name:        fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID),
 			Id:          kb.ID,
+			Slug:        kb.Slug, // Required for findDefaultKnowledgeBase to match
 			DisplayName: kb.DisplayName,
 			Description: kb.Description,
 			Tags:        kb.Tags,
