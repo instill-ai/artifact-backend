@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/lib/pq"
 	"go.einride.tech/aip/filtering"
 
 	"github.com/instill-ai/artifact-backend/pkg/constant"
@@ -663,6 +664,7 @@ func (r *repository) AddFilesToKnowledgeBase(ctx context.Context, targetKBUID ty
 	// Use raw SQL to:
 	// 1. Look up file UIDs from the file table by their IDs
 	// 2. Insert into junction table, skipping duplicates
+	// Note: pq.Array() is required to properly convert Go slice to PostgreSQL array for ANY()
 	sql := `
 		INSERT INTO file_knowledge_base (file_uid, kb_uid, created_at)
 		SELECT f.uid, ?, NOW()
@@ -671,7 +673,7 @@ func (r *repository) AddFilesToKnowledgeBase(ctx context.Context, targetKBUID ty
 		ON CONFLICT (file_uid, kb_uid) DO NOTHING
 	`
 
-	result := r.db.WithContext(ctx).Exec(sql, targetKBUID, fileIDs)
+	result := r.db.WithContext(ctx).Exec(sql, targetKBUID, pq.Array(fileIDs))
 	if result.Error != nil {
 		return 0, fmt.Errorf("failed to add files to knowledge base: %w", result.Error)
 	}
