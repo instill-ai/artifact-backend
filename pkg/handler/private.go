@@ -121,11 +121,13 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 	}
 
 	// Create knowledge base WITHOUT creator (CreatorUID = nil)
+	// Pass the slug from request if provided, otherwise repository will auto-generate
 	dbData, err := h.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
 			ID:                kbID,
 			DisplayName:       displayName,
+			Slug:              kb.GetSlug(), // Pass slug from request (e.g., "instill-agent" for default KBs)
 			Description:       kb.GetDescription(),
 			Tags:              kb.GetTags(),
 			NamespaceUID:      ns.NsUID.String(),
