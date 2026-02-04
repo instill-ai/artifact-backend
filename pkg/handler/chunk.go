@@ -418,18 +418,9 @@ func (ph *PublicHandler) SearchChunks(
 		zap.String("knowledge_base", kbID),
 	)
 
-	// Get namespace
-	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("fetching namespace: %w", err),
-			"Unable to access the specified namespace. Please check the namespace ID and try again.",
-		)
-	}
-
-	// Get knowledge base
-	ownerUID := ns.NsUID
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ownerUID, kbID)
+	// Get knowledge base by ID only (not filtered by namespace)
+	// The ACL check below will verify if the user has access via personal namespace or org membership
+	kb, err := ph.service.Repository().GetKnowledgeBaseByID(ctx, kbID)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("fetching knowledge base: %w", err),
@@ -437,7 +428,7 @@ func (ph *PublicHandler) SearchChunks(
 		)
 	}
 
-	// ACL - check user has access to the knowledge base
+	// Check permissions via ACL - this handles both personal and organization access
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -475,7 +466,15 @@ func (ph *PublicHandler) SearchChunks(
 		)
 	}
 
-	// Perform vector similarity search
+	// Perform vector similarity search using the KB's namespace (not the request path namespace)
+	// This ensures cross-namespace access works correctly for organization members
+	ownerUID, err := uuid.FromString(kb.NamespaceUID)
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("parsing namespace UID: %w", err),
+			"Unable to process the knowledge base namespace. Please try again.",
+		)
+	}
 	simChunksScores, err := ph.service.SearchChunks(ctx, ownerUID, req, textVector)
 	if err != nil {
 		return nil, errorsx.AddMessage(

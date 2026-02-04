@@ -1448,6 +1448,8 @@ type ProcessContentActivityResult struct {
 	UsageMetadata    any                        // AI token usage
 	ConvertedFileUID types.ConvertedFileUIDType // Content converted file UID
 	Pipeline         string                     // Pipeline used (e.g., "instill-ai/indexing-generate-content/v1.4.0" for OpenAI route, empty for AI client)
+	ContentBucket    string                     // MinIO bucket where markdown content is stored
+	ContentPath      string                     // Path to markdown content in MinIO
 }
 
 // ProcessContentActivity handles the entire content processing pipeline:
@@ -1838,6 +1840,8 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	logger.Info("Converted file saved successfully", zap.String("convertedFileUID", convertedFileUID.String()))
 
 	result.ConvertedFileUID = convertedFileUID
+	result.ContentBucket = config.Config.Minio.BucketName
+	result.ContentPath = uploadResult.Destination
 	return result, nil
 }
 
@@ -1864,6 +1868,8 @@ type ProcessSummaryActivityResult struct {
 	UsageMetadata    any                        // AI token usage
 	ConvertedFileUID types.ConvertedFileUIDType // Summary converted file UID (zero if no summary)
 	Pipeline         string                     // Pipeline used (e.g., "instill-ai/indexing-generate-summary/v1.0.0" for OpenAI route, empty for AI client)
+	SummaryBucket    string                     // MinIO bucket where summary is stored
+	SummaryPath      string                     // Path to summary in MinIO
 }
 
 // ProcessSummaryActivity handles the entire summary generation:
@@ -2163,6 +2169,8 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 			zap.String("destination", uploadResult.Destination))
 
 		result.ConvertedFileUID = convertedFileUID
+		result.SummaryBucket = config.Config.Minio.BucketName
+		result.SummaryPath = uploadResult.Destination
 	}
 
 	return result, nil

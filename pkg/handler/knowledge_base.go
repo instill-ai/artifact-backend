@@ -380,14 +380,16 @@ func (ph *PublicHandler) UpdateKnowledgeBase(ctx context.Context, req *artifactp
 			"Unable to access the specified namespace. Please check the namespace ID and try again.",
 		)
 	}
-	// ACL - check user's permission to update knowledge base
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, knowledgeBaseID)
+	// Get knowledge base by ID only (not filtered by namespace)
+	// The ACL check below will verify if the user has access via personal namespace or org membership
+	kb, err := ph.service.Repository().GetKnowledgeBaseByID(ctx, knowledgeBaseID)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf(ErrorListKnowledgeBasesMsg, err),
 			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
 		)
 	}
+	// Check permissions via ACL - this handles both personal and organization access
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
 		return nil, errorsx.AddMessage(

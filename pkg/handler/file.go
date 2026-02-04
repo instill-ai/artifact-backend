@@ -122,12 +122,13 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			"Unable to access the specified namespace. Please check the namespace ID and try again.",
 		)
 	}
-	// ACL - check user's permission to write knowledge base
+	// Get knowledge base by ID only (not filtered by namespace)
+	// The ACL check below will verify if the user has access via personal namespace or org membership
 	logger.Debug("CreateFile: looking up KB",
 		zap.String("knowledge_base_id", kbID),
 		zap.String("namespace_uid", ns.NsUID.String()),
 		zap.String("namespace_id", ns.NsID))
-	kb, err := ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, kbID)
+	kb, err := ph.service.Repository().GetKnowledgeBaseByID(ctx, kbID)
 	if err != nil {
 		logger.Error("failed to get knowledge base", zap.Error(err), zap.String("kb_id_received", kbID))
 		return nil, errorsx.AddMessage(
@@ -135,6 +136,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
 		)
 	}
+	// Check permissions via ACL - this handles both personal and organization access
 	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "writer")
 	if err != nil {
 		logger.Error("failed to check permission", zap.Error(err))
@@ -679,8 +681,9 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 	var kbUID string
 	var kb *repository.KnowledgeBaseModel
 	if kbID != "" {
-		// Get knowledge base and check permissions
-		kb, err = ph.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, kbID)
+		// Get knowledge base by ID only (not filtered by namespace)
+		// The ACL check below will verify if the user has access via personal namespace or org membership
+		kb, err = ph.service.Repository().GetKnowledgeBaseByID(ctx, kbID)
 		if err != nil {
 			logger.Error("failed to get knowledge base", zap.Error(err), zap.String("kbID", kbID))
 			return nil, errorsx.AddMessage(
@@ -688,6 +691,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 				"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
 			)
 		}
+		// Check permissions via ACL - this handles both personal and organization access
 		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
 		if err != nil {
 			logger.Error("failed to check permission", zap.Error(err))
@@ -746,8 +750,17 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		)
 	}
 
-	// Get the tokens and chunks using the source table and source UID.
-	sources, err := ph.service.Repository().GetContentByFileUIDs(ctx, kbFileList.Files)
+	// Filter files to only include those with completed processing status
+	// This prevents "record not found" logs when querying for content of files still being processed
+	var completedFiles []repository.FileModel
+	for _, f := range kbFileList.Files {
+		if f.ProcessStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String() {
+			completedFiles = append(completedFiles, f)
+		}
+	}
+
+	// Get the tokens and chunks using the source table and source UID (only for completed files)
+	sources, err := ph.service.Repository().GetContentByFileUIDs(ctx, completedFiles)
 	if err != nil {
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("fetching sources: %w", err),
@@ -1200,6 +1213,16 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 	// Generate view-specific content with proper download headers
 	switch view {
 	case artifactpb.File_VIEW_SUMMARY:
+		// Check if file processing is complete before attempting to get summary
+		// This prevents "record not found" logs when summary hasn't been generated yet
+		if kbFile.ProcessStatus != artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String() {
+			logger.Info("Summary not available yet (file processing not complete)",
+				zap.String("fileUID", kbFile.UID.String()),
+				zap.String("processStatus", kbFile.ProcessStatus))
+			// Skip database query - summary won't exist until processing is complete
+			break
+		}
+
 		// Get converted summary file and generate pre-signed URL with proper headers
 		convertedFile, err := ph.service.Repository().GetConvertedFileByFileUIDAndType(
 			ctx,
@@ -1242,6 +1265,16 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		}
 
 	case artifactpb.File_VIEW_CONTENT:
+		// Check if file processing is complete before attempting to get content
+		// This prevents "record not found" logs when content hasn't been generated yet
+		if kbFile.ProcessStatus != artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String() {
+			logger.Info("Content not available yet (file processing not complete)",
+				zap.String("fileUID", kbFile.UID.String()),
+				zap.String("processStatus", kbFile.ProcessStatus))
+			// Skip database query - content won't exist until processing is complete
+			break
+		}
+
 		// Get converted content file and generate pre-signed URL with proper headers
 		convertedFile, err := ph.service.Repository().GetConvertedFileByFileUIDAndType(
 			ctx,

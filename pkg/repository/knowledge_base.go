@@ -52,7 +52,6 @@ type KnowledgeBase interface {
 	// Aliases preserve old URLs when display_name is renamed
 	GetKnowledgeBaseByIDOrAlias(ctx context.Context, ownerUID types.OwnerUIDType, id string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseByID(ctx context.Context, kbID string) (*KnowledgeBaseModel, error)
-	GetKnowledgeBaseCountByOwner(ctx context.Context, ownerUID string, kbType artifactpb.KnowledgeBaseType) (int64, error)
 	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
 	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseModel, error)
 	// GetKnowledgeBasesByUIDsWithConfig retrieves multiple KBs with their system configs
@@ -875,20 +874,6 @@ func (r *repository) ListAllKnowledgeBasesAdmin(ctx context.Context) ([]Knowledg
 		return nil, err
 	}
 	return kbs, nil
-}
-
-// get the count of knowledge bases by owner
-// Only counts production KBs (staging=false), as staging KBs are internal implementation details
-func (r *repository) GetKnowledgeBaseCountByOwner(ctx context.Context, owner string, kbType artifactpb.KnowledgeBaseType) (int64, error) {
-	var count int64
-	// GORM automatically excludes soft-deleted records with gorm.DeletedAt
-	// Filter for staging=false to exclude staging/rollback KBs from user-facing counts
-	if err := r.db.WithContext(ctx).Model(&KnowledgeBaseModel{}).
-		Where("namespace_uid = ? AND knowledge_base_type = ? AND staging = ?", owner, kbType.String(), false).
-		Count(&count).Error; err != nil {
-		return 0, err
-	}
-	return count, nil
 }
 
 // IncreaseKnowledgeBaseUsage increments the usage count of a KnowledgeBaseModel record by a specified amount.

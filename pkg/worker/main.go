@@ -95,6 +95,66 @@ const (
 	RetryMaximumAttempts         = 8                 // 8 attempts = up to ~3 minutes with backoff (handles AI rate limiting)
 )
 
+// PostStandardizationFn allows extensions of the worker to provide logic
+// to be executed after a file is standardized (e.g., DOCX→PDF, GIF→PNG).
+// This is called early in the processing pipeline, before content conversion.
+//
+// Parameters:
+//   - ctx: Temporal workflow context
+//   - fileUID: Unique identifier for the file
+//   - namespaceUID: Namespace that owns the file
+//   - kbUID: Knowledge base that contains the file
+//   - standardizedBucket: MinIO bucket containing the standardized file
+//   - standardizedPath: Path to the standardized file in MinIO
+//   - effectiveFileType: The file type after standardization (e.g., PDF, PNG)
+//   - filename: Display name for the file
+type PostStandardizationFn func(
+	ctx workflow.Context,
+	fileUID, namespaceUID, kbUID uuid.UUID,
+	standardizedBucket, standardizedPath string,
+	effectiveFileType artifactpb.File_Type,
+	filename string,
+) error
+
+// PostContentConversionFn allows extensions of the worker to provide logic
+// to be executed after a file's content is converted to markdown.
+// This is called earlier than PostFileCompletionFn - as soon as the markdown
+// content is ready, before chunking and embedding are complete.
+//
+// Parameters:
+//   - ctx: Temporal workflow context
+//   - fileUID: Unique identifier for the file
+//   - namespaceUID: Namespace that owns the file
+//   - kbUID: Knowledge base that contains the file
+//   - contentBucket: MinIO bucket containing the markdown content
+//   - contentPath: Path to the markdown content file in MinIO
+//   - filename: Display name for the file
+type PostContentConversionFn func(
+	ctx workflow.Context,
+	fileUID, namespaceUID, kbUID uuid.UUID,
+	contentBucket, contentPath string,
+	filename string,
+) error
+
+// PostSummaryConversionFn allows extensions of the worker to provide logic
+// to be executed after a file's summary is generated.
+// This is called after summary generation, in parallel with content conversion.
+//
+// Parameters:
+//   - ctx: Temporal workflow context
+//   - fileUID: Unique identifier for the file
+//   - namespaceUID: Namespace that owns the file
+//   - kbUID: Knowledge base that contains the file
+//   - summaryBucket: MinIO bucket containing the summary
+//   - summaryPath: Path to the summary file in MinIO
+//   - filename: Display name for the file
+type PostSummaryConversionFn func(
+	ctx workflow.Context,
+	fileUID, namespaceUID, kbUID uuid.UUID,
+	summaryBucket, summaryPath string,
+	filename string,
+) error
+
 // PostFileCompletionFn allows extensions of the worker to provide some logic
 // to be executed after a file is successfully processed.
 type PostFileCompletionFn func(_ workflow.Context, file *repository.FileModel, effectiveFileType artifactpb.File_Type) error
@@ -115,6 +175,9 @@ type Worker struct {
 	log      *zap.Logger
 
 	postFileCompletion    PostFileCompletionFn
+	postContentConversion PostContentConversionFn
+	postStandardization   PostStandardizationFn
+	postSummaryConversion PostSummaryConversionFn
 	generateContentPrompt string // Prompt for AI content generation
 	generateSummaryPrompt string // Prompt for AI summary generation
 }
@@ -146,10 +209,34 @@ func (w *Worker) GetLogger() *zap.Logger {
 	return w.log
 }
 
+// GetRedisClient returns the Redis client for external use (e.g., EE worker event publishing)
+func (w *Worker) GetRedisClient() *redis.Client {
+	return w.redisClient
+}
+
 // SetPostFileCompletionFn allows clients to add logic for files that have been
 // successfully processed.
 func (w *Worker) SetPostFileCompletionFn(fn PostFileCompletionFn) {
 	w.postFileCompletion = fn
+}
+
+// SetPostContentConversionFn allows clients to add logic to be executed
+// when a file's content is converted to markdown (before chunking/embedding).
+func (w *Worker) SetPostContentConversionFn(fn PostContentConversionFn) {
+	w.postContentConversion = fn
+}
+
+// SetPostStandardizationFn allows clients to add logic to be executed
+// when a file is standardized (e.g., DOCX→PDF, GIF→PNG).
+// This is called early in the pipeline, before content conversion.
+func (w *Worker) SetPostStandardizationFn(fn PostStandardizationFn) {
+	w.postStandardization = fn
+}
+
+// SetPostSummaryConversionFn allows clients to add logic to be executed
+// when a file's summary is generated.
+func (w *Worker) SetPostSummaryConversionFn(fn PostSummaryConversionFn) {
+	w.postSummaryConversion = fn
 }
 
 // SetGenerateContentPrompt allows clients to override the content generation prompt.

@@ -75,8 +75,28 @@ func (s *service) GetOrCreateFileCache(
 			zap.Error(err),
 			zap.String("fileUID", fileUID.String()))
 	} else if len(files) > 0 {
+		file := files[0]
+
+		// Check if file processing is complete before attempting cache/content operations
+		// If file is still being processed, return empty cache result (no error)
+		// This prevents "record not found" logs from content/summary queries during processing
+		if file.ProcessStatus != artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED.String() {
+			logger.Info("File processing not complete, skipping cache creation",
+				zap.String("fileUID", fileUID.String()),
+				zap.String("processStatus", file.ProcessStatus))
+			return &repository.CacheMetadata{
+				CacheName:            "",
+				Model:                "",
+				FileUIDs:             []types.FileUIDType{fileUID},
+				FileCount:            1,
+				CreateTime:           time.Now(),
+				ExpireTime:           time.Now().Add(gemini.DefaultCacheTTL),
+				CachedContextEnabled: false,
+			}, nil
+		}
+
 		// Get the actual token count for the file
-		fileModels := []repository.FileModel{files[0]}
+		fileModels := []repository.FileModel{file}
 		sources, err := s.repository.GetContentByFileUIDs(ctx, fileModels)
 		if err != nil {
 			logger.Warn("Failed to get content sources for token count, proceeding with cache creation",

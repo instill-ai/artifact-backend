@@ -421,6 +421,25 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				convertedDestination: result.ConvertedDestination,
 				converted:            result.Converted,
 			}
+
+			// Invoke post-standardization callback if set
+			// This fires as soon as the file is standardized (PDF/PNG/etc.), before content conversion.
+			if w.postStandardization != nil {
+				if callbackErr := w.postStandardization(
+					ctx,
+					uuid.UUID(fm.fileUID),
+					uuid.UUID(fm.metadata.File.NamespaceUID),
+					uuid.UUID(kbUID),
+					effectiveBucket,
+					effectiveDestination,
+					effectiveFileType,
+					fm.metadata.File.DisplayName,
+				); callbackErr != nil {
+					logger.Warn("Post-standardization callback failed (non-fatal)",
+						"fileUID", fm.fileUID.String(),
+						"error", callbackErr.Error())
+				}
+			}
 		}
 
 		// Step 2d: Create caches using the converted files (Gemini only)
@@ -684,6 +703,30 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			contentErr := wf.contentFuture.Get(ctx, &contentResult)
 
+			// Invoke post-content-conversion callback if set and content succeeded
+			// This fires as soon as markdown content is ready, before chunking/embedding
+			if contentErr == nil && w.postContentConversion != nil {
+				// Get filename from file metadata
+				filename := ""
+				if wf.conversionData != nil && wf.conversionData.fileMetadata != nil &&
+					wf.conversionData.fileMetadata.metadata.File != nil {
+					filename = wf.conversionData.fileMetadata.metadata.File.DisplayName
+				}
+				if callbackErr := w.postContentConversion(
+					ctx,
+					uuid.UUID(wf.fileUID),
+					uuid.UUID(param.UserUID),
+					uuid.UUID(kbUID),
+					contentResult.ContentBucket,
+					contentResult.ContentPath,
+					filename,
+				); callbackErr != nil {
+					logger.Warn("Post-content-conversion callback failed (non-fatal)",
+						"fileUID", wf.fileUID.String(),
+						"error", callbackErr.Error())
+				}
+			}
+
 			// For OpenAI sequential processing, receive the summary future from the channel
 			// (which was sent after content completed in the goroutine)
 			var summaryErr error
@@ -717,6 +760,30 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					summaryErr = fmt.Errorf("summary future is nil")
 				} else {
 					summaryErr = wf.summaryFuture.Get(ctx, &summaryResult)
+				}
+			}
+
+			// Invoke post-summary-conversion callback if set and summary succeeded
+			// This fires as soon as summary is ready, before chunking/embedding
+			if summaryErr == nil && w.postSummaryConversion != nil && summaryResult.SummaryBucket != "" {
+				// Get filename from file metadata
+				filename := ""
+				if wf.conversionData != nil && wf.conversionData.fileMetadata != nil &&
+					wf.conversionData.fileMetadata.metadata.File != nil {
+					filename = wf.conversionData.fileMetadata.metadata.File.DisplayName
+				}
+				if callbackErr := w.postSummaryConversion(
+					ctx,
+					uuid.UUID(wf.fileUID),
+					uuid.UUID(param.UserUID),
+					uuid.UUID(kbUID),
+					summaryResult.SummaryBucket,
+					summaryResult.SummaryPath,
+					filename,
+				); callbackErr != nil {
+					logger.Warn("Post-summary-conversion callback failed (non-fatal)",
+						"fileUID", wf.fileUID.String(),
+						"error", callbackErr.Error())
 				}
 			}
 
