@@ -13,6 +13,7 @@ import (
 	"github.com/gogo/status"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/config"
@@ -144,6 +145,101 @@ func (s *service) GetObject(
 	}
 
 	return repository.TurnObjectInDBToObjectInProto(obj), nil
+}
+
+// UpdateObject updates an object's metadata based on the update mask
+func (s *service) UpdateObject(
+	ctx context.Context,
+	namespaceUID types.NamespaceUIDType,
+	objectID string,
+	obj *artifactpb.Object,
+	updateMask *fieldmaskpb.FieldMask,
+) (*artifactpb.Object, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	// Get the existing object from database using the hash-based ID
+	existingObj, err := s.repository.GetObjectByID(ctx, namespaceUID, types.ObjectIDType(objectID))
+	if err != nil {
+		logger.Error("failed to get object", zap.Error(err))
+		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)
+	}
+
+	// Verify namespace matches
+	if existingObj.NamespaceUID != namespaceUID {
+		logger.Error("namespace mismatch")
+		return nil, status.Error(codes.PermissionDenied, "namespace mismatch")
+	}
+
+	// Build update map based on update mask (or update all mutable fields if no mask)
+	updateMap := make(map[string]any)
+	paths := updateMask.GetPaths()
+
+	// If no update mask, or mask contains is_uploaded, update the field
+	if len(paths) == 0 || containsPath(paths, "is_uploaded") {
+		if obj.GetIsUploaded() {
+			updateMap[repository.ObjectColumn.IsUploaded] = true
+
+			// When marking as uploaded, verify the file exists in MinIO and get metadata
+			if !existingObj.IsUploaded && strings.HasPrefix(existingObj.StoragePath, "ns-") {
+				fileMetadata, err := s.repository.GetMinIOStorage().GetFileMetadata(ctx, object.BlobBucketName, existingObj.StoragePath)
+				if err != nil {
+					logger.Warn("failed to verify file in MinIO during upload confirmation", zap.Error(err))
+					// Continue anyway - the file might not be ready yet, but we'll mark as uploaded
+				} else {
+					// Update size and metadata from MinIO
+					if fileMetadata.Size > 0 {
+						updateMap[repository.ObjectColumn.Size] = fileMetadata.Size
+					}
+					if fileMetadata.ContentType != "" {
+						updateMap[repository.ObjectColumn.ContentType] = fileMetadata.ContentType
+					}
+					updateMap[repository.ObjectColumn.LastModifiedTime] = fileMetadata.LastModified
+				}
+			}
+		}
+	}
+
+	// If no update mask, or mask contains size, update the field (if not already set from MinIO)
+	if (len(paths) == 0 || containsPath(paths, "size")) && obj.GetSize() > 0 {
+		if _, exists := updateMap[repository.ObjectColumn.Size]; !exists {
+			updateMap[repository.ObjectColumn.Size] = obj.GetSize()
+		}
+	}
+
+	// If no update mask, or mask contains content_type, update the field
+	if (len(paths) == 0 || containsPath(paths, "content_type")) && obj.GetContentType() != "" {
+		if _, exists := updateMap[repository.ObjectColumn.ContentType]; !exists {
+			updateMap[repository.ObjectColumn.ContentType] = obj.GetContentType()
+		}
+	}
+
+	if len(updateMap) == 0 {
+		// Nothing to update, return existing object
+		return repository.TurnObjectInDBToObjectInProto(existingObj), nil
+	}
+
+	// Perform the update
+	updatedObj, err := s.repository.UpdateObjectByUpdateMap(ctx, existingObj.UID, updateMap)
+	if err != nil {
+		logger.Error("failed to update object", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "failed to update object: %v", err)
+	}
+
+	logger.Info("object updated",
+		zap.String("object_id", objectID),
+		zap.Any("updated_fields", updateMap))
+
+	return repository.TurnObjectInDBToObjectInProto(updatedObj), nil
+}
+
+// containsPath checks if a path is in the list of paths
+func containsPath(paths []string, target string) bool {
+	for _, p := range paths {
+		if p == target {
+			return true
+		}
+	}
+	return false
 }
 
 // GetDownloadURL gets the download url of the object

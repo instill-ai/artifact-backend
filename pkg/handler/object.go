@@ -151,6 +151,81 @@ func (ph *PublicHandler) GetObject(ctx context.Context, req *artifactpb.GetObjec
 	}, nil
 }
 
+// UpdateObject updates an object's metadata (e.g., marking upload complete).
+func (ph *PublicHandler) UpdateObject(ctx context.Context, req *artifactpb.UpdateObjectRequest) (*artifactpb.UpdateObjectResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+	authUID, err := getUserUIDFromContext(ctx)
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get user id from header: %v: %w", err, errorsx.ErrUnauthenticated),
+			"Authentication failed. Please log in and try again.",
+		)
+	}
+
+	obj := req.GetObject()
+	if obj == nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("object is required"),
+			"Object data is required for update.",
+		)
+	}
+
+	// Parse the AIP-compliant name field (format: namespaces/{namespace}/objects/{object})
+	namespaceID, objectID, err := parseObjectFromName(obj.GetName())
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("invalid name format: %w", err),
+			"Invalid object name format. Expected format: namespaces/{namespace}/objects/{object}",
+		)
+	}
+
+	ns, err := ph.service.GetNamespaceByNsID(ctx, namespaceID)
+	if err != nil {
+		logger.Error(
+			"failed to get namespace",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", namespaceID),
+			zap.String("auth_uid", authUID))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to get namespace: %w", err),
+			"Unable to access the specified namespace. Please check the namespace ID and try again.",
+		)
+	}
+
+	// ACL - check user's permission to update objects in the namespace
+	err = ph.service.CheckNamespacePermission(ctx, ns)
+	if err != nil {
+		logger.Error(
+			"failed to check namespace permission",
+			zap.Error(err),
+			zap.String("owner_id(ns_id)", namespaceID),
+			zap.String("auth_uid", authUID))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to check namespace permission: %w", err),
+			"You don't have permission to update objects in this namespace. Please contact the owner for access.",
+		)
+	}
+
+	// Call the service to update the object
+	updatedObj, err := ph.service.UpdateObject(ctx, ns.NsUID, objectID, obj, req.GetUpdateMask())
+	if err != nil {
+		logger.Error("failed to update object", zap.Error(err), zap.String("object_id", objectID))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to update object: %w", err),
+			"Unable to update the object. Please try again.",
+		)
+	}
+
+	logger.Info("object updated successfully",
+		zap.String("object_id", objectID),
+		zap.Bool("is_uploaded", updatedObj.GetIsUploaded()),
+		zap.Int64("size", updatedObj.GetSize()))
+
+	return &artifactpb.UpdateObjectResponse{
+		Object: updatedObj,
+	}, nil
+}
+
 // GetObjectDownloadURL returns the download URL for an object.
 func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifactpb.GetObjectDownloadURLRequest) (*artifactpb.GetObjectDownloadURLResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)

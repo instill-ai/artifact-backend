@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/instill-ai/artifact-backend/pkg/acl"
 	"github.com/instill-ai/artifact-backend/pkg/ai"
@@ -34,6 +35,7 @@ type Service interface {
 	// Repository tag methods removed - tag.proto was removed from protobuf definitions
 	GetUploadURL(context.Context, *artifactpb.GetObjectUploadURLRequest, types.NamespaceUIDType, string, types.CreatorUIDType) (*artifactpb.GetObjectUploadURLResponse, error)
 	GetObject(context.Context, types.NamespaceUIDType, string) (*artifactpb.Object, error)
+	UpdateObject(context.Context, types.NamespaceUIDType, string, *artifactpb.Object, *fieldmaskpb.FieldMask) (*artifactpb.Object, error)
 	GetDownloadURL(context.Context, string, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
 	GetDownloadURLByObjectUID(context.Context, types.ObjectUIDType, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
 	CheckCatalogUserPermission(context.Context, string, string, string) (*resource.Namespace, *repository.KnowledgeBaseModel, error)

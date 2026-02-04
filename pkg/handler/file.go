@@ -343,17 +343,19 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 				logger.Error("failed to get file from minio", zap.Error(err))
 				return nil, err
 			}
-			obj.IsUploaded = true
 
-			// Update object size from MinIO if it's 0
+			// File exists in MinIO - mark as uploaded and update size if needed
+			obj.IsUploaded = true
 			if obj.Size == 0 && fileMetadata.Size > 0 {
 				obj.Size = fileMetadata.Size
-				_, err = ph.service.Repository().UpdateObject(ctx, *obj)
-				if err != nil {
-					logger.Warn("failed to update object size", zap.Error(err))
-				} else {
-					logger.Info("updated object size from MinIO", zap.Int64("size", obj.Size))
-				}
+			}
+
+			// Always persist the IsUploaded flag (and size if updated)
+			_, err = ph.service.Repository().UpdateObject(ctx, *obj)
+			if err != nil {
+				logger.Warn("failed to update object upload status", zap.Error(err))
+			} else {
+				logger.Info("marked object as uploaded", zap.String("object_id", string(obj.ID)), zap.Int64("size", obj.Size))
 			}
 		}
 
