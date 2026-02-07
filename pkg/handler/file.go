@@ -13,6 +13,7 @@ import (
 
 	"go.einride.tech/aip/filtering"
 	"go.uber.org/zap"
+	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -693,20 +694,24 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 				"Unable to access the specified knowledge base. Please check the knowledge base ID and try again.",
 			)
 		}
-		// Check permissions via ACL - this handles both personal and organization access
-		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
-		if err != nil {
-			logger.Error("failed to check permission", zap.Error(err))
-			return nil, errorsx.AddMessage(
-				fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
-				"Unable to verify access permissions. Please try again.",
-			)
-		}
-		if !granted {
-			return nil, errorsx.AddMessage(
-				fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized),
-				"You don't have permission to view this knowledge base. Please contact the owner for access.",
-			)
+		// Check permissions via ACL - this handles both personal and organization access.
+		// Trusted backend-to-backend calls bypass this check (the calling service
+		// already verified permissions at its own level).
+		if !service.IsTrustedBackendRequest(ctx) {
+			granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+			if err != nil {
+				logger.Error("failed to check permission", zap.Error(err))
+				return nil, errorsx.AddMessage(
+					fmt.Errorf(ErrorUpdateKnowledgeBaseMsg, err),
+					"Unable to verify access permissions. Please try again.",
+				)
+			}
+			if !granted {
+				return nil, errorsx.AddMessage(
+					fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized),
+					"You don't have permission to view this knowledge base. Please contact the owner for access.",
+				)
+			}
 		}
 		kbUID = kb.UID.String()
 	}
@@ -720,6 +725,15 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		filtering.DeclareIdent("uid", filtering.TypeString),
 		filtering.DeclareIdent("id", filtering.TypeString),
 		filtering.DeclareIdent("process_status", filtering.TypeString),
+		// tags is a repeated string field (PostgreSQL VARCHAR[] array).
+		// Use the `:` (has) operator: tags:"value" → '?' = ANY(tags)
+		filtering.DeclareIdent("tags", &expr.Type{
+			TypeKind: &expr.Type_ListType_{
+				ListType: &expr.Type_ListType{
+					ElemType: filtering.TypeString,
+				},
+			},
+		}),
 	}...)
 	if err != nil {
 		logger.Error("failed to create filter declarations", zap.Error(err))

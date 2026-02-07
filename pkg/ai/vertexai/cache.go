@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/ai"
 
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	errorsx "github.com/instill-ai/x/errors"
 	filetype "github.com/instill-ai/x/file"
 )
@@ -169,12 +171,27 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 		cacheTTL = GetCacheTTL()
 	}
 
-	// Prepare all file parts - upload to GCS and create FileData parts
+	// Prepare all file parts - either inline text or GCS FileData
 	parts := make([]*genai.Part, 0, len(files))
 	gcsURIs := make([]string, 0, len(files))
 
-	// Upload all files to GCS first
 	for _, file := range files {
+		// For text-based file types, pass content inline instead of uploading to GCS.
+		// Gemini's FileData API does not support text MIME types via gs:// URI.
+		isTextBased := file.FileType == artifactpb.File_TYPE_TEXT ||
+			file.FileType == artifactpb.File_TYPE_MARKDOWN ||
+			file.FileType == artifactpb.File_TYPE_CSV ||
+			file.FileType == artifactpb.File_TYPE_HTML
+
+		if isTextBased {
+			textContent := strings.ToValidUTF8(string(file.Content), "\uFFFD")
+			parts = append(parts, &genai.Part{
+				Text: fmt.Sprintf("File: %s\n\n%s", file.FileDisplayName, textContent),
+			})
+			continue
+		}
+
+		// Binary files: upload to GCS and use FileData
 		mimeType := filetype.FileTypeToMimeType(file.FileType)
 
 		// Upload to object storage (GCS)
@@ -196,8 +213,6 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 			)
 		}
 
-		// Note: For VertexAI, we need the GCS bucket configured
-		// The storage backend should be GCS for VertexAI to work
 		// Get the bucket name from the storage configuration
 		bucketName := c.storage.GetBucket()
 		gsURI := fmt.Sprintf("gs://%s/%s", bucketName, objectPath)

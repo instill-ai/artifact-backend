@@ -40,11 +40,18 @@ func (w *Worker) GetFileStatusActivity(ctx context.Context, param *GetFileStatus
 		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, activityError(err, getFileStatusActivityError)
 	}
 	if len(files) == 0 {
-		err := errorsx.AddMessage(
-			errorsx.ErrNotFound,
-			"File not found. It may have been deleted.",
-		)
-		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED, activityError(err, getFileStatusActivityError)
+		// File record not found in database - this is non-retryable because:
+		// - File was deleted before processing started (common in integration tests)
+		// - Invalid file UID was provided
+		// Retrying won't help since the file won't reappear in the DB.
+		w.log.Info("GetFileStatusActivity: File not found (record missing from database)",
+			zap.String("fileUID", fileUID.String()))
+		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED,
+			activityErrorNonRetryableFlat(
+				"File not found. It may have been deleted.",
+				getFileStatusActivityError,
+				errorsx.ErrNotFound,
+			)
 	}
 	file := files[0]
 

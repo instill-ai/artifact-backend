@@ -13,6 +13,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/service"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/x/resource"
 
@@ -428,28 +429,32 @@ func (ph *PublicHandler) SearchChunks(
 		)
 	}
 
-	// Check permissions via ACL - this handles both personal and organization access
-	granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("checking permissions: %w", err),
-			"Unable to verify access permissions. Please try again.",
-		)
-	}
-	if !granted {
-		return nil, errorsx.AddMessage(
-			errorsx.ErrUnauthenticated,
-			"You don't have permission to access this knowledge base. Please contact the owner for access.",
-		)
-	}
+	// Check permissions via ACL - this handles both personal and organization access.
+	// Trusted backend-to-backend calls bypass this check (the calling service
+	// already verified permissions at its own level).
+	if !service.IsTrustedBackendRequest(ctx) {
+		granted, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kb.UID, "reader")
+		if err != nil {
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("checking permissions: %w", err),
+				"Unable to verify access permissions. Please try again.",
+			)
+		}
+		if !granted {
+			return nil, errorsx.AddMessage(
+				errorsx.ErrUnauthenticated,
+				"You don't have permission to access this knowledge base. Please contact the owner for access.",
+			)
+		}
 
-	// Check auth user has access to the requester
-	err = ph.service.ACLClient().CheckRequesterPermission(ctx)
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("checking requester permission: %w", err),
-			"Unable to verify your authentication. Please log in again and try again.",
-		)
+		// Check auth user has access to the requester
+		err = ph.service.ACLClient().CheckRequesterPermission(ctx)
+		if err != nil {
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("checking requester permission: %w", err),
+				"Unable to verify your authentication. Please log in again and try again.",
+			)
+		}
 	}
 
 	// Retrieve the chunks based on the similarity

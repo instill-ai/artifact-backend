@@ -24,49 +24,61 @@ func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []by
 		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "Content is empty")
 	}
 
-	mimeType := filetype.FileTypeToMimeType(fileType)
+	// For text-based file types (TEXT, MARKDOWN, CSV, HTML), pass content inline
+	// instead of uploading to GCS. Gemini's FileData API does not support text
+	// MIME types via gs:// URI — they must be passed as inline text parts.
+	isTextBased := fileType == artifactpb.File_TYPE_TEXT ||
+		fileType == artifactpb.File_TYPE_MARKDOWN ||
+		fileType == artifactpb.File_TYPE_CSV ||
+		fileType == artifactpb.File_TYPE_HTML
 
-	// Upload file to object storage (GCS)
-	// Generate unique path for file
-	fileUID := uuid.Must(uuid.NewV4())
-	objectPath := path.Join("vertexai-conversion", fileUID.String(), filename)
+	var parts []*genai.Part
+	if isTextBased {
+		// Pass text content inline as part of the prompt
+		textContent := strings.ToValidUTF8(string(content), "\uFFFD")
+		parts = []*genai.Part{
+			{Text: fmt.Sprintf("File: %s\n\n%s", filename, textContent)},
+			{Text: prompt},
+		}
+	} else {
+		// Binary files: upload to GCS and use FileData with gs:// URI
+		mimeType := filetype.FileTypeToMimeType(fileType)
 
-	// Convert to base64 for object.Storage interface
-	base64Content := base64.StdEncoding.EncodeToString(content)
-	err := c.storage.UploadBase64File(ctx, "", objectPath, base64Content, mimeType)
-	if err != nil {
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to upload file to object storage for conversion: %w", err),
-			"Unable to upload file for processing. Please try again.",
-		)
-	}
+		// Upload file to object storage (GCS)
+		// Generate unique path for file
+		fileUID := uuid.Must(uuid.NewV4())
+		objectPath := path.Join("vertexai-conversion", fileUID.String(), filename)
 
-	// Construct GCS URI
-	// Get the bucket name from the storage configuration
-	bucketName := c.storage.GetBucket()
-	gsURI := fmt.Sprintf("gs://%s/%s", bucketName, objectPath)
+		// Convert to base64 for object.Storage interface
+		base64Content := base64.StdEncoding.EncodeToString(content)
+		err := c.storage.UploadBase64File(ctx, "", objectPath, base64Content, mimeType)
+		if err != nil {
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("failed to upload file to object storage for conversion: %w", err),
+				"Unable to upload file for processing. Please try again.",
+			)
+		}
 
-	// Clean up file after conversion (defer)
-	defer func() {
-		_ = c.storage.DeleteFile(context.Background(), "", objectPath)
-	}()
+		// Construct GCS URI
+		bucketName := c.storage.GetBucket()
+		gsURI := fmt.Sprintf("gs://%s/%s", bucketName, objectPath)
 
-	// Create FileData part with GCS URI
-	part := &genai.Part{
-		FileData: &genai.FileData{
-			FileURI:  gsURI,
-			MIMEType: mimeType,
-		},
+		// Clean up file after conversion (defer)
+		defer func() {
+			_ = c.storage.DeleteFile(context.Background(), "", objectPath)
+		}()
+
+		parts = []*genai.Part{
+			{FileData: &genai.FileData{FileURI: gsURI, MIMEType: mimeType}},
+			{Text: prompt},
+		}
 	}
 
 	// Create prompt content
 	promptContent := []*genai.Content{
 		{
 			Role: genai.RoleUser,
-			Parts: []*genai.Part{
-				part,
-				{Text: prompt},
-			},
+			Parts: parts,
 		},
 	}
 

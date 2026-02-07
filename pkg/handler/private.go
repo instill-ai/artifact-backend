@@ -121,13 +121,11 @@ func (h *PrivateHandler) CreateKnowledgeBaseAdmin(ctx context.Context, req *arti
 	}
 
 	// Create knowledge base WITHOUT creator (CreatorUID = nil)
-	// Pass the slug from request if provided, otherwise repository will auto-generate
 	dbData, err := h.service.Repository().CreateKnowledgeBase(
 		ctx,
 		repository.KnowledgeBaseModel{
 			ID:                kbID,
 			DisplayName:       displayName,
-			Slug:              kb.GetSlug(), // Pass slug from request (e.g., "instill-agent" for default KBs)
 			Description:       kb.GetDescription(),
 			Tags:              kb.GetTags(),
 			NamespaceUID:      ns.NsUID.String(),
@@ -202,7 +200,7 @@ func (h *PrivateHandler) ListKnowledgeBasesAdmin(ctx context.Context, req *artif
 		pbKBs = append(pbKBs, &artifactpb.KnowledgeBase{
 			Name:        fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID),
 			Id:          kb.ID,
-			Slug:        kb.Slug, // Required for findDefaultKnowledgeBase to match
+			Slug:        kb.Slug,
 			DisplayName: kb.DisplayName,
 			Description: kb.Description,
 			Tags:        kb.Tags,
@@ -954,6 +952,58 @@ func (h *PrivateHandler) GetDefaultSystemAdmin(ctx context.Context, req *artifac
 	return resp, nil
 }
 
+// ListFilesAdmin lists files in a knowledge base without ACL filtering (admin only).
+// This delegates to the CE public ListFiles handler which handles all the DB queries,
+// filtering, and pagination. The admin endpoint bypasses the EE per-file FGA filtering
+// that wraps the public handler.
+// Used by internal services (e.g., agent-backend) for service-to-service file lookups.
+func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.ListFilesAdminRequest) (*artifactpb.ListFilesAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	logger.Info("ListFilesAdmin called",
+		zap.String("parent", req.GetParent()),
+		zap.String("filter", req.GetFilter()))
+
+	// Build a public ListFilesRequest from the admin request
+	publicReq := &artifactpb.ListFilesRequest{
+		Parent: req.GetParent(),
+	}
+	if req.GetPageSize() > 0 {
+		pageSize := req.GetPageSize()
+		publicReq.PageSize = &pageSize
+	}
+	if req.GetPageToken() != "" {
+		pageToken := req.GetPageToken()
+		publicReq.PageToken = &pageToken
+	}
+	if req.GetFilter() != "" {
+		filter := req.GetFilter()
+		publicReq.Filter = &filter
+	}
+
+	// Create a public handler to reuse the existing ListFiles logic
+	publicHandler := &PublicHandler{
+		service: h.service,
+	}
+
+	// Delegate to the CE public handler's ListFiles which handles:
+	// - AIP-160 filter parsing (file IDs, tags, process status)
+	// - Pagination with page token
+	// - Token/chunk count enrichment
+	// No ACL checks are applied (admin endpoint).
+	resp, err := publicHandler.ListFiles(ctx, publicReq)
+	if err != nil {
+		logger.Error("ListFilesAdmin failed", zap.Error(err))
+		return nil, err
+	}
+
+	return &artifactpb.ListFilesAdminResponse{
+		Files:         resp.GetFiles(),
+		NextPageToken: resp.GetNextPageToken(),
+		TotalSize:     resp.GetTotalSize(),
+	}, nil
+}
+
 // resolveOwnerUID resolves a namespace ID to an owner UID.
 // It first tries to parse as UUID (for backward compatibility), then looks up via service.
 func (h *PrivateHandler) resolveOwnerUID(ctx context.Context, namespaceID string) (types.OwnerUIDType, error) {
@@ -1050,186 +1100,5 @@ func (h *PrivateHandler) ResetKnowledgeBaseEmbeddingsAdmin(ctx context.Context, 
 	return &artifactpb.ResetKnowledgeBaseEmbeddingsAdminResponse{
 		KnowledgeBase:  convertKBToCatalogPB(kb, ns, owner, nil),
 		FilesToReembed: int32(fileCount),
-	}, nil
-}
-
-// AddFilesToKnowledgeBaseAdmin adds file associations to a target KB by file resource names (admin only).
-// Files can belong to multiple KBs (many-to-many relationship).
-func (h *PrivateHandler) AddFilesToKnowledgeBaseAdmin(ctx context.Context, req *artifactpb.AddFilesToKnowledgeBaseAdminRequest) (*artifactpb.AddFilesToKnowledgeBaseAdminResponse, error) {
-	logger, _ := logx.GetZapLogger(ctx)
-
-	// Parse target KB from name (format: namespaces/{namespace}/knowledge-bases/{kb})
-	targetNamespaceID, targetKBID, err := parseKnowledgeBaseFromName(req.GetTargetKnowledgeBase())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid target_knowledge_base format: %v", err)
-	}
-
-	logger.Info("AddFilesToKnowledgeBaseAdmin called",
-		zap.String("target_namespace_id", targetNamespaceID),
-		zap.String("target_kb_id", targetKBID),
-		zap.Int("file_count", len(req.GetFiles())))
-
-	// Get target namespace
-	targetNs, err := h.service.GetNamespaceByNsID(ctx, targetNamespaceID)
-	if err != nil {
-		logger.Error("failed to get target namespace", zap.Error(err))
-		return nil, status.Errorf(codes.NotFound, "target namespace not found: %v", err)
-	}
-
-	// Get target knowledge base
-	targetKB, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, targetNs.NsUID, targetKBID)
-	if err != nil {
-		logger.Error("failed to get target knowledge base", zap.Error(err))
-		return nil, status.Errorf(codes.NotFound, "target knowledge base not found: %v", err)
-	}
-
-	// Parse file resource names to extract file IDs
-	// Format: namespaces/{namespace}/files/{file}
-	fileIDs := make([]string, 0, len(req.GetFiles()))
-	for _, fileName := range req.GetFiles() {
-		_, _, fileID, err := parseFileFromName(fileName)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid file resource name format: %s", fileName)
-		}
-		fileIDs = append(fileIDs, fileID)
-	}
-
-	// Add file associations
-	filesAdded, err := h.service.Repository().AddFilesToKnowledgeBase(ctx, types.KnowledgeBaseUIDType(targetKB.UID), fileIDs)
-	if err != nil {
-		logger.Error("failed to add files to knowledge base", zap.Error(err))
-		return nil, status.Errorf(codes.Internal, "failed to add files: %v", err)
-	}
-
-	logger.Info("AddFilesToKnowledgeBaseAdmin completed",
-		zap.String("target_kb_uid", targetKB.UID.String()),
-		zap.Int64("files_added", filesAdded))
-
-	return &artifactpb.AddFilesToKnowledgeBaseAdminResponse{
-		FilesAdded: int32(filesAdded),
-	}, nil
-}
-
-// DeleteKnowledgeBaseAdmin force-deletes a knowledge base (admin only).
-// CASCADE removes file-KB associations from junction table. Files remain orphaned.
-// Also cleans up the Milvus collection.
-func (h *PrivateHandler) DeleteKnowledgeBaseAdmin(ctx context.Context, req *artifactpb.DeleteKnowledgeBaseAdminRequest) (*artifactpb.DeleteKnowledgeBaseAdminResponse, error) {
-	logger, _ := logx.GetZapLogger(ctx)
-
-	// Parse namespace and KB ID from name (format: namespaces/{namespace}/knowledge-bases/{kb})
-	namespaceID, knowledgeBaseID, err := parseKnowledgeBaseFromName(req.GetName())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid name format: %v", err)
-	}
-
-	logger.Info("DeleteKnowledgeBaseAdmin called",
-		zap.String("namespace_id", namespaceID),
-		zap.String("knowledge_base_id", knowledgeBaseID))
-
-	// Get namespace
-	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
-	if err != nil {
-		logger.Error("failed to get namespace", zap.Error(err))
-		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
-	}
-
-	// Get knowledge base
-	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, knowledgeBaseID)
-	if err != nil {
-		logger.Error("failed to get knowledge base", zap.Error(err))
-		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
-	}
-
-	collectionName := constant.KBCollectionName(kb.ActiveCollectionUID)
-
-	// Step 1: Drop Milvus collection if it exists
-	if err := h.service.Repository().DropCollection(ctx, collectionName); err != nil {
-		// Log but continue - collection might not exist
-		logger.Warn("Failed to drop Milvus collection (may not exist)", zap.Error(err), zap.String("collection", collectionName))
-	} else {
-		logger.Info("Dropped Milvus collection", zap.String("collection", collectionName))
-	}
-
-	// Step 2: Remove ACL entry
-	if err := h.service.ACLClient().Purge(ctx, "knowledgebase", kb.UID); err != nil {
-		// Log but continue - ACL entry might not exist
-		logger.Warn("Failed to purge ACL entry", zap.Error(err))
-	}
-
-	// Step 3: Hard delete the knowledge base (CASCADE will remove file_knowledge_base associations)
-	if err := h.service.Repository().HardDeleteKnowledgeBase(ctx, kb.UID.String()); err != nil {
-		logger.Error("failed to delete knowledge base", zap.Error(err))
-		return nil, status.Errorf(codes.Internal, "failed to delete knowledge base: %v", err)
-	}
-
-	logger.Info("DeleteKnowledgeBaseAdmin completed",
-		zap.String("kb_uid", kb.UID.String()),
-		zap.String("kb_id", kb.ID))
-
-	return &artifactpb.DeleteKnowledgeBaseAdminResponse{}, nil
-}
-
-// ListFilesAdmin lists files in a knowledge base without ACL checks (admin only).
-// Used by internal services during migrations and administrative operations.
-func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.ListFilesAdminRequest) (*artifactpb.ListFilesAdminResponse, error) {
-	logger, _ := logx.GetZapLogger(ctx)
-
-	// Parse namespace and KB ID from parent (format: namespaces/{namespace}/knowledge-bases/{kb})
-	namespaceID, knowledgeBaseID, err := parseKnowledgeBaseFromName(req.GetParent())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid parent format: %v", err)
-	}
-
-	logger.Info("ListFilesAdmin called",
-		zap.String("namespace_id", namespaceID),
-		zap.String("knowledge_base_id", knowledgeBaseID),
-		zap.Int32("page_size", req.GetPageSize()))
-
-	// Get namespace
-	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
-	if err != nil {
-		logger.Error("failed to get namespace", zap.Error(err))
-		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
-	}
-
-	// Get knowledge base
-	kb, err := h.service.Repository().GetKnowledgeBaseByOwnerAndKbID(ctx, ns.NsUID, knowledgeBaseID)
-	if err != nil {
-		logger.Error("failed to get knowledge base", zap.Error(err))
-		return nil, status.Errorf(codes.NotFound, "knowledge base not found: %v", err)
-	}
-
-	// Set default page size
-	pageSize := req.GetPageSize()
-	if pageSize <= 0 {
-		pageSize = 100
-	}
-
-	// List files from repository without ACL checks
-	files, nextPageToken, totalSize, err := h.service.Repository().ListKnowledgeBaseFilesAdmin(
-		ctx,
-		types.KnowledgeBaseUIDType(kb.UID),
-		pageSize,
-		req.GetPageToken(),
-	)
-	if err != nil {
-		logger.Error("failed to list files", zap.Error(err))
-		return nil, status.Errorf(codes.Internal, "failed to list files: %v", err)
-	}
-
-	// Convert to proto files with minimal information (admin context - no owner/creator)
-	protoFiles := make([]*artifactpb.File, len(files))
-	for i, f := range files {
-		protoFiles[i] = convertKBFileToPB(&f, ns, kb, nil, nil, "")
-	}
-
-	logger.Info("ListFilesAdmin completed",
-		zap.Int("files_returned", len(protoFiles)),
-		zap.Int32("total_size", totalSize))
-
-	return &artifactpb.ListFilesAdminResponse{
-		Files:         protoFiles,
-		NextPageToken: nextPageToken,
-		TotalSize:     totalSize,
 	}, nil
 }

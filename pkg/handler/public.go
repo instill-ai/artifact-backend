@@ -23,6 +23,12 @@ func NewPublicHandler(service artifact.Service, log *zap.Logger) *PublicHandler 
 	}
 }
 
+// GetService returns the underlying service for use by EE handler overrides
+// that need to bypass CE-level permission checks for trusted service-to-service calls.
+func (ph *PublicHandler) GetService() artifact.Service {
+	return ph.service
+}
+
 // Liveness returns the health of the service.
 func (ph *PublicHandler) Liveness(_ context.Context, _ *artifactpb.LivenessRequest) (*artifactpb.LivenessResponse, error) {
 	return &artifactpb.LivenessResponse{

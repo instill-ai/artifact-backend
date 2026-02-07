@@ -18,6 +18,7 @@ import (
 	mgmtpb "github.com/instill-ai/protogen-go/mgmt/v1beta"
 	pipelinepb "github.com/instill-ai/protogen-go/pipeline/v1beta"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // ServiceMock implements mm_service.Service
@@ -312,6 +313,13 @@ type ServiceMock struct {
 	beforeSetRollbackRetentionAdminCounter uint64
 	SetRollbackRetentionAdminMock          mServiceMockSetRollbackRetentionAdmin
 
+	funcUpdateObject          func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) (op2 *artifactpb.Object, err error)
+	funcUpdateObjectOrigin    string
+	inspectFuncUpdateObject   func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask)
+	afterUpdateObjectCounter  uint64
+	beforeUpdateObjectCounter uint64
+	UpdateObjectMock          mServiceMockUpdateObject
+
 	funcUpdateSystemAdmin          func(ctx context.Context, up1 *artifactpb.UpdateSystemAdminRequest) (up2 *artifactpb.UpdateSystemAdminResponse, err error)
 	funcUpdateSystemAdminOrigin    string
 	inspectFuncUpdateSystemAdmin   func(ctx context.Context, up1 *artifactpb.UpdateSystemAdminRequest)
@@ -446,6 +454,9 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 
 	m.SetRollbackRetentionAdminMock = mServiceMockSetRollbackRetentionAdmin{mock: m}
 	m.SetRollbackRetentionAdminMock.callArgs = []*ServiceMockSetRollbackRetentionAdminParams{}
+
+	m.UpdateObjectMock = mServiceMockUpdateObject{mock: m}
+	m.UpdateObjectMock.callArgs = []*ServiceMockUpdateObjectParams{}
 
 	m.UpdateSystemAdminMock = mServiceMockUpdateSystemAdmin{mock: m}
 	m.UpdateSystemAdminMock.callArgs = []*ServiceMockUpdateSystemAdminParams{}
@@ -15252,6 +15263,442 @@ func (m *ServiceMock) MinimockSetRollbackRetentionAdminInspect() {
 	}
 }
 
+type mServiceMockUpdateObject struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockUpdateObjectExpectation
+	expectations       []*ServiceMockUpdateObjectExpectation
+
+	callArgs []*ServiceMockUpdateObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockUpdateObjectExpectation specifies expectation struct of the Service.UpdateObject
+type ServiceMockUpdateObjectExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockUpdateObjectParams
+	paramPtrs          *ServiceMockUpdateObjectParamPtrs
+	expectationOrigins ServiceMockUpdateObjectExpectationOrigins
+	results            *ServiceMockUpdateObjectResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockUpdateObjectParams contains parameters of the Service.UpdateObject
+type ServiceMockUpdateObjectParams struct {
+	ctx context.Context
+	n1  types.NamespaceUIDType
+	s1  string
+	op1 *artifactpb.Object
+	fp1 *fieldmaskpb.FieldMask
+}
+
+// ServiceMockUpdateObjectParamPtrs contains pointers to parameters of the Service.UpdateObject
+type ServiceMockUpdateObjectParamPtrs struct {
+	ctx *context.Context
+	n1  *types.NamespaceUIDType
+	s1  *string
+	op1 **artifactpb.Object
+	fp1 **fieldmaskpb.FieldMask
+}
+
+// ServiceMockUpdateObjectResults contains results of the Service.UpdateObject
+type ServiceMockUpdateObjectResults struct {
+	op2 *artifactpb.Object
+	err error
+}
+
+// ServiceMockUpdateObjectOrigins contains origins of expectations of the Service.UpdateObject
+type ServiceMockUpdateObjectExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originN1  string
+	originS1  string
+	originOp1 string
+	originFp1 string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateObject *mServiceMockUpdateObject) Optional() *mServiceMockUpdateObject {
+	mmUpdateObject.optional = true
+	return mmUpdateObject
+}
+
+// Expect sets up expected params for Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) Expect(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) *mServiceMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &ServiceMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateObject.defaultExpectation.params = &ServiceMockUpdateObjectParams{ctx, n1, s1, op1, fp1}
+	mmUpdateObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateObject.expectations {
+		if minimock.Equal(e.params, mmUpdateObject.defaultExpectation.params) {
+			mmUpdateObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateObject.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) ExpectCtxParam1(ctx context.Context) *mServiceMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &ServiceMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.params != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Expect")
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs == nil {
+		mmUpdateObject.defaultExpectation.paramPtrs = &ServiceMockUpdateObjectParamPtrs{}
+	}
+	mmUpdateObject.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateObject.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateObject
+}
+
+// ExpectN1Param2 sets up expected param n1 for Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) ExpectN1Param2(n1 types.NamespaceUIDType) *mServiceMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &ServiceMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.params != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Expect")
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs == nil {
+		mmUpdateObject.defaultExpectation.paramPtrs = &ServiceMockUpdateObjectParamPtrs{}
+	}
+	mmUpdateObject.defaultExpectation.paramPtrs.n1 = &n1
+	mmUpdateObject.defaultExpectation.expectationOrigins.originN1 = minimock.CallerInfo(1)
+
+	return mmUpdateObject
+}
+
+// ExpectS1Param3 sets up expected param s1 for Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) ExpectS1Param3(s1 string) *mServiceMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &ServiceMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.params != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Expect")
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs == nil {
+		mmUpdateObject.defaultExpectation.paramPtrs = &ServiceMockUpdateObjectParamPtrs{}
+	}
+	mmUpdateObject.defaultExpectation.paramPtrs.s1 = &s1
+	mmUpdateObject.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+
+	return mmUpdateObject
+}
+
+// ExpectOp1Param4 sets up expected param op1 for Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) ExpectOp1Param4(op1 *artifactpb.Object) *mServiceMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &ServiceMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.params != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Expect")
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs == nil {
+		mmUpdateObject.defaultExpectation.paramPtrs = &ServiceMockUpdateObjectParamPtrs{}
+	}
+	mmUpdateObject.defaultExpectation.paramPtrs.op1 = &op1
+	mmUpdateObject.defaultExpectation.expectationOrigins.originOp1 = minimock.CallerInfo(1)
+
+	return mmUpdateObject
+}
+
+// ExpectFp1Param5 sets up expected param fp1 for Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) ExpectFp1Param5(fp1 *fieldmaskpb.FieldMask) *mServiceMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &ServiceMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.params != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Expect")
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs == nil {
+		mmUpdateObject.defaultExpectation.paramPtrs = &ServiceMockUpdateObjectParamPtrs{}
+	}
+	mmUpdateObject.defaultExpectation.paramPtrs.fp1 = &fp1
+	mmUpdateObject.defaultExpectation.expectationOrigins.originFp1 = minimock.CallerInfo(1)
+
+	return mmUpdateObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) Inspect(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask)) *mServiceMockUpdateObject {
+	if mmUpdateObject.mock.inspectFuncUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("Inspect function is already set for ServiceMock.UpdateObject")
+	}
+
+	mmUpdateObject.mock.inspectFuncUpdateObject = f
+
+	return mmUpdateObject
+}
+
+// Return sets up results that will be returned by Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) Return(op2 *artifactpb.Object, err error) *ServiceMock {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &ServiceMockUpdateObjectExpectation{mock: mmUpdateObject.mock}
+	}
+	mmUpdateObject.defaultExpectation.results = &ServiceMockUpdateObjectResults{op2, err}
+	mmUpdateObject.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateObject.mock
+}
+
+// Set uses given function f to mock the Service.UpdateObject method
+func (mmUpdateObject *mServiceMockUpdateObject) Set(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) (op2 *artifactpb.Object, err error)) *ServiceMock {
+	if mmUpdateObject.defaultExpectation != nil {
+		mmUpdateObject.mock.t.Fatalf("Default expectation is already set for the Service.UpdateObject method")
+	}
+
+	if len(mmUpdateObject.expectations) > 0 {
+		mmUpdateObject.mock.t.Fatalf("Some expectations are already set for the Service.UpdateObject method")
+	}
+
+	mmUpdateObject.mock.funcUpdateObject = f
+	mmUpdateObject.mock.funcUpdateObjectOrigin = minimock.CallerInfo(1)
+	return mmUpdateObject.mock
+}
+
+// When sets expectation for the Service.UpdateObject which will trigger the result defined by the following
+// Then helper
+func (mmUpdateObject *mServiceMockUpdateObject) When(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) *ServiceMockUpdateObjectExpectation {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
+	}
+
+	expectation := &ServiceMockUpdateObjectExpectation{
+		mock:               mmUpdateObject.mock,
+		params:             &ServiceMockUpdateObjectParams{ctx, n1, s1, op1, fp1},
+		expectationOrigins: ServiceMockUpdateObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateObject.expectations = append(mmUpdateObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.UpdateObject return parameters for the expectation previously defined by the When method
+func (e *ServiceMockUpdateObjectExpectation) Then(op2 *artifactpb.Object, err error) *ServiceMock {
+	e.results = &ServiceMockUpdateObjectResults{op2, err}
+	return e.mock
+}
+
+// Times sets number of times Service.UpdateObject should be invoked
+func (mmUpdateObject *mServiceMockUpdateObject) Times(n uint64) *mServiceMockUpdateObject {
+	if n == 0 {
+		mmUpdateObject.mock.t.Fatalf("Times of ServiceMock.UpdateObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateObject.expectedInvocations, n)
+	mmUpdateObject.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateObject
+}
+
+func (mmUpdateObject *mServiceMockUpdateObject) invocationsDone() bool {
+	if len(mmUpdateObject.expectations) == 0 && mmUpdateObject.defaultExpectation == nil && mmUpdateObject.mock.funcUpdateObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateObject.mock.afterUpdateObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateObject implements mm_service.Service
+func (mmUpdateObject *ServiceMock) UpdateObject(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) (op2 *artifactpb.Object, err error) {
+	mm_atomic.AddUint64(&mmUpdateObject.beforeUpdateObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateObject.afterUpdateObjectCounter, 1)
+
+	mmUpdateObject.t.Helper()
+
+	if mmUpdateObject.inspectFuncUpdateObject != nil {
+		mmUpdateObject.inspectFuncUpdateObject(ctx, n1, s1, op1, fp1)
+	}
+
+	mm_params := ServiceMockUpdateObjectParams{ctx, n1, s1, op1, fp1}
+
+	// Record call args
+	mmUpdateObject.UpdateObjectMock.mutex.Lock()
+	mmUpdateObject.UpdateObjectMock.callArgs = append(mmUpdateObject.UpdateObjectMock.callArgs, &mm_params)
+	mmUpdateObject.UpdateObjectMock.mutex.Unlock()
+
+	for _, e := range mmUpdateObject.UpdateObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op2, e.results.err
+		}
+	}
+
+	if mmUpdateObject.UpdateObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateObject.UpdateObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateObject.UpdateObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateObject.UpdateObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockUpdateObjectParams{ctx, n1, s1, op1, fp1}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateObject.t.Errorf("ServiceMock.UpdateObject got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateObject.UpdateObjectMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.n1 != nil && !minimock.Equal(*mm_want_ptrs.n1, mm_got.n1) {
+				mmUpdateObject.t.Errorf("ServiceMock.UpdateObject got unexpected parameter n1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateObject.UpdateObjectMock.defaultExpectation.expectationOrigins.originN1, *mm_want_ptrs.n1, mm_got.n1, minimock.Diff(*mm_want_ptrs.n1, mm_got.n1))
+			}
+
+			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
+				mmUpdateObject.t.Errorf("ServiceMock.UpdateObject got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateObject.UpdateObjectMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+			if mm_want_ptrs.op1 != nil && !minimock.Equal(*mm_want_ptrs.op1, mm_got.op1) {
+				mmUpdateObject.t.Errorf("ServiceMock.UpdateObject got unexpected parameter op1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateObject.UpdateObjectMock.defaultExpectation.expectationOrigins.originOp1, *mm_want_ptrs.op1, mm_got.op1, minimock.Diff(*mm_want_ptrs.op1, mm_got.op1))
+			}
+
+			if mm_want_ptrs.fp1 != nil && !minimock.Equal(*mm_want_ptrs.fp1, mm_got.fp1) {
+				mmUpdateObject.t.Errorf("ServiceMock.UpdateObject got unexpected parameter fp1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateObject.UpdateObjectMock.defaultExpectation.expectationOrigins.originFp1, *mm_want_ptrs.fp1, mm_got.fp1, minimock.Diff(*mm_want_ptrs.fp1, mm_got.fp1))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateObject.t.Errorf("ServiceMock.UpdateObject got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateObject.UpdateObjectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateObject.UpdateObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateObject.t.Fatal("No results are set for the ServiceMock.UpdateObject")
+		}
+		return (*mm_results).op2, (*mm_results).err
+	}
+	if mmUpdateObject.funcUpdateObject != nil {
+		return mmUpdateObject.funcUpdateObject(ctx, n1, s1, op1, fp1)
+	}
+	mmUpdateObject.t.Fatalf("Unexpected call to ServiceMock.UpdateObject. %v %v %v %v %v", ctx, n1, s1, op1, fp1)
+	return
+}
+
+// UpdateObjectAfterCounter returns a count of finished ServiceMock.UpdateObject invocations
+func (mmUpdateObject *ServiceMock) UpdateObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateObject.afterUpdateObjectCounter)
+}
+
+// UpdateObjectBeforeCounter returns a count of ServiceMock.UpdateObject invocations
+func (mmUpdateObject *ServiceMock) UpdateObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateObject.beforeUpdateObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.UpdateObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateObject *mServiceMockUpdateObject) Calls() []*ServiceMockUpdateObjectParams {
+	mmUpdateObject.mutex.RLock()
+
+	argCopy := make([]*ServiceMockUpdateObjectParams, len(mmUpdateObject.callArgs))
+	copy(argCopy, mmUpdateObject.callArgs)
+
+	mmUpdateObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateObjectDone returns true if the count of the UpdateObject invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockUpdateObjectDone() bool {
+	if m.UpdateObjectMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateObjectMock.invocationsDone()
+}
+
+// MinimockUpdateObjectInspect logs each unmet expectation
+func (m *ServiceMock) MinimockUpdateObjectInspect() {
+	for _, e := range m.UpdateObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.UpdateObject at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateObjectCounter := mm_atomic.LoadUint64(&m.afterUpdateObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateObjectMock.defaultExpectation != nil && afterUpdateObjectCounter < 1 {
+		if m.UpdateObjectMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.UpdateObject at\n%s", m.UpdateObjectMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.UpdateObject at\n%s with params: %#v", m.UpdateObjectMock.defaultExpectation.expectationOrigins.origin, *m.UpdateObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateObject != nil && afterUpdateObjectCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.UpdateObject at\n%s", m.funcUpdateObjectOrigin)
+	}
+
+	if !m.UpdateObjectMock.invocationsDone() && afterUpdateObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.UpdateObject at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateObjectMock.expectedInvocations), m.UpdateObjectMock.expectedInvocationsOrigin, afterUpdateObjectCounter)
+	}
+}
+
 type mServiceMockUpdateSystemAdmin struct {
 	optional           bool
 	mock               *ServiceMock
@@ -15681,6 +16128,8 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockSetRollbackRetentionAdminInspect()
 
+			m.MinimockUpdateObjectInspect()
+
 			m.MinimockUpdateSystemAdminInspect()
 		}
 	})
@@ -15746,5 +16195,6 @@ func (m *ServiceMock) minimockDone() bool {
 		m.MinimockSearchChunksDone() &&
 		m.MinimockSetDefaultSystemAdminDone() &&
 		m.MinimockSetRollbackRetentionAdminDone() &&
+		m.MinimockUpdateObjectDone() &&
 		m.MinimockUpdateSystemAdminDone()
 }
