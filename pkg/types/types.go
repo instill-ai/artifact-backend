@@ -107,8 +107,6 @@ type (
 	ObjectUIDType = uuid.UUID
 	// ObjectIDType is the Object canonical ID (hash-based, e.g., "obj-3k7m9p2w5t1")
 	ObjectIDType string
-	// ObjectURLUIDType is the Object URL unique identifier
-	ObjectURLUIDType = uuid.UUID
 
 	// SourceUIDType is the Source entity unique identifier
 	SourceUIDType = uuid.UUID

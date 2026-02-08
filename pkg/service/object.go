@@ -38,7 +38,6 @@ var (
 )
 
 // GetUploadURL get the upload url of the object
-// this function will create a new object and object_url record in the database
 func (s *service) GetUploadURL(
 	ctx context.Context,
 	req *artifactpb.GetObjectUploadURLRequest,
