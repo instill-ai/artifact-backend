@@ -124,7 +124,7 @@ func (s *service) GetUploadURL(
 	return &artifactpb.GetObjectUploadURLResponse{
 		UploadUrl:   uploadURL,
 		UrlExpireAt: timestamppb.New(expireAtTS),
-		Object:      repository.TurnObjectInDBToObjectInProto(createdObject),
+		Object:      repository.TurnObjectInDBToObjectInProto(createdObject, namespaceID),
 	}, nil
 }
 
@@ -133,6 +133,7 @@ func (s *service) GetObject(
 	ctx context.Context,
 	namespaceUID types.NamespaceUIDType,
 	objectID string,
+	namespaceID string,
 ) (*artifactpb.Object, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
@@ -143,7 +144,7 @@ func (s *service) GetObject(
 		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)
 	}
 
-	return repository.TurnObjectInDBToObjectInProto(obj), nil
+	return repository.TurnObjectInDBToObjectInProto(obj, namespaceID), nil
 }
 
 // UpdateObject updates an object's metadata based on the update mask
@@ -151,6 +152,7 @@ func (s *service) UpdateObject(
 	ctx context.Context,
 	namespaceUID types.NamespaceUIDType,
 	objectID string,
+	namespaceID string,
 	obj *artifactpb.Object,
 	updateMask *fieldmaskpb.FieldMask,
 ) (*artifactpb.Object, error) {
@@ -214,7 +216,7 @@ func (s *service) UpdateObject(
 
 	if len(updateMap) == 0 {
 		// Nothing to update, return existing object
-		return repository.TurnObjectInDBToObjectInProto(existingObj), nil
+		return repository.TurnObjectInDBToObjectInProto(existingObj, namespaceID), nil
 	}
 
 	// Perform the update
@@ -228,7 +230,7 @@ func (s *service) UpdateObject(
 		zap.String("object_id", objectID),
 		zap.Any("updated_fields", updateMap))
 
-	return repository.TurnObjectInDBToObjectInProto(updatedObj), nil
+	return repository.TurnObjectInDBToObjectInProto(updatedObj, namespaceID), nil
 }
 
 // containsPath checks if a path is in the list of paths
@@ -340,7 +342,7 @@ func (s *service) GetDownloadURL(
 		return nil, status.Errorf(codes.Internal, "failed to get expire at ts: %v", err)
 	}
 
-	objectInProto := repository.TurnObjectInDBToObjectInProto(obj)
+	objectInProto := repository.TurnObjectInDBToObjectInProto(obj, namespaceID)
 
 	return &artifactpb.GetObjectDownloadURLResponse{
 		DownloadUrl: downloadURL,
@@ -442,7 +444,7 @@ func (s *service) GetDownloadURLByObjectUID(
 		return nil, status.Errorf(codes.Internal, "failed to get expire at ts: %v", err)
 	}
 
-	objectInProto := repository.TurnObjectInDBToObjectInProto(obj)
+	objectInProto := repository.TurnObjectInDBToObjectInProto(obj, namespaceID)
 
 	return &artifactpb.GetObjectDownloadURLResponse{
 		DownloadUrl: downloadURL,

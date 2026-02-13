@@ -137,7 +137,7 @@ func (ph *PublicHandler) GetObject(ctx context.Context, req *artifactpb.GetObjec
 	}
 
 	// Call the service to get the object
-	obj, err := ph.service.GetObject(ctx, ns.NsUID, objectID)
+	obj, err := ph.service.GetObject(ctx, ns.NsUID, objectID, ns.NsID)
 	if err != nil {
 		logger.Error("failed to get object", zap.Error(err), zap.String("object_id", objectID))
 		return nil, errorsx.AddMessage(
@@ -207,7 +207,7 @@ func (ph *PublicHandler) UpdateObject(ctx context.Context, req *artifactpb.Updat
 	}
 
 	// Call the service to update the object
-	updatedObj, err := ph.service.UpdateObject(ctx, ns.NsUID, objectID, obj, req.GetUpdateMask())
+	updatedObj, err := ph.service.UpdateObject(ctx, ns.NsUID, objectID, ns.NsID, obj, req.GetUpdateMask())
 	if err != nil {
 		logger.Error("failed to update object", zap.Error(err), zap.String("object_id", objectID))
 		return nil, errorsx.AddMessage(

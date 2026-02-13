@@ -197,16 +197,18 @@ func (r *repository) GetObjectByID(ctx context.Context, namespaceUID types.Names
 	return &obj, nil
 }
 
-// TurnObjectInDBToObjectInProto turns the object in db to the object in proto
-func TurnObjectInDBToObjectInProto(obj *ObjectModel) *artifactpb.Object {
-	// Build canonical resource name following AIP format
-	name := fmt.Sprintf("namespaces/%s/objects/%s", obj.NamespaceUID.String(), string(obj.ID))
+// TurnObjectInDBToObjectInProto turns the object in db to the object in proto.
+// namespaceID is the hash-based namespace ID (e.g., "usr-xxx" or "org-xxx")
+// used to build the canonical AIP resource name.
+func TurnObjectInDBToObjectInProto(obj *ObjectModel, namespaceID string) *artifactpb.Object {
+	// Build canonical resource name following AIP format using hash-based namespace ID
+	name := fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, string(obj.ID))
 
 	protoObj := &artifactpb.Object{
 		Name:             name,
 		Id:               string(obj.ID),
 		DisplayName:      obj.DisplayName,
-		OwnerName:        fmt.Sprintf("namespaces/%s", obj.NamespaceUID.String()),
+		OwnerName:        fmt.Sprintf("namespaces/%s", namespaceID),
 		CreatorName:      fmt.Sprintf("users/%s", obj.CreatorUID.String()),
 		CreateTime:       timestamppb.New(obj.CreateTime),
 		UpdateTime:       timestamppb.New(obj.UpdateTime),

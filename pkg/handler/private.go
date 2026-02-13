@@ -428,8 +428,12 @@ func (h *PrivateHandler) GetObjectAdmin(ctx context.Context, req *artifactpb.Get
 		return nil, fmt.Errorf("object not found")
 	}
 
+	// Admin API: use namespace UID as fallback for resource name.
+	// Public APIs resolve the hash-based namespace ID properly.
+	nsID := obj.NamespaceUID.String()
+
 	return &artifactpb.GetObjectAdminResponse{
-		Object: repository.TurnObjectInDBToObjectInProto(obj),
+		Object: repository.TurnObjectInDBToObjectInProto(obj, nsID),
 	}, nil
 }
 
@@ -470,8 +474,12 @@ func (h *PrivateHandler) UpdateObjectAdmin(ctx context.Context, req *artifactpb.
 		return nil, fmt.Errorf("failed to update object: %w", err)
 	}
 
+	// Admin API: use namespace UID as fallback for resource name.
+	// Public APIs resolve the hash-based namespace ID properly.
+	nsID := updatedObject.NamespaceUID.String()
+
 	return &artifactpb.UpdateObjectAdminResponse{
-		Object: repository.TurnObjectInDBToObjectInProto(updatedObject),
+		Object: repository.TurnObjectInDBToObjectInProto(updatedObject, nsID),
 	}, nil
 }
 
