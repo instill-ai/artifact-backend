@@ -822,6 +822,13 @@ type RepositoryMock struct {
 	beforeScanGCSFilesForCleanupCounter uint64
 	ScanGCSFilesForCleanupMock          mRepositoryMockScanGCSFilesForCleanup
 
+	funcSearchKnowledgeBases          func(ctx context.Context, ownerUID string, query string, limit int) (ka1 []mm_repository.KnowledgeBaseModel, err error)
+	funcSearchKnowledgeBasesOrigin    string
+	inspectFuncSearchKnowledgeBases   func(ctx context.Context, ownerUID string, query string, limit int)
+	afterSearchKnowledgeBasesCounter  uint64
+	beforeSearchKnowledgeBasesCounter uint64
+	SearchKnowledgeBasesMock          mRepositoryMockSearchKnowledgeBases
+
 	funcSearchVectorsInCollection          func(ctx context.Context, s1 mm_repository.SearchVectorParam) (saa1 [][]mm_repository.SimilarVectorEmbedding, err error)
 	funcSearchVectorsInCollectionOrigin    string
 	inspectFuncSearchVectorsInCollection   func(ctx context.Context, s1 mm_repository.SearchVectorParam)
@@ -1352,6 +1359,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.ScanGCSFilesForCleanupMock = mRepositoryMockScanGCSFilesForCleanup{mock: m}
 	m.ScanGCSFilesForCleanupMock.callArgs = []*RepositoryMockScanGCSFilesForCleanupParams{}
+
+	m.SearchKnowledgeBasesMock = mRepositoryMockSearchKnowledgeBases{mock: m}
+	m.SearchKnowledgeBasesMock.callArgs = []*RepositoryMockSearchKnowledgeBasesParams{}
 
 	m.SearchVectorsInCollectionMock = mRepositoryMockSearchVectorsInCollection{mock: m}
 	m.SearchVectorsInCollectionMock.callArgs = []*RepositoryMockSearchVectorsInCollectionParams{}
@@ -41155,6 +41165,411 @@ func (m *RepositoryMock) MinimockScanGCSFilesForCleanupInspect() {
 	}
 }
 
+type mRepositoryMockSearchKnowledgeBases struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockSearchKnowledgeBasesExpectation
+	expectations       []*RepositoryMockSearchKnowledgeBasesExpectation
+
+	callArgs []*RepositoryMockSearchKnowledgeBasesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockSearchKnowledgeBasesExpectation specifies expectation struct of the Repository.SearchKnowledgeBases
+type RepositoryMockSearchKnowledgeBasesExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockSearchKnowledgeBasesParams
+	paramPtrs          *RepositoryMockSearchKnowledgeBasesParamPtrs
+	expectationOrigins RepositoryMockSearchKnowledgeBasesExpectationOrigins
+	results            *RepositoryMockSearchKnowledgeBasesResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockSearchKnowledgeBasesParams contains parameters of the Repository.SearchKnowledgeBases
+type RepositoryMockSearchKnowledgeBasesParams struct {
+	ctx      context.Context
+	ownerUID string
+	query    string
+	limit    int
+}
+
+// RepositoryMockSearchKnowledgeBasesParamPtrs contains pointers to parameters of the Repository.SearchKnowledgeBases
+type RepositoryMockSearchKnowledgeBasesParamPtrs struct {
+	ctx      *context.Context
+	ownerUID *string
+	query    *string
+	limit    *int
+}
+
+// RepositoryMockSearchKnowledgeBasesResults contains results of the Repository.SearchKnowledgeBases
+type RepositoryMockSearchKnowledgeBasesResults struct {
+	ka1 []mm_repository.KnowledgeBaseModel
+	err error
+}
+
+// RepositoryMockSearchKnowledgeBasesOrigins contains origins of expectations of the Repository.SearchKnowledgeBases
+type RepositoryMockSearchKnowledgeBasesExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originOwnerUID string
+	originQuery    string
+	originLimit    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) Optional() *mRepositoryMockSearchKnowledgeBases {
+	mmSearchKnowledgeBases.optional = true
+	return mmSearchKnowledgeBases
+}
+
+// Expect sets up expected params for Repository.SearchKnowledgeBases
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) Expect(ctx context.Context, ownerUID string, query string, limit int) *mRepositoryMockSearchKnowledgeBases {
+	if mmSearchKnowledgeBases.mock.funcSearchKnowledgeBases != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Set")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation == nil {
+		mmSearchKnowledgeBases.defaultExpectation = &RepositoryMockSearchKnowledgeBasesExpectation{}
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation.paramPtrs != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by ExpectParams functions")
+	}
+
+	mmSearchKnowledgeBases.defaultExpectation.params = &RepositoryMockSearchKnowledgeBasesParams{ctx, ownerUID, query, limit}
+	mmSearchKnowledgeBases.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSearchKnowledgeBases.expectations {
+		if minimock.Equal(e.params, mmSearchKnowledgeBases.defaultExpectation.params) {
+			mmSearchKnowledgeBases.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSearchKnowledgeBases.defaultExpectation.params)
+		}
+	}
+
+	return mmSearchKnowledgeBases
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.SearchKnowledgeBases
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) ExpectCtxParam1(ctx context.Context) *mRepositoryMockSearchKnowledgeBases {
+	if mmSearchKnowledgeBases.mock.funcSearchKnowledgeBases != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Set")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation == nil {
+		mmSearchKnowledgeBases.defaultExpectation = &RepositoryMockSearchKnowledgeBasesExpectation{}
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation.params != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Expect")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation.paramPtrs == nil {
+		mmSearchKnowledgeBases.defaultExpectation.paramPtrs = &RepositoryMockSearchKnowledgeBasesParamPtrs{}
+	}
+	mmSearchKnowledgeBases.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSearchKnowledgeBases.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSearchKnowledgeBases
+}
+
+// ExpectOwnerUIDParam2 sets up expected param ownerUID for Repository.SearchKnowledgeBases
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) ExpectOwnerUIDParam2(ownerUID string) *mRepositoryMockSearchKnowledgeBases {
+	if mmSearchKnowledgeBases.mock.funcSearchKnowledgeBases != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Set")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation == nil {
+		mmSearchKnowledgeBases.defaultExpectation = &RepositoryMockSearchKnowledgeBasesExpectation{}
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation.params != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Expect")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation.paramPtrs == nil {
+		mmSearchKnowledgeBases.defaultExpectation.paramPtrs = &RepositoryMockSearchKnowledgeBasesParamPtrs{}
+	}
+	mmSearchKnowledgeBases.defaultExpectation.paramPtrs.ownerUID = &ownerUID
+	mmSearchKnowledgeBases.defaultExpectation.expectationOrigins.originOwnerUID = minimock.CallerInfo(1)
+
+	return mmSearchKnowledgeBases
+}
+
+// ExpectQueryParam3 sets up expected param query for Repository.SearchKnowledgeBases
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) ExpectQueryParam3(query string) *mRepositoryMockSearchKnowledgeBases {
+	if mmSearchKnowledgeBases.mock.funcSearchKnowledgeBases != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Set")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation == nil {
+		mmSearchKnowledgeBases.defaultExpectation = &RepositoryMockSearchKnowledgeBasesExpectation{}
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation.params != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Expect")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation.paramPtrs == nil {
+		mmSearchKnowledgeBases.defaultExpectation.paramPtrs = &RepositoryMockSearchKnowledgeBasesParamPtrs{}
+	}
+	mmSearchKnowledgeBases.defaultExpectation.paramPtrs.query = &query
+	mmSearchKnowledgeBases.defaultExpectation.expectationOrigins.originQuery = minimock.CallerInfo(1)
+
+	return mmSearchKnowledgeBases
+}
+
+// ExpectLimitParam4 sets up expected param limit for Repository.SearchKnowledgeBases
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) ExpectLimitParam4(limit int) *mRepositoryMockSearchKnowledgeBases {
+	if mmSearchKnowledgeBases.mock.funcSearchKnowledgeBases != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Set")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation == nil {
+		mmSearchKnowledgeBases.defaultExpectation = &RepositoryMockSearchKnowledgeBasesExpectation{}
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation.params != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Expect")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation.paramPtrs == nil {
+		mmSearchKnowledgeBases.defaultExpectation.paramPtrs = &RepositoryMockSearchKnowledgeBasesParamPtrs{}
+	}
+	mmSearchKnowledgeBases.defaultExpectation.paramPtrs.limit = &limit
+	mmSearchKnowledgeBases.defaultExpectation.expectationOrigins.originLimit = minimock.CallerInfo(1)
+
+	return mmSearchKnowledgeBases
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.SearchKnowledgeBases
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) Inspect(f func(ctx context.Context, ownerUID string, query string, limit int)) *mRepositoryMockSearchKnowledgeBases {
+	if mmSearchKnowledgeBases.mock.inspectFuncSearchKnowledgeBases != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("Inspect function is already set for RepositoryMock.SearchKnowledgeBases")
+	}
+
+	mmSearchKnowledgeBases.mock.inspectFuncSearchKnowledgeBases = f
+
+	return mmSearchKnowledgeBases
+}
+
+// Return sets up results that will be returned by Repository.SearchKnowledgeBases
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) Return(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	if mmSearchKnowledgeBases.mock.funcSearchKnowledgeBases != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Set")
+	}
+
+	if mmSearchKnowledgeBases.defaultExpectation == nil {
+		mmSearchKnowledgeBases.defaultExpectation = &RepositoryMockSearchKnowledgeBasesExpectation{mock: mmSearchKnowledgeBases.mock}
+	}
+	mmSearchKnowledgeBases.defaultExpectation.results = &RepositoryMockSearchKnowledgeBasesResults{ka1, err}
+	mmSearchKnowledgeBases.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSearchKnowledgeBases.mock
+}
+
+// Set uses given function f to mock the Repository.SearchKnowledgeBases method
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) Set(f func(ctx context.Context, ownerUID string, query string, limit int) (ka1 []mm_repository.KnowledgeBaseModel, err error)) *RepositoryMock {
+	if mmSearchKnowledgeBases.defaultExpectation != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("Default expectation is already set for the Repository.SearchKnowledgeBases method")
+	}
+
+	if len(mmSearchKnowledgeBases.expectations) > 0 {
+		mmSearchKnowledgeBases.mock.t.Fatalf("Some expectations are already set for the Repository.SearchKnowledgeBases method")
+	}
+
+	mmSearchKnowledgeBases.mock.funcSearchKnowledgeBases = f
+	mmSearchKnowledgeBases.mock.funcSearchKnowledgeBasesOrigin = minimock.CallerInfo(1)
+	return mmSearchKnowledgeBases.mock
+}
+
+// When sets expectation for the Repository.SearchKnowledgeBases which will trigger the result defined by the following
+// Then helper
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) When(ctx context.Context, ownerUID string, query string, limit int) *RepositoryMockSearchKnowledgeBasesExpectation {
+	if mmSearchKnowledgeBases.mock.funcSearchKnowledgeBases != nil {
+		mmSearchKnowledgeBases.mock.t.Fatalf("RepositoryMock.SearchKnowledgeBases mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockSearchKnowledgeBasesExpectation{
+		mock:               mmSearchKnowledgeBases.mock,
+		params:             &RepositoryMockSearchKnowledgeBasesParams{ctx, ownerUID, query, limit},
+		expectationOrigins: RepositoryMockSearchKnowledgeBasesExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSearchKnowledgeBases.expectations = append(mmSearchKnowledgeBases.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.SearchKnowledgeBases return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockSearchKnowledgeBasesExpectation) Then(ka1 []mm_repository.KnowledgeBaseModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockSearchKnowledgeBasesResults{ka1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.SearchKnowledgeBases should be invoked
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) Times(n uint64) *mRepositoryMockSearchKnowledgeBases {
+	if n == 0 {
+		mmSearchKnowledgeBases.mock.t.Fatalf("Times of RepositoryMock.SearchKnowledgeBases mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSearchKnowledgeBases.expectedInvocations, n)
+	mmSearchKnowledgeBases.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSearchKnowledgeBases
+}
+
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) invocationsDone() bool {
+	if len(mmSearchKnowledgeBases.expectations) == 0 && mmSearchKnowledgeBases.defaultExpectation == nil && mmSearchKnowledgeBases.mock.funcSearchKnowledgeBases == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSearchKnowledgeBases.mock.afterSearchKnowledgeBasesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSearchKnowledgeBases.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SearchKnowledgeBases implements mm_repository.Repository
+func (mmSearchKnowledgeBases *RepositoryMock) SearchKnowledgeBases(ctx context.Context, ownerUID string, query string, limit int) (ka1 []mm_repository.KnowledgeBaseModel, err error) {
+	mm_atomic.AddUint64(&mmSearchKnowledgeBases.beforeSearchKnowledgeBasesCounter, 1)
+	defer mm_atomic.AddUint64(&mmSearchKnowledgeBases.afterSearchKnowledgeBasesCounter, 1)
+
+	mmSearchKnowledgeBases.t.Helper()
+
+	if mmSearchKnowledgeBases.inspectFuncSearchKnowledgeBases != nil {
+		mmSearchKnowledgeBases.inspectFuncSearchKnowledgeBases(ctx, ownerUID, query, limit)
+	}
+
+	mm_params := RepositoryMockSearchKnowledgeBasesParams{ctx, ownerUID, query, limit}
+
+	// Record call args
+	mmSearchKnowledgeBases.SearchKnowledgeBasesMock.mutex.Lock()
+	mmSearchKnowledgeBases.SearchKnowledgeBasesMock.callArgs = append(mmSearchKnowledgeBases.SearchKnowledgeBasesMock.callArgs, &mm_params)
+	mmSearchKnowledgeBases.SearchKnowledgeBasesMock.mutex.Unlock()
+
+	for _, e := range mmSearchKnowledgeBases.SearchKnowledgeBasesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ka1, e.results.err
+		}
+	}
+
+	if mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation.Counter, 1)
+		mm_want := mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation.params
+		mm_want_ptrs := mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockSearchKnowledgeBasesParams{ctx, ownerUID, query, limit}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSearchKnowledgeBases.t.Errorf("RepositoryMock.SearchKnowledgeBases got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.ownerUID != nil && !minimock.Equal(*mm_want_ptrs.ownerUID, mm_got.ownerUID) {
+				mmSearchKnowledgeBases.t.Errorf("RepositoryMock.SearchKnowledgeBases got unexpected parameter ownerUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation.expectationOrigins.originOwnerUID, *mm_want_ptrs.ownerUID, mm_got.ownerUID, minimock.Diff(*mm_want_ptrs.ownerUID, mm_got.ownerUID))
+			}
+
+			if mm_want_ptrs.query != nil && !minimock.Equal(*mm_want_ptrs.query, mm_got.query) {
+				mmSearchKnowledgeBases.t.Errorf("RepositoryMock.SearchKnowledgeBases got unexpected parameter query, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation.expectationOrigins.originQuery, *mm_want_ptrs.query, mm_got.query, minimock.Diff(*mm_want_ptrs.query, mm_got.query))
+			}
+
+			if mm_want_ptrs.limit != nil && !minimock.Equal(*mm_want_ptrs.limit, mm_got.limit) {
+				mmSearchKnowledgeBases.t.Errorf("RepositoryMock.SearchKnowledgeBases got unexpected parameter limit, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation.expectationOrigins.originLimit, *mm_want_ptrs.limit, mm_got.limit, minimock.Diff(*mm_want_ptrs.limit, mm_got.limit))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSearchKnowledgeBases.t.Errorf("RepositoryMock.SearchKnowledgeBases got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSearchKnowledgeBases.SearchKnowledgeBasesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSearchKnowledgeBases.t.Fatal("No results are set for the RepositoryMock.SearchKnowledgeBases")
+		}
+		return (*mm_results).ka1, (*mm_results).err
+	}
+	if mmSearchKnowledgeBases.funcSearchKnowledgeBases != nil {
+		return mmSearchKnowledgeBases.funcSearchKnowledgeBases(ctx, ownerUID, query, limit)
+	}
+	mmSearchKnowledgeBases.t.Fatalf("Unexpected call to RepositoryMock.SearchKnowledgeBases. %v %v %v %v", ctx, ownerUID, query, limit)
+	return
+}
+
+// SearchKnowledgeBasesAfterCounter returns a count of finished RepositoryMock.SearchKnowledgeBases invocations
+func (mmSearchKnowledgeBases *RepositoryMock) SearchKnowledgeBasesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSearchKnowledgeBases.afterSearchKnowledgeBasesCounter)
+}
+
+// SearchKnowledgeBasesBeforeCounter returns a count of RepositoryMock.SearchKnowledgeBases invocations
+func (mmSearchKnowledgeBases *RepositoryMock) SearchKnowledgeBasesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSearchKnowledgeBases.beforeSearchKnowledgeBasesCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.SearchKnowledgeBases.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSearchKnowledgeBases *mRepositoryMockSearchKnowledgeBases) Calls() []*RepositoryMockSearchKnowledgeBasesParams {
+	mmSearchKnowledgeBases.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockSearchKnowledgeBasesParams, len(mmSearchKnowledgeBases.callArgs))
+	copy(argCopy, mmSearchKnowledgeBases.callArgs)
+
+	mmSearchKnowledgeBases.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSearchKnowledgeBasesDone returns true if the count of the SearchKnowledgeBases invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockSearchKnowledgeBasesDone() bool {
+	if m.SearchKnowledgeBasesMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SearchKnowledgeBasesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SearchKnowledgeBasesMock.invocationsDone()
+}
+
+// MinimockSearchKnowledgeBasesInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockSearchKnowledgeBasesInspect() {
+	for _, e := range m.SearchKnowledgeBasesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.SearchKnowledgeBases at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSearchKnowledgeBasesCounter := mm_atomic.LoadUint64(&m.afterSearchKnowledgeBasesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SearchKnowledgeBasesMock.defaultExpectation != nil && afterSearchKnowledgeBasesCounter < 1 {
+		if m.SearchKnowledgeBasesMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.SearchKnowledgeBases at\n%s", m.SearchKnowledgeBasesMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.SearchKnowledgeBases at\n%s with params: %#v", m.SearchKnowledgeBasesMock.defaultExpectation.expectationOrigins.origin, *m.SearchKnowledgeBasesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSearchKnowledgeBases != nil && afterSearchKnowledgeBasesCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.SearchKnowledgeBases at\n%s", m.funcSearchKnowledgeBasesOrigin)
+	}
+
+	if !m.SearchKnowledgeBasesMock.invocationsDone() && afterSearchKnowledgeBasesCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.SearchKnowledgeBases at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SearchKnowledgeBasesMock.expectedInvocations), m.SearchKnowledgeBasesMock.expectedInvocationsOrigin, afterSearchKnowledgeBasesCounter)
+	}
+}
+
 type mRepositoryMockSearchVectorsInCollection struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -51740,6 +52155,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockScanGCSFilesForCleanupInspect()
 
+			m.MinimockSearchKnowledgeBasesInspect()
+
 			m.MinimockSearchVectorsInCollectionInspect()
 
 			m.MinimockSeedDefaultSystemsInspect()
@@ -51928,6 +52345,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockRenewCacheMetadataTTLDone() &&
 		m.MinimockResetFileStatusesByKBUIDDone() &&
 		m.MinimockScanGCSFilesForCleanupDone() &&
+		m.MinimockSearchKnowledgeBasesDone() &&
 		m.MinimockSearchVectorsInCollectionDone() &&
 		m.MinimockSeedDefaultSystemsDone() &&
 		m.MinimockSetCacheMetadataDone() &&

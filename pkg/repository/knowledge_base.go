@@ -84,6 +84,9 @@ type KnowledgeBase interface {
 	ListKnowledgeBasesForUpdate(ctx context.Context, tagFilters []string, knowledgeBaseIDs []string) ([]KnowledgeBaseModel, error)
 	// ListKnowledgeBasesByUpdateStatus lists all KBs with a specific update_status
 	ListKnowledgeBasesByUpdateStatus(ctx context.Context, updateStatus string) ([]KnowledgeBaseModel, error)
+	// SearchKnowledgeBases searches KBs by display_name using pg_trgm word_similarity.
+	// Used by the mention panel's fuzzy search via ListKnowledgeBasesAdmin with filter.
+	SearchKnowledgeBases(ctx context.Context, ownerUID string, query string, limit int) ([]KnowledgeBaseModel, error)
 	// ListAllKnowledgeBasesAdmin lists all production KBs across all owners (admin only)
 	ListAllKnowledgeBasesAdmin(ctx context.Context) ([]KnowledgeBaseModel, error)
 	// UpdateKnowledgeBaseUpdateStatus updates the update status of a KB. Stores error message if status is FAILED. Stores previous system UID for audit trail when status is UPDATING.
@@ -438,6 +441,29 @@ func (r *repository) ListKnowledgeBases(ctx context.Context, owner string) ([]Kn
 		return nil, err
 	}
 
+	return knowledgeBases, nil
+}
+
+// SearchKnowledgeBases searches KBs by display_name using pg_trgm word_similarity.
+// Returns production KBs whose display_name fuzzy-matches the query, ordered by relevance.
+func (r *repository) SearchKnowledgeBases(ctx context.Context, ownerUID string, query string, limit int) ([]KnowledgeBaseModel, error) {
+	var knowledgeBases []KnowledgeBaseModel
+	const fuzzyThreshold = 0.3
+	err := r.db.WithContext(ctx).
+		Where(fmt.Sprintf("%v = ? AND %v = ?", KnowledgeBaseColumn.NamespaceUID, KnowledgeBaseColumn.Staging), ownerUID, false).
+		Where("word_similarity(?, display_name) >= ?", query, fuzzyThreshold).
+		Clauses(clause.OrderBy{
+			Expression: clause.Expr{
+				SQL:                "word_similarity(?, display_name) DESC",
+				Vars:               []interface{}{query},
+				WithoutParentheses: true,
+			},
+		}).
+		Limit(limit).
+		Find(&knowledgeBases).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to search knowledge bases: %w", err)
+	}
 	return knowledgeBases, nil
 }
 

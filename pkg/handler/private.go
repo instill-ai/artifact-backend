@@ -177,7 +177,9 @@ func (h *PrivateHandler) ListKnowledgeBasesAdmin(ctx context.Context, req *artif
 		return nil, status.Errorf(codes.InvalidArgument, "invalid parent format: %v", err)
 	}
 
-	logger.Info("ListKnowledgeBasesAdmin called", zap.String("namespace_id", namespaceID))
+	logger.Info("ListKnowledgeBasesAdmin called",
+		zap.String("namespace_id", namespaceID),
+		zap.String("filter", req.GetFilter()))
 
 	// Get namespace
 	ns, err := h.service.GetNamespaceByNsID(ctx, namespaceID)
@@ -186,9 +188,22 @@ func (h *PrivateHandler) ListKnowledgeBasesAdmin(ctx context.Context, req *artif
 		return nil, status.Errorf(codes.NotFound, "namespace not found: %v", err)
 	}
 
-	// List knowledge bases WITHOUT ACL filtering
-	// The repository ListKnowledgeBases directly queries by owner UID without ACL checks
-	kbs, err := h.service.Repository().ListKnowledgeBases(ctx, ns.NsUID.String())
+	// Parse optional q="<text>" filter for fuzzy search on display_name.
+	searchQuery := parseQFilter(req.GetFilter())
+
+	pageSize := int(req.GetPageSize())
+	if pageSize <= 0 {
+		pageSize = 100
+	}
+
+	var kbs []repository.KnowledgeBaseModel
+	if searchQuery != "" {
+		// Fuzzy search using pg_trgm word_similarity on display_name.
+		kbs, err = h.service.Repository().SearchKnowledgeBases(ctx, ns.NsUID.String(), searchQuery, pageSize)
+	} else {
+		// List all knowledge bases WITHOUT ACL filtering.
+		kbs, err = h.service.Repository().ListKnowledgeBases(ctx, ns.NsUID.String())
+	}
 	if err != nil {
 		logger.Error("failed to list knowledge bases", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "failed to list knowledge bases: %v", err)
@@ -1109,4 +1124,25 @@ func (h *PrivateHandler) ResetKnowledgeBaseEmbeddingsAdmin(ctx context.Context, 
 		KnowledgeBase:  convertKBToCatalogPB(kb, ns, owner, nil),
 		FilesToReembed: int32(fileCount),
 	}, nil
+}
+
+// parseQFilter extracts the search text from an AIP-160 filter string of the
+// form q="<text>". Returns an empty string if no q= clause is found.
+func parseQFilter(filter string) string {
+	filter = strings.TrimSpace(filter)
+	if filter == "" {
+		return ""
+	}
+	// Look for q="..." pattern
+	const prefix = `q="`
+	idx := strings.Index(filter, prefix)
+	if idx == -1 {
+		return ""
+	}
+	rest := filter[idx+len(prefix):]
+	end := strings.Index(rest, `"`)
+	if end == -1 {
+		return ""
+	}
+	return rest[:end]
 }

@@ -181,10 +181,12 @@ func (t *transpiler) transpileComparisonCallExpr(e *expr.Expr, op interface{}) (
 	switch op.(type) {
 	case clause.Eq:
 		switch ident.SQL {
-		// Fuzzy search for knowledge bases
+		// Fuzzy search for files (used by mention panel and public search).
+		// Matches on display_name via pg_trgm word_similarity, plus substring
+		// fallbacks on id and description.
 		case "q":
-			sql = "((SIMILARITY(id, ?) > 0.2) OR (LOWER(id) LIKE LOWER(?)) OR (LOWER(description) LIKE LOWER(?)))"
-			vars = append(vars, con.Vars[0], fmt.Sprintf("%%%s%%", con.Vars[0]), fmt.Sprintf("%%%s%%", con.Vars[0]))
+			sql = "((word_similarity(?, display_name) >= 0.3) OR (SIMILARITY(id, ?) > 0.2) OR (LOWER(id) LIKE LOWER(?)) OR (LOWER(description) LIKE LOWER(?)))"
+			vars = append(vars, con.Vars[0], con.Vars[0], fmt.Sprintf("%%%s%%", con.Vars[0]), fmt.Sprintf("%%%s%%", con.Vars[0]))
 		// 'id' filter: check both id column and aliases for backward compatibility
 		// Supports both hash-based IDs (e.g., "my-file-abc12345") and UUIDs
 		case "id":
