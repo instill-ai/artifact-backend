@@ -987,6 +987,32 @@ func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.Lis
 		zap.String("parent", req.GetParent()),
 		zap.String("filter", req.GetFilter()))
 
+	// Resolve namespace from parent to inject admin metadata.
+	// The public ListFiles handler requires a user UID in context and performs
+	// namespace permission checks. For admin endpoints we inject the namespace
+	// owner UID and mark the request as a trusted backend call so that
+	// CheckNamespacePermission bypasses ACL.
+	namespaceID, _, err := parseKnowledgeBaseFromParent(req.GetParent())
+	if err != nil {
+		return nil, fmt.Errorf("invalid parent format: %w", err)
+	}
+
+	ownerUID, err := h.resolveOwnerUID(ctx, namespaceID)
+	if err != nil {
+		logger.Error("ListFilesAdmin: failed to resolve namespace", zap.Error(err))
+		return nil, fmt.Errorf("failed to resolve namespace %q: %w", namespaceID, err)
+	}
+
+	md, _ := metadata.FromIncomingContext(ctx)
+	if md == nil {
+		md = metadata.MD{}
+	}
+	md = md.Copy()
+	md.Set(strings.ToLower(constantx.HeaderAuthTypeKey), "user")
+	md.Set(strings.ToLower(constantx.HeaderUserUIDKey), uuid.UUID(ownerUID).String())
+	md.Set(strings.ToLower("instill-backend"), "artifact-backend-admin")
+	ctx = metadata.NewIncomingContext(ctx, md)
+
 	// Build a public ListFilesRequest from the admin request
 	publicReq := &artifactpb.ListFilesRequest{
 		Parent: req.GetParent(),
@@ -1013,7 +1039,7 @@ func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.Lis
 	// - AIP-160 filter parsing (file IDs, tags, process status)
 	// - Pagination with page token
 	// - Token/chunk count enrichment
-	// No ACL checks are applied (admin endpoint).
+	// ACL checks are bypassed via the injected Instill-Backend header.
 	resp, err := publicHandler.ListFiles(ctx, publicReq)
 	if err != nil {
 		logger.Error("ListFilesAdmin failed", zap.Error(err))

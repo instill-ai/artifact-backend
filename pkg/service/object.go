@@ -26,9 +26,9 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
-// MaxUploadFileSizeMB returns the maximum file size for artifact uploads, in
-// megabytes. For now, this is a constant (512 Mb).
-const MaxUploadFileSizeMB int64 = 512
+// MaxUploadFileSizeMB is the maximum file size for artifact uploads, in
+// megabytes. Aligned with the Gemini Files API upload limit (2 GB).
+const MaxUploadFileSizeMB int64 = 2048
 
 const blobURLPath = "/v1alpha/blob-urls"
 
