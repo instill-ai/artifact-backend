@@ -873,78 +873,78 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			downloadURL = response.GetDownloadUrl()
 		}
 
-	// Fetch creator for this file (owner is the same for all files in this KB)
-	creator, _ := ph.service.FetchUserByUID(ctx, kbFile.CreatorUID.String())
+		// Fetch creator for this file (owner is the same for all files in this KB)
+		creator, _ := ph.service.FetchUserByUID(ctx, kbFile.CreatorUID.String())
 
-	// Use ID if set, otherwise fallback to UID (for backward compatibility)
-	fileID := kbFile.ID
-	if fileID == "" {
-		fileID = kbFile.UID.String()
-	}
+		// Use ID if set, otherwise fallback to UID (for backward compatibility)
+		fileID := kbFile.ID
+		if fileID == "" {
+			fileID = kbFile.UID.String()
+		}
 
-	// Determine KB ID for this file
-	var fileKBID string
-	var knowledgeBaseNames []string
-	if kbID != "" {
-		fileKBID = kb.ID
-		knowledgeBaseNames = []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)}
-	} else {
-		// Use batch-fetched associations
-		kbIDs := fileKBAssociations[kbFile.UID]
-		if len(kbIDs) > 0 {
-			fileKBID = kbIDs[0] // Pick first one as primary
-			knowledgeBaseNames = make([]string, len(kbIDs))
-			for i, id := range kbIDs {
-				knowledgeBaseNames[i] = fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, id)
-			}
+		// Determine KB ID for this file
+		var fileKBID string
+		var knowledgeBaseNames []string
+		if kbID != "" {
+			fileKBID = kb.ID
+			knowledgeBaseNames = []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)}
 		} else {
-			// Fallback if no associations found (should not happen)
-			fileKBID = "unknown"
-			knowledgeBaseNames = []string{}
+			// Use batch-fetched associations
+			kbIDs := fileKBAssociations[kbFile.UID]
+			if len(kbIDs) > 0 {
+				fileKBID = kbIDs[0] // Pick first one as primary
+				knowledgeBaseNames = make([]string, len(kbIDs))
+				for i, id := range kbIDs {
+					knowledgeBaseNames[i] = fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, id)
+				}
+			} else {
+				// Fallback if no associations found (should not happen)
+				fileKBID = "unknown"
+				knowledgeBaseNames = []string{}
+			}
 		}
-	}
 
-	// Get object ID for AIP-122 compliant resource name
-	objectID := ""
-	objectResourceName := ""
-	if kbFile.ObjectUID != nil {
-		obj, err := ph.service.Repository().GetObjectByUID(ctx, *kbFile.ObjectUID)
-		if err == nil && obj != nil {
-			objectID = string(obj.ID)
-			objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
+		// Get object ID for AIP-122 compliant resource name
+		objectID := ""
+		objectResourceName := ""
+		if kbFile.ObjectUID != nil {
+			obj, err := ph.service.Repository().GetObjectByUID(ctx, *kbFile.ObjectUID)
+			if err == nil && obj != nil {
+				objectID = string(obj.ID)
+				objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
+			}
+		} else if objectUID != uuid.Nil {
+			// Fallback: try to get object by UID parsed from storage path
+			obj, err := ph.service.Repository().GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
+			if err == nil && obj != nil {
+				objectID = string(obj.ID)
+				objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
+			}
 		}
-	} else if objectUID != uuid.Nil {
-		// Fallback: try to get object by UID parsed from storage path
-		obj, err := ph.service.Repository().GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
-		if err == nil && obj != nil {
-			objectID = string(obj.ID)
-			objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
-		}
-	}
 
-	file := &artifactpb.File{
-		Id:                 fileID,
-		Slug:               kbFile.Slug,
-		OwnerName:          ns.Name(),
-		Owner:              owner,
-		Creator:            creator,
-		KnowledgeBases:     knowledgeBaseNames,
-		Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, fileKBID, fileID),
-		DisplayName:        kbFile.DisplayName,
-		Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
-		CreateTime:         timestamppb.New(*kbFile.CreateTime),
-		UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
-		ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
-		Size:               kbFile.Size,
-		ExternalMetadata:   kbFile.PublicExternalMetadataUnmarshal(),
-		TotalChunks:        int32(totalChunks[kbFile.UID]),
-		TotalTokens:        int32(totalTokens[kbFile.UID]),
-		Object:             objectResourceName,
-		DownloadUrl:        downloadURL,
-		ConvertingPipeline: kbFile.ConvertingPipeline(),
-		Tags:               []string(kbFile.Tags),
-		Collections:        extractCollectionIDs(kbFile.Tags),
-	}
+		file := &artifactpb.File{
+			Id:                 fileID,
+			Slug:               kbFile.Slug,
+			OwnerName:          ns.Name(),
+			Owner:              owner,
+			Creator:            creator,
+			KnowledgeBases:     knowledgeBaseNames,
+			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, fileKBID, fileID),
+			DisplayName:        kbFile.DisplayName,
+			Type:               artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType]),
+			CreateTime:         timestamppb.New(*kbFile.CreateTime),
+			UpdateTime:         timestamppb.New(*kbFile.UpdateTime),
+			ProcessStatus:      artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[kbFile.ProcessStatus]),
+			Size:               kbFile.Size,
+			ExternalMetadata:   kbFile.PublicExternalMetadataUnmarshal(),
+			TotalChunks:        int32(totalChunks[kbFile.UID]),
+			TotalTokens:        int32(totalTokens[kbFile.UID]),
+			Object:             objectResourceName,
+			DownloadUrl:        downloadURL,
+			ConvertingPipeline: kbFile.ConvertingPipeline(),
+			Tags:               []string(kbFile.Tags),
+			Collections:        extractCollectionIDs(kbFile.Tags),
+		}
 
 		// Include status message (error or success message)
 		if kbFile.ExtraMetaDataUnmarshal != nil && kbFile.ExtraMetaDataUnmarshal.StatusMessage != "" {
