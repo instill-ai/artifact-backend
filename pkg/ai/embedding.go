@@ -18,7 +18,7 @@ import (
 //   - taskType: The embedding task type (RETRIEVAL_DOCUMENT, RETRIEVAL_QUERY, QUESTION_ANSWERING)
 //
 // Returns:
-//   - The embedding vectors
+//   - The full EmbedResult (vectors, model, dimensionality, usage metadata)
 //   - Error if any step fails
 func EmbedTexts(
 	ctx context.Context,
@@ -27,9 +27,9 @@ func EmbedTexts(
 	dimensionality int32,
 	texts []string,
 	taskType string,
-) ([][]float32, error) {
+) (*EmbedResult, error) {
 	if len(texts) == 0 {
-		return [][]float32{}, nil
+		return &EmbedResult{Vectors: [][]float32{}}, nil
 	}
 
 	if client == nil {
@@ -54,5 +54,5 @@ func EmbedTexts(
 		)
 	}
 
-	return result.Vectors, nil
+	return result, nil
 }

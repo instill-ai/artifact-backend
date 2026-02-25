@@ -105,6 +105,7 @@ func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []by
 		PositionData:  nil, // VertexAI doesn't provide position data
 		Length:        nil,
 		Client:        "vertexai",
+		Model:         GetModel(),
 		UsageMetadata: resp.UsageMetadata,
 	}, nil
 }
@@ -146,6 +147,7 @@ func (c *Client) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prom
 		PositionData:  nil,
 		Length:        nil,
 		Client:        "vertexai",
+		Model:         GetModel(),
 		UsageMetadata: resp.UsageMetadata,
 	}, nil
 }

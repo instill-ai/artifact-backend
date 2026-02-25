@@ -27,6 +27,7 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 
 	// Generate embeddings for all texts
 	vectors := make([][]float32, 0, len(texts))
+	var totalProcessedChars int32 // Accumulate processed characters across all API calls
 
 	for _, text := range texts {
 		content := &genai.Content{
@@ -54,6 +55,11 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 			)
 		}
 
+		// Accumulate processed characters from Vertex AI metadata
+		if resp != nil && resp.Metadata != nil {
+			totalProcessedChars += resp.Metadata.BillableCharacterCount
+		}
+
 		// Extract embedding vectors
 		if resp != nil && len(resp.Embeddings) > 0 {
 			for _, emb := range resp.Embeddings {
@@ -70,10 +76,21 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 		actualDim = int32(len(vectors[0]))
 	}
 
+	// Build usage metadata from accumulated processed characters
+	var usageMetadata any
+	if totalProcessedChars > 0 {
+		usageMetadata = map[string]interface{}{
+			"processed_character_count": totalProcessedChars,
+			"text_count":              len(texts),
+			"model":                   embeddingModel,
+		}
+	}
+
 	return &ai.EmbedResult{
 		Vectors:        vectors,
 		Model:          embeddingModel,
 		Dimensionality: actualDim,
+		UsageMetadata:  usageMetadata,
 	}, nil
 }
 

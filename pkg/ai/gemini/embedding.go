@@ -59,6 +59,7 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 	// Process texts concurrently with retry logic for better performance and reliability
 	// Note: Gemini API doesn't have a batch endpoint, so we call EmbedContent for each text
 	vectors := make([][]float32, len(texts))
+	var totalProcessedChars int32 // Accumulate processed characters across all API calls
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var embeddingErr error
@@ -173,10 +174,18 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 					break
 				}
 
-				// Success! Store the embedding
-				embedding = emb.Values
-				err = nil
-				break
+			// Accumulate processed characters if metadata is available
+			// (Vertex API only — may be nil for direct Gemini API)
+			if result.Metadata != nil {
+				mu.Lock()
+				totalProcessedChars += result.Metadata.BillableCharacterCount
+				mu.Unlock()
+			}
+
+			// Success! Store the embedding
+			embedding = emb.Values
+			err = nil
+			break
 			}
 
 			// Handle errors after all retries exhausted
@@ -230,9 +239,20 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 		return nil, embeddingErr
 	}
 
+	// Build usage metadata from accumulated processed characters
+	var usageMetadata any
+	if totalProcessedChars > 0 {
+		usageMetadata = map[string]interface{}{
+			"processed_character_count": totalProcessedChars,
+			"text_count":              len(texts),
+			"model":                   DefaultEmbeddingModel,
+		}
+	}
+
 	return &ai.EmbedResult{
 		Vectors:        vectors,
 		Model:          DefaultEmbeddingModel,
 		Dimensionality: dimensionality,
+		UsageMetadata:  usageMetadata,
 	}, nil
 }

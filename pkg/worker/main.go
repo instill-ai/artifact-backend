@@ -157,7 +157,37 @@ type PostSummaryConversionFn func(
 
 // PostFileCompletionFn allows extensions of the worker to provide some logic
 // to be executed after a file is successfully processed.
-type PostFileCompletionFn func(_ workflow.Context, file *repository.FileModel, effectiveFileType artifactpb.File_Type) error
+// The usageData parameter contains token/character usage from all AI activities.
+type PostFileCompletionFn func(_ workflow.Context, file *repository.FileModel, effectiveFileType artifactpb.File_Type, usageData *FileProcessingUsageData) error
+
+// FileProcessingUsageData contains token usage metadata collected from file
+// processing activities (content, summary, embedding). Each field may be nil
+// if the corresponding activity didn't complete or didn't produce usage data
+// (e.g., OpenAI pipeline route, or the activity failed before LLM call).
+type FileProcessingUsageData struct {
+	ContentUsageMetadata   any    // From ProcessContentActivity (nil if content activity didn't complete)
+	ContentModel           string // Model used for content generation (e.g., "gemini-2.0-flash-001")
+	SummaryUsageMetadata   any    // From ProcessSummaryActivity (nil if summary activity didn't complete)
+	SummaryModel           string // Model used for summary generation
+	EmbeddingUsageMetadata any    // From EmbedAndSaveChunksActivity (nil if embed activity didn't complete)
+	EmbeddingModel         string // Model used for embedding generation (e.g., "text-embedding-004")
+}
+
+// PostFileFailureFn allows extensions of the worker to provide some logic
+// to be executed when a file processing operation fails.
+// This is called in the workflow ONLY when file metadata is available
+// (i.e., after the metadata fetch phase). Early failures (e.g., file not found)
+// do not trigger this callback since no LLM processing occurred.
+//
+// Parameters:
+//   - ctx: Temporal workflow context
+//   - file: The file model
+//   - effectiveFileType: The resolved file type after standardization
+//   - stage: The processing stage where the failure occurred
+//   - err: The error that caused the failure
+//   - usageData: Token usage metadata from completed/partially-completed activities.
+//     May contain data from activities that called LLM before failing in post-processing.
+type PostFileFailureFn func(_ workflow.Context, file *repository.FileModel, effectiveFileType artifactpb.File_Type, stage string, err error, usageData *FileProcessingUsageData) error
 
 // Worker implements the Temporal worker with all workflows and activities
 type Worker struct {
@@ -175,6 +205,7 @@ type Worker struct {
 	log      *zap.Logger
 
 	postFileCompletion    PostFileCompletionFn
+	postFileFailure       PostFileFailureFn
 	postContentConversion PostContentConversionFn
 	postStandardization   PostStandardizationFn
 	postSummaryConversion PostSummaryConversionFn
@@ -218,6 +249,13 @@ func (w *Worker) GetRedisClient() *redis.Client {
 // successfully processed.
 func (w *Worker) SetPostFileCompletionFn(fn PostFileCompletionFn) {
 	w.postFileCompletion = fn
+}
+
+// SetPostFileFailureFn allows clients to add logic for files that failed
+// during processing. Called with available file context when a processing
+// stage fails after the metadata fetch phase.
+func (w *Worker) SetPostFileFailureFn(fn PostFileFailureFn) {
+	w.postFileFailure = fn
 }
 
 // SetPostContentConversionFn allows clients to add logic to be executed

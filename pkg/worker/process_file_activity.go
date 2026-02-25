@@ -11,6 +11,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"go.uber.org/zap"
+	"google.golang.org/genai"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 
@@ -297,16 +298,19 @@ type UpdateConvertedFileDestinationActivityParam struct {
 
 // UpdateConversionMetadataActivityParam for updating file metadata after conversion
 type UpdateConversionMetadataActivityParam struct {
-	FileUID   types.FileUIDType // File unique identifier
-	Length    []uint32          // Length of markdown sections
-	Pipelines []string          // Pipelines used: [content_pipeline, summary_pipeline] (empty strings if AI client was used)
+	FileUID         types.FileUIDType // File unique identifier
+	Length          []uint32          // Character length of the markdown
+	PageCount       int32             // Actual number of pages
+	Pipelines       []string          // Pipelines used: [content_pipeline, summary_pipeline] (empty strings if AI client was used)
+	DurationSeconds int32             // Media duration in seconds (audio/video only, from Gemini cache metadata)
 }
 
-// UpdateUsageMetadataActivityParam for updating file usage metadata after content/summary processing
+// UpdateUsageMetadataActivityParam for updating file usage metadata after content/summary/embedding processing
 type UpdateUsageMetadataActivityParam struct {
-	FileUID         types.FileUIDType // File unique identifier
-	ContentMetadata any               // Usage metadata from content processing (from AI response)
-	SummaryMetadata any               // Usage metadata from summary processing (from AI response)
+	FileUID           types.FileUIDType // File unique identifier
+	ContentMetadata   any               // Usage metadata from content processing (from AI response)
+	SummaryMetadata   any               // Usage metadata from summary processing (from AI response)
+	EmbeddingMetadata any               // Usage metadata from embedding generation (processed characters)
 }
 
 // DeleteOldConvertedFilesActivity removes old converted file from MinIO and DB if it exists
@@ -562,6 +566,8 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 
 	mdUpdate := repository.ExtraMetaData{
 		Length:          param.Length,
+		PageCount:       param.PageCount,
+		DurationSeconds: param.DurationSeconds,
 		ConvertingPipe:  contentPipeline,
 		SummarizingPipe: summaryPipeline,
 	}
@@ -584,30 +590,32 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 	return nil
 }
 
-// UpdateUsageMetadataActivity stores AI usage metadata (token counts) from content and summary processing
-// This activity aggregates usage metadata from both content and summary processing activities
-// and stores it in the file's usage_metadata JSONB column for later retrieval
+// UpdateUsageMetadataActivity stores AI usage metadata (token counts) from content, summary, and embedding processing.
+// This activity aggregates usage metadata from all processing activities
+// and stores it in the file's usage_metadata JSONB column for later retrieval.
 // According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
 // The usage metadata includes prompt_token_count, candidates_token_count, total_token_count, etc.
+// For embeddings, it includes processed_character_count (Vertex AI only).
 func (w *Worker) UpdateUsageMetadataActivity(ctx context.Context, param *UpdateUsageMetadataActivityParam) error {
 	w.log.Info("UpdateUsageMetadataActivity: Storing usage metadata",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Bool("hasContentMetadata", param.ContentMetadata != nil),
-		zap.Bool("hasSummaryMetadata", param.SummaryMetadata != nil))
+		zap.Bool("hasSummaryMetadata", param.SummaryMetadata != nil),
+		zap.Bool("hasEmbeddingMetadata", param.EmbeddingMetadata != nil))
 
-	// Early return if both metadata are nil - no need to do a database update
-	// This will be the case until we implement CountTokens in ProcessContent/ProcessSummary activities
-	if param.ContentMetadata == nil && param.SummaryMetadata == nil {
+	// Early return if all metadata are nil - no need to do a database update
+	if param.ContentMetadata == nil && param.SummaryMetadata == nil && param.EmbeddingMetadata == nil {
 		w.log.Info("UpdateUsageMetadataActivity: Skipping - no usage metadata available yet",
 			zap.String("fileUID", param.FileUID.String()))
 		return nil
 	}
 
 	// Build usage metadata structure
-	// Format: {"content": {...}, "summary": {...}}
+	// Format: {"content": {...}, "summary": {...}, "embedding": {...}}
 	usageMetadata := repository.UsageMetadata{
-		Content: make(map[string]interface{}),
-		Summary: make(map[string]interface{}),
+		Content:   make(map[string]interface{}),
+		Summary:   make(map[string]interface{}),
+		Embedding: make(map[string]interface{}),
 	}
 
 	// Store content metadata if available
@@ -632,6 +640,19 @@ func (w *Worker) UpdateUsageMetadataActivity(ctx context.Context, param *UpdateU
 			summaryBytes, err := json.Marshal(param.SummaryMetadata)
 			if err == nil {
 				_ = json.Unmarshal(summaryBytes, &usageMetadata.Summary)
+			}
+		}
+	}
+
+	// Store embedding metadata if available
+	if param.EmbeddingMetadata != nil {
+		if embeddingMap, ok := param.EmbeddingMetadata.(map[string]interface{}); ok {
+			usageMetadata.Embedding = embeddingMap
+		} else {
+			// If it's a struct, convert it to map via JSON marshaling
+			embeddingBytes, err := json.Marshal(param.EmbeddingMetadata)
+			if err == nil {
+				_ = json.Unmarshal(embeddingBytes, &usageMetadata.Embedding)
 			}
 		}
 	}
@@ -1292,6 +1313,13 @@ type CacheFileContextActivityResult struct {
 	ExpireTime           time.Time // When cache will expire
 	CachedContextEnabled bool      // Flag indicating if cache was created (false means caching is disabled)
 	UsageMetadata        any       // Token usage metadata from AI client (nil if cache was not created)
+
+	// Explicit duration fields extracted before Temporal serialization.
+	// The UsageMetadata field loses its concrete Go type (*genai.CachedContentUsageMetadata)
+	// when Temporal JSON-serializes/deserializes across the activity boundary, so these
+	// must be stored as primitive types.
+	AudioDurationSeconds int32 // From Gemini CachedContentUsageMetadata
+	VideoDurationSeconds int32 // From Gemini CachedContentUsageMetadata
 }
 
 // CacheFileContextActivity creates a cached context for the input file
@@ -1381,14 +1409,21 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 		}, nil
 	}
 
-	return &CacheFileContextActivityResult{
+	result := &CacheFileContextActivityResult{
 		CacheName:            cacheOutput.CacheName,
 		Model:                cacheOutput.Model,
 		CreateTime:           cacheOutput.CreateTime,
 		ExpireTime:           cacheOutput.ExpireTime,
 		CachedContextEnabled: true,
 		UsageMetadata:        cacheOutput.UsageMetadata,
-	}, nil
+	}
+
+	if cacheMeta, ok := cacheOutput.UsageMetadata.(*genai.CachedContentUsageMetadata); ok && cacheMeta != nil {
+		result.AudioDurationSeconds = cacheMeta.AudioDurationSeconds
+		result.VideoDurationSeconds = cacheMeta.VideoDurationSeconds
+	}
+
+	return result, nil
 }
 
 // DeleteCacheActivityParam defines the parameters for DeleteCacheActivity
@@ -1441,15 +1476,20 @@ type ProcessContentActivityParam struct {
 // ProcessContentActivityResult defines output from ProcessContentActivity
 type ProcessContentActivityResult struct {
 	Content          string                     // Converted markdown content
-	Length           []uint32                   // Length information
+	Length           []uint32                   // Character length of the markdown
+	PageCount        int32                      // Actual number of pages
 	PositionData     *types.PositionData        // Position data for PDF
 	OriginalType     artifactpb.File_Type       // Original file type
 	ConvertedType    artifactpb.File_Type       // Converted file type
 	UsageMetadata    any                        // AI token usage
+	Model            string                     // AI model used (e.g., "gemini-2.0-flash-001")
 	ConvertedFileUID types.ConvertedFileUIDType // Content converted file UID
 	Pipeline         string                     // Pipeline used (e.g., "instill-ai/indexing-generate-content/v1.4.0" for OpenAI route, empty for AI client)
 	ContentBucket    string                     // MinIO bucket where markdown content is stored
 	ContentPath      string                     // Path to markdown content in MinIO
+	// Error is set when the LLM call succeeded but post-processing failed.
+	// UsageMetadata is still valid for usage tracking. Empty means success.
+	Error string
 }
 
 // ProcessContentActivity handles the entire content processing pipeline:
@@ -1527,7 +1567,9 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	var contentInMarkdown string
 	var positionData *types.PositionData
 	var length []uint32
+	var pageCount int32
 	var usageMetadata any
+	var modelName string
 
 	// Fetch KB with config to check embedding model family for routing
 	kb, err := w.repository.GetKnowledgeBaseByUIDWithConfig(authCtx, param.KBUID)
@@ -1548,6 +1590,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			zap.String("fileType", param.FileType.String()))
 		contentInMarkdown = string(rawFileContent)
 		length = []uint32{uint32(len(contentInMarkdown))}
+		pageCount = 1
 	} else {
 		// Check for UNSPECIFIED or unsupported file types
 		if param.FileType == artifactpb.File_TYPE_UNSPECIFIED {
@@ -1607,7 +1650,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			result.Pipeline = pipelineResult.PipelineRelease.Name()
 
 			// Process pipeline result (extracts [Page: X] tags and creates PageDelimiters)
-			contentInMarkdown, positionData, length = ExtractPageDelimiters(
+			contentInMarkdown, positionData, length, pageCount = ExtractPageDelimiters(
 				pipelineResult.Markdown, w.log, map[string]any{"route": "openai-pipeline"})
 
 			logger.Info("OpenAI pipeline conversion successful",
@@ -1652,12 +1695,13 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 						zap.Int("markdownLength", len(conversion.Markdown)))
 
 					// Process AI conversion result
-					contentInMarkdown, positionData, length = ExtractPageDelimiters(
+					contentInMarkdown, positionData, length, pageCount = ExtractPageDelimiters(
 						conversion.Markdown,
 						w.log,
 						map[string]any{"cacheName": param.CacheName},
 					)
 					usageMetadata = conversion.UsageMetadata
+					modelName = conversion.Model
 				}
 			}
 
@@ -1698,6 +1742,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 								// Wrap with page tag for consistency
 								contentInMarkdown = "[Page: 1]\n\n" + rawText
 								length = []uint32{uint32(len(contentInMarkdown))}
+								pageCount = 1
 								positionData = &types.PositionData{
 									PageDelimiters: []uint32{uint32(len(contentInMarkdown))},
 								}
@@ -1712,12 +1757,13 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 						zap.Int("markdownLength", len(conversion.Markdown)))
 
 					// Process AI conversion result
-					contentInMarkdown, positionData, length = ExtractPageDelimiters(
+					contentInMarkdown, positionData, length, pageCount = ExtractPageDelimiters(
 						conversion.Markdown,
 						w.log,
 						map[string]any{"fileType": param.FileType.String()},
 					)
 					usageMetadata = conversion.UsageMetadata
+					modelName = conversion.Model
 				}
 			}
 
@@ -1768,14 +1814,20 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 
 	result.Content = contentInMarkdown
 	result.Length = length
+	result.PageCount = pageCount
 	result.PositionData = positionData
 	result.UsageMetadata = usageMetadata
+	result.Model = modelName
 	result.ConvertedType = param.FileType // Already converted at workflow level
 
 	logger.Info("Content in Markdown conversion completed", zap.Int("contentInMarkdownLength", len(contentInMarkdown)))
 
 	// Phase 3: Save converted file to DB and MinIO
 	// All file types now follow the same 3-step SAGA: create record → upload → update destination
+	//
+	// If any post-processing step fails, we return the result (with UsageMetadata preserved)
+	// and set result.Error instead of returning a Go error. This allows the workflow to
+	// record partial token usage in errored usage events.
 	convertedFileUID, _ := uuid.NewV4()
 
 	// Step 1: Create DB record with placeholder
@@ -1789,11 +1841,8 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	})
 	if err != nil {
 		logger.Error("Failed to create converted file record", zap.Error(err))
-		return nil, activityErrorWithCauseFlat(
-			fmt.Sprintf("Failed to create converted file record: %s", errorsx.MessageOrErr(err)),
-			processContentActivityError,
-			err,
-		)
+		result.Error = fmt.Sprintf("Failed to create converted file record: %s", errorsx.MessageOrErr(err))
+		return result, nil
 	}
 
 	// Step 2: Upload to MinIO
@@ -1809,11 +1858,8 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 			ConvertedFileUID: convertedFileUID,
 		})
-		return nil, activityErrorWithCauseFlat(
-			fmt.Sprintf("Failed to upload converted file to MinIO: %s", errorsx.MessageOrErr(err)),
-			processContentActivityError,
-			err,
-		)
+		result.Error = fmt.Sprintf("Failed to upload converted file to MinIO: %s", errorsx.MessageOrErr(err))
+		return result, nil
 	}
 
 	// Step 3: Update DB record with actual destination
@@ -1830,11 +1876,8 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 			ConvertedFileUID: convertedFileUID,
 		})
-		return nil, activityErrorWithCauseFlat(
-			fmt.Sprintf("Failed to update converted file destination: %s", errorsx.MessageOrErr(err)),
-			processContentActivityError,
-			err,
-		)
+		result.Error = fmt.Sprintf("Failed to update converted file destination: %s", errorsx.MessageOrErr(err))
+		return result, nil
 	}
 
 	logger.Info("Converted file saved successfully", zap.String("convertedFileUID", convertedFileUID.String()))
@@ -1866,10 +1909,14 @@ type ProcessSummaryActivityResult struct {
 	OriginalType     artifactpb.File_Type       // Original file type
 	ConvertedType    artifactpb.File_Type       // Converted file type (same as original)
 	UsageMetadata    any                        // AI token usage
+	Model            string                     // AI model used (e.g., "gemini-2.0-flash-001")
 	ConvertedFileUID types.ConvertedFileUIDType // Summary converted file UID (zero if no summary)
 	Pipeline         string                     // Pipeline used (e.g., "instill-ai/indexing-generate-summary/v1.0.0" for OpenAI route, empty for AI client)
 	SummaryBucket    string                     // MinIO bucket where summary is stored
 	SummaryPath      string                     // Path to summary in MinIO
+	// Error is set when the LLM call succeeded but post-processing failed.
+	// UsageMetadata is still valid for usage tracking. Empty means success.
+	Error string
 }
 
 // ProcessSummaryActivity handles the entire summary generation:
@@ -1970,6 +2017,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 
 	var summary string
 	var usageMetadata any
+	var modelName string
 
 	// Route based on model family
 	if kb.SystemConfig.RAG.Embedding.ModelFamily == "openai" {
@@ -2033,6 +2081,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 			} else {
 				summary = conversion.Markdown
 				usageMetadata = conversion.UsageMetadata
+				modelName = conversion.Model
 				logger.Info("AI summarization with cache succeeded",
 					zap.Int("summaryLength", len(summary)))
 			}
@@ -2057,6 +2106,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 			} else {
 				summary = conversion.Markdown
 				usageMetadata = conversion.UsageMetadata
+				modelName = conversion.Model
 				logger.Info("AI summarization without cache succeeded",
 					zap.Int("summaryLength", len(summary)))
 			}
@@ -2085,6 +2135,7 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 	result.Summary = summary
 	result.Length = []uint32{summaryLength}
 	result.UsageMetadata = usageMetadata
+	result.Model = modelName
 	result.OriginalType = param.FileType  // File type being summarized
 	result.ConvertedType = param.FileType // Same as original (no conversion)
 
@@ -2116,11 +2167,8 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		})
 		if err != nil {
 			logger.Error("Failed to create summary converted file record", zap.Error(err))
-			return nil, activityErrorWithCauseFlat(
-				fmt.Sprintf("Failed to create summary converted file record: %s", errorsx.MessageOrErr(err)),
-				processSummaryActivityError,
-				err,
-			)
+			result.Error = fmt.Sprintf("Failed to create summary converted file record: %s", errorsx.MessageOrErr(err))
+			return result, nil
 		}
 
 		// Step 2: Upload to MinIO (same path pattern as content)
@@ -2136,11 +2184,8 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 			_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 				ConvertedFileUID: convertedFileUID,
 			})
-			return nil, activityErrorWithCauseFlat(
-				fmt.Sprintf("Failed to upload summary to MinIO: %s", errorsx.MessageOrErr(err)),
-				processSummaryActivityError,
-				err,
-			)
+			result.Error = fmt.Sprintf("Failed to upload summary to MinIO: %s", errorsx.MessageOrErr(err))
+			return result, nil
 		}
 
 		// Step 3: Update DB record with actual destination
@@ -2157,11 +2202,8 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 			_ = w.DeleteConvertedFileRecordActivity(ctx, &DeleteConvertedFileRecordActivityParam{
 				ConvertedFileUID: convertedFileUID,
 			})
-			return nil, activityErrorWithCauseFlat(
-				fmt.Sprintf("Failed to update summary converted file destination: %s", errorsx.MessageOrErr(err)),
-				processSummaryActivityError,
-				err,
-			)
+			result.Error = fmt.Sprintf("Failed to update summary converted file destination: %s", errorsx.MessageOrErr(err))
+			return result, nil
 		}
 
 		logger.Info("Summary converted file created successfully",
@@ -2192,9 +2234,10 @@ type DeleteTemporaryConvertedFileActivityParam struct {
 // ===== MARKDOWN CONVERSION HELPERS =====
 
 // ExtractPageDelimiters parses [Page: X] tags from AI-generated markdown and extracts page delimiter positions
-// Returns markdown WITH page tags preserved, position data for visual grounding, and length array
+// Returns markdown WITH page tags preserved, position data for visual grounding,
+// character length array, and actual page count.
 // (Exported for EE worker overrides)
-func ExtractPageDelimiters(markdown string, logger *zap.Logger, logContext map[string]any) (string, *types.PositionData, []uint32) {
+func ExtractPageDelimiters(markdown string, logger *zap.Logger, logContext map[string]any) (string, *types.PositionData, []uint32, int32) {
 	// Parse pages from AI-generated Markdown
 	// Expected format: [Page: 1] ... [Page: n] ...
 	// The page tags are KEPT in the stored markdown for robust extraction
@@ -2203,7 +2246,6 @@ func ExtractPageDelimiters(markdown string, logger *zap.Logger, logContext map[s
 
 	pageCount := len(pages)
 
-	// Log if multi-page document detected
 	if pageCount > 1 {
 		logFields := []zap.Field{
 			zap.Int("pageCount", pageCount),
@@ -2214,15 +2256,14 @@ func ExtractPageDelimiters(markdown string, logger *zap.Logger, logContext map[s
 		logger.Info("AI conversion: Multi-page document detected with [Page: X] tags", logFields...)
 	}
 
-	// Calculate length: page count for multi-page, character count for single-page
 	var length []uint32
 	if pageCount > 1 {
-		length = []uint32{uint32(pageCount)} // Number of pages
+		length = []uint32{uint32(pageCount)}
 	} else {
-		length = []uint32{uint32(len(markdownWithPageTags))} // Character length
+		length = []uint32{uint32(len(markdownWithPageTags))}
 	}
 
-	return markdownWithPageTags, positionData, length
+	return markdownWithPageTags, positionData, length, int32(pageCount)
 }
 
 // ============================================================================
