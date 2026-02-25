@@ -40,7 +40,7 @@ func (s *service) EmbedTexts(ctx context.Context, kbUID *types.KBUIDType, texts 
 	}
 
 	// Use AI client directly (no type assertion needed)
-	return ai.EmbedTexts(
+	embedResult, err := ai.EmbedTexts(
 		ctx,
 		s.aiClient,
 		kb.SystemConfig.RAG.Embedding.ModelFamily,
@@ -48,4 +48,8 @@ func (s *service) EmbedTexts(ctx context.Context, kbUID *types.KBUIDType, texts 
 		texts,
 		taskType,
 	)
+	if err != nil {
+		return nil, err
+	}
+	return embedResult.Vectors, nil
 }

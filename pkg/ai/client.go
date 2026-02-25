@@ -29,6 +29,7 @@ type ConversionResult struct {
 	PositionData *types.PositionData
 	Length       []uint32
 	Client       string // "gemini", "openai", "anthropic"
+	Model        string // AI model used (e.g., "gemini-2.0-flash-001")
 	// UsageMetadata contains token usage information from the AI client
 	// The actual type depends on the client
 	UsageMetadata any
@@ -82,6 +83,10 @@ type EmbedResult struct {
 	Vectors        [][]float32 // The embedding vectors
 	Model          string      // Model used (e.g., "gemini-embedding-001")
 	Dimensionality int32       // Vector dimensionality (e.g., 3072)
+	// UsageMetadata contains token/character usage from the embedding API.
+	// For Vertex AI: includes processed character count.
+	// For direct Gemini API: may be nil.
+	UsageMetadata any
 }
 
 // Client defines the interface for AI vendor API clients that understand unstructured data

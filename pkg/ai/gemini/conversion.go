@@ -350,6 +350,7 @@ func buildConversionResult(output *conversionOutput, err error) (*ai.ConversionR
 		Markdown:      output.Markdown,
 		Length:        []uint32{uint32(len(output.Markdown))},
 		Client:        "gemini",
+		Model:         output.Model,
 		PositionData:  nil,
 		UsageMetadata: output.UsageMetadata,
 	}, nil
