@@ -199,16 +199,26 @@ type ExtraMetaData struct {
 	ChunkingTime    int64  `json:"chunking_time"`
 	EmbeddingTime   int64  `json:"embedding_time"`
 
-	// Length of the file. The unit will depend on the filetype (e.g. pages,
-	// milliseconds).
+	// Length stores the character count of the converted markdown content.
+	// For API position data (coordinates), not for usage tracking.
 	Length []uint32 `json:"length,omitempty"`
+
+	// PageCount is the actual number of pages in a document, as determined
+	// by AI conversion (via [Page: X] tags). Used for usage tracking.
+	// Always >= 1 for successfully processed documents.
+	PageCount int32 `json:"page_count,omitempty"`
+
+	// DurationSeconds is the actual media duration in seconds for audio/video files,
+	// sourced from Gemini CachedContentUsageMetadata (integer precision).
+	DurationSeconds int32 `json:"duration_seconds,omitempty"`
 }
 
-// UsageMetadata stores AI usage metadata from content and summary generation
-// Format: {"content": {...}, "summary": {...}}
+// UsageMetadata stores AI usage metadata from content, summary, and embedding generation
+// Format: {"content": {...}, "summary": {...}, "embedding": {...}}
 type UsageMetadata struct {
-	Content map[string]interface{} `json:"content,omitempty"`
-	Summary map[string]interface{} `json:"summary,omitempty"`
+	Content   map[string]interface{} `json:"content,omitempty"`
+	Summary   map[string]interface{} `json:"summary,omitempty"`
+	Embedding map[string]interface{} `json:"embedding,omitempty"`
 }
 
 // FileColumns is the columns for the file table
@@ -1243,6 +1253,12 @@ func (r *repository) UpdateFileMetadata(ctx context.Context, fileUID types.FileU
 		}
 		if len(updates.Length) > 0 {
 			file.ExtraMetaDataUnmarshal.Length = updates.Length
+		}
+		if updates.PageCount != 0 {
+			file.ExtraMetaDataUnmarshal.PageCount = updates.PageCount
+		}
+		if updates.DurationSeconds != 0 {
+			file.ExtraMetaDataUnmarshal.DurationSeconds = updates.DurationSeconds
 		}
 
 		// Marshal the updated ExtraMetaData.
