@@ -507,6 +507,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 		workflowFutures := make([]fileWorkflowFutures, len(processingFutures))
 		fileCacheNames := make(map[string]string) // Map fileUID -> cacheName
+		fileDurationSec := make(map[string]int32) // Map fileUID -> media duration in seconds (from cache metadata)
 
 		// Phase 1: Collect cache names for all files (Gemini only)
 		for _, pf := range processingFutures {
@@ -529,6 +530,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				logger.Info("File cache created",
 					"fileUID", pf.fileUID.String(),
 					"cacheName", fileCacheName)
+
+				if fileCacheResult.AudioDurationSeconds > 0 {
+					fileDurationSec[pf.fileUID.String()] = fileCacheResult.AudioDurationSeconds
+				} else if fileCacheResult.VideoDurationSeconds > 0 {
+					fileDurationSec[pf.fileUID.String()] = fileCacheResult.VideoDurationSeconds
+				}
 
 				// Schedule file cache cleanup for this file
 				defer func(cn string, fuid types.FileUIDType) {
@@ -703,6 +710,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			contentErr := wf.contentFuture.Get(ctx, &contentResult)
 
+			// Check for activity-level post-LLM error: the LLM call succeeded
+			// but post-processing (DB write, MinIO upload) failed. The result
+			// (including UsageMetadata) is still valid for usage tracking.
+			if contentErr == nil && contentResult.Error != "" {
+				contentErr = fmt.Errorf("%s", contentResult.Error)
+			}
+
 			// Invoke post-content-conversion callback if set and content succeeded
 			// This fires as soon as markdown content is ready, before chunking/embedding
 			if contentErr == nil && w.postContentConversion != nil {
@@ -763,6 +777,11 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				}
 			}
 
+			// Check for activity-level post-LLM error on summary (same as content above).
+			if summaryErr == nil && summaryResult.Error != "" {
+				summaryErr = fmt.Errorf("%s", summaryResult.Error)
+			}
+
 			// Invoke post-summary-conversion callback if set and summary succeeded
 			// This fires as soon as summary is ready, before chunking/embedding
 			if summaryErr == nil && w.postSummaryConversion != nil && summaryResult.SummaryBucket != "" {
@@ -787,14 +806,44 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				}
 			}
 
+			// Helper to call the post-file-failure hook with collected usage data.
+			// contentResult and summaryResult are captured by reference — they
+			// contain whatever was populated before the failure occurred.
+			// embedResult is passed explicitly since it may not exist yet.
+			callPostFileFailure := func(stage string, failErr error, embedResult *EmbedAndSaveChunksActivityResult) {
+				if w.postFileFailure == nil || wf.conversionData == nil {
+					return
+				}
+				usageData := &FileProcessingUsageData{
+					ContentUsageMetadata: contentResult.UsageMetadata,
+					ContentModel:         contentResult.Model,
+					SummaryUsageMetadata: summaryResult.UsageMetadata,
+					SummaryModel:         summaryResult.Model,
+				}
+				if embedResult != nil {
+					usageData.EmbeddingUsageMetadata = embedResult.UsageMetadata
+					usageData.EmbeddingModel = embedResult.Model
+				}
+				file := wf.conversionData.fileMetadata.metadata.File
+				effectiveFileType := wf.conversionData.effectiveFileType
+				if hookErr := w.postFileFailure(ctx, file, effectiveFileType, stage, failErr, usageData); hookErr != nil {
+					logger.Warn("Post file failure hook failed (non-fatal)",
+						"fileUID", wf.fileUID.String(),
+						"stage", stage,
+						"error", hookErr.Error())
+				}
+			}
+
 			// Check for errors
 			if contentErr != nil {
 				filesFailed[wf.fileUID.String()] = handleFileError(wf.fileUID, "process content workflow", contentErr)
+				callPostFileFailure("process content", contentErr, nil)
 				filesCompleted[wf.fileUID.String()] = true
 				continue
 			}
 			if summaryErr != nil {
 				filesFailed[wf.fileUID.String()] = handleFileError(wf.fileUID, "process summary workflow", summaryErr)
+				callPostFileFailure("process summary", summaryErr, nil)
 				filesCompleted[wf.fileUID.String()] = true
 				continue
 			}
@@ -808,29 +857,20 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			// Each can be a pipeline name (e.g., "instill-ai/indexing-generate-content@v1.4.0") or empty if AI client was used
 			pipelines := []string{contentResult.Pipeline, summaryResult.Pipeline}
 			if err := workflow.ExecuteActivity(ctx, w.UpdateConversionMetadataActivity, &UpdateConversionMetadataActivityParam{
-				FileUID:   wf.fileUID,
-				Length:    contentResult.Length,
-				Pipelines: pipelines,
+				FileUID:         wf.fileUID,
+				Length:          contentResult.Length,
+				PageCount:       contentResult.PageCount,
+				DurationSeconds: fileDurationSec[wf.fileUID.String()],
+				Pipelines:       pipelines,
 			}).Get(ctx, nil); err != nil {
 				filesFailed[wf.fileUID.String()] = handleFileError(wf.fileUID, "update conversion metadata", err)
+				callPostFileFailure("update conversion metadata", err, nil)
 				filesCompleted[wf.fileUID.String()] = true
 				continue
 			}
 
-			// Update usage metadata (token counts from AI processing)
-			// Store the usage metadata from both content and summary for later retrieval
-			// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
-			if err := workflow.ExecuteActivity(ctx, w.UpdateUsageMetadataActivity, &UpdateUsageMetadataActivityParam{
-				FileUID:         wf.fileUID,
-				ContentMetadata: contentResult.UsageMetadata,
-				SummaryMetadata: summaryResult.UsageMetadata,
-			}).Get(ctx, nil); err != nil {
-				// Non-fatal error - log warning and continue
-				// Usage metadata is for billing/monitoring, not critical for file processing
-				logger.Warn("Failed to update usage metadata (continuing anyway)",
-					"fileUID", wf.fileUID.String(),
-					"error", err.Error())
-			}
+			// Note: Usage metadata (content + summary + embedding) is updated after embedding phase completes.
+			// This allows us to collect all three sources of usage metadata in a single write.
 
 			// Step 2d: Process chunking and embedding for this file
 			fileUID := wf.fileUID
@@ -850,6 +890,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				FileUID: fileUID,
 			}).Get(ctx, nil); err != nil {
 				filesFailed[fileUID.String()] = handleFileError(fileUID, "delete old text chunks", err)
+				callPostFileFailure("delete old text chunks", err, nil)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -865,6 +906,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				PositionData: contentResult.PositionData,    // Pass position data from content processing
 			}).Get(ctx, &contentChunks); err != nil {
 				filesFailed[fileUID.String()] = handleFileError(fileUID, "chunk content", err)
+				callPostFileFailure("chunk content", err, nil)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -877,6 +919,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				ConvertedFileUID: contentResult.ConvertedFileUID, // Use UID from ProcessContentActivity
 			}).Get(ctx, nil); err != nil {
 				filesFailed[fileUID.String()] = handleFileError(fileUID, "save content chunks", err)
+				callPostFileFailure("save content chunks", err, nil)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -897,6 +940,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					PositionData: summaryResult.PositionData,    // Pass position data from summary processing
 				}).Get(ctx, &summaryChunks); err != nil {
 					filesFailed[fileUID.String()] = handleFileError(fileUID, "chunk summary", err)
+					callPostFileFailure("chunk summary", err, nil)
 					filesCompleted[fileUID.String()] = true
 					continue
 				}
@@ -909,6 +953,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					ConvertedFileUID: summaryResult.ConvertedFileUID, // Summary chunks reference summary converted_file
 				}).Get(ctx, nil); err != nil {
 					filesFailed[fileUID.String()] = handleFileError(fileUID, "save summary chunks", err)
+					callPostFileFailure("save summary chunks", err, nil)
 					filesCompleted[fileUID.String()] = true
 					continue
 				}
@@ -949,6 +994,15 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Metadata: wf.conversionData.fileMetadata.metadata.ExternalMetadata,
 			}).Get(embedCtx, &embedResult); err != nil {
 				filesFailed[fileUID.String()] = handleFileError(fileUID, "embed and save chunks", err)
+				callPostFileFailure("embed and save chunks", err, nil)
+				filesCompleted[fileUID.String()] = true
+				continue
+			}
+			// Check for activity-level post-LLM error (embedding succeeded but save failed).
+			if embedResult.Error != "" {
+				embedErr := fmt.Errorf("%s", embedResult.Error)
+				filesFailed[fileUID.String()] = handleFileError(fileUID, "embed and save chunks", embedErr)
+				callPostFileFailure("embed and save chunks", embedErr, &embedResult)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
@@ -966,8 +1020,25 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Pipeline: embedResult.Pipeline,
 			}).Get(ctx, nil); err != nil {
 				filesFailed[fileUID.String()] = handleFileError(fileUID, "update embedding metadata", err)
+				callPostFileFailure("update embedding metadata", err, &embedResult)
 				filesCompleted[fileUID.String()] = true
 				continue
+			}
+
+			// Update usage metadata (token counts from all AI processing phases)
+			// Store the usage metadata from content, summary, and embedding for monitoring
+			// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
+			if err := workflow.ExecuteActivity(ctx, w.UpdateUsageMetadataActivity, &UpdateUsageMetadataActivityParam{
+				FileUID:           fileUID,
+				ContentMetadata:   contentResult.UsageMetadata,
+				SummaryMetadata:   summaryResult.UsageMetadata,
+				EmbeddingMetadata: embedResult.UsageMetadata,
+			}).Get(ctx, nil); err != nil {
+				// Non-fatal error - log warning and continue
+				// Usage metadata is for monitoring, not critical for file processing
+				logger.Warn("Failed to update usage metadata (continuing anyway)",
+					"fileUID", fileUID.String(),
+					"error", err.Error())
 			}
 
 			// IMPORTANT: Execute post-completion logic BEFORE marking as COMPLETED
@@ -976,8 +1047,33 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			if w.postFileCompletion != nil {
 				effectiveFileType := wf.conversionData.effectiveFileType
 				file := wf.conversionData.fileMetadata.metadata.File
-				if err := w.postFileCompletion(ctx, file, effectiveFileType); err != nil {
-					filesFailed[fileUID.String()] = handleFileError(fileUID, "credit subtraction", err)
+
+				durationSec := fileDurationSec[fileUID.String()]
+				if len(contentResult.Length) > 0 || durationSec > 0 || contentResult.PageCount > 0 {
+					if file.ExtraMetaDataUnmarshal == nil {
+						file.ExtraMetaDataUnmarshal = &repository.ExtraMetaData{}
+					}
+					if len(contentResult.Length) > 0 {
+						file.ExtraMetaDataUnmarshal.Length = contentResult.Length
+					}
+					if contentResult.PageCount > 0 {
+						file.ExtraMetaDataUnmarshal.PageCount = contentResult.PageCount
+					}
+					if durationSec > 0 {
+						file.ExtraMetaDataUnmarshal.DurationSeconds = durationSec
+					}
+				}
+				completionUsageData := &FileProcessingUsageData{
+					ContentUsageMetadata:   contentResult.UsageMetadata,
+					ContentModel:           contentResult.Model,
+					SummaryUsageMetadata:   summaryResult.UsageMetadata,
+					SummaryModel:           summaryResult.Model,
+					EmbeddingUsageMetadata: embedResult.UsageMetadata,
+					EmbeddingModel:         embedResult.Model,
+				}
+				if err := w.postFileCompletion(ctx, file, effectiveFileType, completionUsageData); err != nil {
+					filesFailed[fileUID.String()] = handleFileError(fileUID, "post-completion hook", err)
+					callPostFileFailure("post-completion hook", err, &embedResult)
 					filesCompleted[fileUID.String()] = true
 					continue
 				}
@@ -991,6 +1087,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Message: "File processing completed successfully",
 			}).Get(ctx, nil); err != nil {
 				filesFailed[fileUID.String()] = handleFileError(fileUID, "update final status", err)
+				callPostFileFailure("update final status", err, &embedResult)
 				filesCompleted[fileUID.String()] = true
 				continue
 			}

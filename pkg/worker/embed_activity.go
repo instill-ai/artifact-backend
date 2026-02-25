@@ -79,6 +79,11 @@ type EmbedAndSaveChunksActivityResult struct {
 	ChunkCount     int    // Number of chunks processed
 	EmbeddingCount int    // Number of embeddings saved
 	Pipeline       string // Pipeline used (e.g., "preset/indexing-embed@v1.0.0" for OpenAI, empty for AI client)
+	Model          string // Embedding model used (e.g., "text-embedding-004")
+	UsageMetadata  any    // Token/character usage from embedding API (nil for OpenAI pipeline route)
+	// Error is set when the embedding generation succeeded but post-processing failed.
+	// UsageMetadata is still valid for usage tracking. Empty means success.
+	Error string
 }
 
 // EmbedAndSaveChunksActivity is a combined activity that:
@@ -205,7 +210,7 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 		w.log.Info("Using AI client route for embeddings",
 			zap.String("modelFamily", kb.SystemConfig.RAG.Embedding.ModelFamily))
 
-		vectors, err = ai.EmbedTexts(
+		embedResult, embedErr := ai.EmbedTexts(
 			authCtx,
 			w.aiClient,
 			kb.SystemConfig.RAG.Embedding.ModelFamily,
@@ -213,13 +218,16 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 			texts,
 			taskType,
 		)
-		if err != nil {
+		if embedErr != nil {
 			w.log.Error("Failed to embed texts",
 				zap.Int("textCount", len(texts)),
-				zap.Error(err))
-			err = errorsx.AddMessage(err, "Unable to generate embeddings. Please try again.")
-			return nil, activityError(err, embedAndSaveChunksActivityError)
+				zap.Error(embedErr))
+			embedErr = errorsx.AddMessage(embedErr, "Unable to generate embeddings. Please try again.")
+			return nil, activityError(embedErr, embedAndSaveChunksActivityError)
 		}
+		vectors = embedResult.Vectors
+		result.UsageMetadata = embedResult.UsageMetadata
+		result.Model = embedResult.Model
 	}
 
 	w.log.Info("Embedding generation completed",
@@ -252,6 +260,12 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 	// Get collection name for vector DB operations
 	activeCollectionUID := kb.ActiveCollectionUID
 	if activeCollectionUID.IsNil() {
+		// Post-LLM failure: embeddings were generated but can't be saved.
+		// Preserve UsageMetadata for token tracking.
+		if result.UsageMetadata != nil {
+			result.Error = "Knowledge base has no active collection. Please try again."
+			return result, nil
+		}
 		err := errorsx.AddMessage(fmt.Errorf("active collection UID is nil"), "Knowledge base has no active collection. Please try again.")
 		return nil, activityError(err, embedAndSaveChunksActivityError)
 	}
@@ -260,6 +274,10 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 	// Delete from VectorDB
 	if err := w.repository.DeleteEmbeddingsWithFileUID(ctx, collection, param.FileUID); err != nil {
 		w.log.Error("Failed to delete old embeddings from VectorDB", zap.Error(err))
+		if result.UsageMetadata != nil {
+			result.Error = fmt.Sprintf("Unable to delete old embeddings from vector database: %s", errorsx.MessageOrErr(err))
+			return result, nil
+		}
 		return nil, activityErrorWithMessage(
 			"Unable to delete old embeddings from vector database. Please try again.",
 			embedAndSaveChunksActivityError,
@@ -270,6 +288,10 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 	// Delete from PostgreSQL
 	if err := w.repository.DeleteEmbeddingsByKBFileUID(ctx, param.FileUID); err != nil {
 		w.log.Error("Failed to delete old embeddings from DB", zap.Error(err))
+		if result.UsageMetadata != nil {
+			result.Error = fmt.Sprintf("Unable to delete old embeddings from database: %s", errorsx.MessageOrErr(err))
+			return result, nil
+		}
 		return nil, activityErrorWithMessage(
 			"Unable to delete old embeddings from database. Please try again.",
 			embedAndSaveChunksActivityError,
@@ -327,6 +349,10 @@ func (w *Worker) EmbedAndSaveChunksActivity(ctx context.Context, param *EmbedAnd
 				zap.Int("batchNumber", i+1),
 				zap.Int("totalBatches", totalBatches),
 				zap.Error(err))
+			if result.UsageMetadata != nil {
+				result.Error = fmt.Sprintf("Unable to save embedding batch %d/%d: %s", i+1, totalBatches, errorsx.MessageOrErr(err))
+				return result, nil
+			}
 			return nil, activityErrorWithMessage(
 				fmt.Sprintf("Unable to save embedding batch %d/%d. Please try again.", i+1, totalBatches),
 				embedAndSaveChunksActivityError,
