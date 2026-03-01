@@ -113,6 +113,7 @@ ifeq ($(CI),true)
 		integration-test/rest-kb-e2e-file-process.js \
 		integration-test/rest-file-reprocess.js \
 		integration-test/rest-kb-delete.js \
+		integration-test/rest-file-dedup.js \
 		integration-test/rest-namespace-permission.js \
 		integration-test/grpc.js \
 		integration-test/grpc-kb-update.js \
@@ -140,7 +141,8 @@ else
 		integration-test/rest.js \
 		integration-test/rest-object-storage.js \
 		integration-test/rest-hash-based-ids.js \
-		integration-test/rest-invariants.js 2>&1 | tee -a /tmp/artifact-integration-test.log
+		integration-test/rest-invariants.js \
+		integration-test/rest-file-dedup.js 2>&1 | tee -a /tmp/artifact-integration-test.log
 	# Batch 2: File processing tests (heavy AI workload)
 	@parallel --halt now,fail=1 --tag --line-buffer \
 		"TEST_FOLDER_ABS_PATH=${PWD} k6 run --address=\"\" \

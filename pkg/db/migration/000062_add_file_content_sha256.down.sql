@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_file_content_sha256;
+ALTER TABLE file DROP COLUMN IF EXISTS content_sha256;

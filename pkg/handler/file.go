@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,8 +15,10 @@ import (
 
 	"go.einride.tech/aip/filtering"
 	"go.uber.org/zap"
-	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -32,6 +36,7 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 	filetype "github.com/instill-ai/x/file"
 	logx "github.com/instill-ai/x/log"
+	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 )
 
 // filterRequestWrapper implements filtering.Request interface to pass a custom filter string
@@ -312,6 +317,13 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 
 		fileSize, _ := getFileSize(req.File.Content)
 		kbFile.Size = fileSize
+
+		// Compute SHA256 of decoded content for deduplication
+		decodedForHash, err := base64.StdEncoding.DecodeString(req.File.Content)
+		if err == nil {
+			hash := sha256.Sum256(decodedForHash)
+			kbFile.ContentSHA256 = hex.EncodeToString(hash[:])
+		}
 	} else {
 		// Parse object resource name: namespaces/{namespace}/objects/{object_id}
 		objectResourceName := req.GetFile().GetObject()
@@ -390,6 +402,17 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		}
 
 		kbFile.FileType = req.File.Type.String()
+
+		// Compute SHA256 of object content for deduplication
+		if kbFile.ContentSHA256 == "" {
+			fileBytes, err := ph.service.Repository().GetMinIOStorage().GetFile(ctx, object.BlobBucketName, obj.StoragePath)
+			if err == nil && len(fileBytes) > 0 {
+				hash := sha256.Sum256(fileBytes)
+				kbFile.ContentSHA256 = hex.EncodeToString(hash[:])
+			} else if err != nil {
+				logger.Warn("failed to read object for SHA256 computation", zap.Error(err))
+			}
+		}
 	}
 
 	maxSizeBytes := service.MaxUploadFileSizeMB << 10 << 10
@@ -397,6 +420,39 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		err := fmt.Errorf("%w: max file size exceeded", errorsx.ErrInvalidArgument)
 		msg := fmt.Sprintf("Uploaded files can not exceed %d MB.", service.MaxUploadFileSizeMB)
 		return nil, errorsx.AddMessage(err, msg)
+	}
+
+	// Duplicate content check: block uploads with identical SHA256 hash
+	if kbFile.ContentSHA256 != "" {
+		existingFile, err := ph.service.Repository().GetFileByContentSHA256(ctx, kbFile.ContentSHA256)
+		if err != nil {
+			logger.Warn("failed to check for duplicate file content", zap.Error(err))
+		} else if existingFile != nil {
+			existingNsID := namespaceID
+
+			// Resolve the KB ID for the link
+			existingKBID := ""
+			kbUIDs, _ := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, existingFile.UID)
+			if len(kbUIDs) > 0 {
+				existingKB, _ := ph.service.Repository().GetKnowledgeBaseByUID(ctx, kbUIDs[0])
+				if existingKB != nil {
+					existingKBID = existingKB.ID
+				}
+			}
+
+			st := status.New(codes.AlreadyExists, "A file with identical content already exists. Duplicate uploads are not allowed.")
+			st, _ = st.WithDetails(&errdetails.ErrorInfo{
+				Reason: "DUPLICATE_FILE_CONTENT",
+				Domain: "artifact.instill.tech",
+				Metadata: map[string]string{
+					"existing_file_name":         existingFile.DisplayName,
+					"existing_file_id":           existingFile.ID,
+					"existing_namespace_id":      existingNsID,
+					"existing_knowledge_base_id": existingKBID,
+				},
+			})
+			return nil, st.Err()
+		}
 	}
 
 	// create knowledge base file in database

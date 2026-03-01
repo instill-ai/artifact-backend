@@ -106,6 +106,10 @@ type File interface {
 	// Returns files, next page token, total count, and error.
 	ListKnowledgeBaseFilesAdmin(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) ([]FileModel, string, int32, error)
 
+	// GetFileByContentSHA256 returns a non-deleted file matching the given SHA256 hash.
+	// Returns nil with no error if no match is found.
+	GetFileByContentSHA256(ctx context.Context, sha256 string) (*FileModel, error)
+
 	// Deprecated methods
 
 	// GetFileByKBUIDAndFileID returns the file by
@@ -164,6 +168,8 @@ type FileModel struct {
 	UsageMetadata string `gorm:"column:usage_metadata;type:jsonb" json:"usage_metadata"`
 	// This field is not stored in the database. It is used to unmarshal the UsageMetadata field
 	UsageMetadataUnmarshal *UsageMetadata `gorm:"-" json:"usage_metadata_unmarshal"`
+	// SHA256 hash of the file content for deduplication
+	ContentSHA256 string `gorm:"column:content_sha256;size:64" json:"content_sha256"`
 }
 
 // TableName overrides the default table name for GORM
@@ -1364,6 +1370,22 @@ func (r *repository) GetFileByKBUIDAndFileID(ctx context.Context, kbUID types.KB
 			return nil, fmt.Errorf("file not found by knowledge base ID: %v and file ID: %v", kbUID, fileID)
 		}
 		return nil, err
+	}
+	return &file, nil
+}
+
+// GetFileByContentSHA256 returns a non-deleted file matching the given SHA256 hash.
+// Returns nil with no error if no match is found. Used for content-based deduplication.
+func (r *repository) GetFileByContentSHA256(ctx context.Context, sha256 string) (*FileModel, error) {
+	var file FileModel
+	err := r.db.WithContext(ctx).
+		Where("content_sha256 = ? AND delete_time IS NULL", sha256).
+		First(&file).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("querying file by content SHA256: %w", err)
 	}
 	return &file, nil
 }
