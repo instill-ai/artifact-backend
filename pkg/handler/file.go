@@ -2452,7 +2452,8 @@ func getPositionUnit(fileType artifactpb.File_Type) artifactpb.File_Position_Uni
 	case artifactpb.File_TYPE_TEXT,
 		artifactpb.File_TYPE_MARKDOWN,
 		artifactpb.File_TYPE_HTML,
-		artifactpb.File_TYPE_CSV:
+		artifactpb.File_TYPE_CSV,
+		artifactpb.File_TYPE_JSON:
 		return artifactpb.File_Position_UNIT_CHARACTER
 	case artifactpb.File_TYPE_PDF,
 		artifactpb.File_TYPE_DOCX,

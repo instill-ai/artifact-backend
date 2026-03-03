@@ -280,6 +280,7 @@ func getInputVariableName(fileType artifactpb.File_Type) string {
 		artifactpb.File_TYPE_BMP,
 		artifactpb.File_TYPE_TIFF,
 		artifactpb.File_TYPE_AVIF,
+		artifactpb.File_TYPE_SVG,
 		artifactpb.File_TYPE_JPEG,
 		artifactpb.File_TYPE_WEBP,
 		artifactpb.File_TYPE_HEIC,
@@ -314,7 +315,8 @@ func getInputVariableName(fileType artifactpb.File_Type) string {
 		artifactpb.File_TYPE_HTML,
 		artifactpb.File_TYPE_TEXT,
 		artifactpb.File_TYPE_MARKDOWN,
-		artifactpb.File_TYPE_CSV:
+		artifactpb.File_TYPE_CSV,
+		artifactpb.File_TYPE_JSON:
 		return "document"
 	default:
 		return ""

@@ -343,7 +343,6 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	}
 
 	if hasNativeBM25 {
-		// Native Milvus BM25: Just insert the raw text, Milvus auto-generates sparse vectors
 		texts := make([]string, len(embeddings))
 		for i, emb := range embeddings {
 			texts[i] = emb.Text

@@ -160,6 +160,9 @@ export const imageSampleAvif = encoding.b64encode(
 export const imageSampleBmp = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/img-sample.bmp`, "b")
 );
+export const imageSampleSvg = encoding.b64encode(
+  open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/img-sample.svg`, "b")
+);
 
 // Test audio sample data files
 export const audioSampleMp3 = encoding.b64encode(
@@ -240,6 +243,7 @@ export const sampleFiles = [
   { originalName: "img-sample.heif", type: "TYPE_HEIF", content: imageSampleHeif },
   { originalName: "img-sample.avif", type: "TYPE_AVIF", content: imageSampleAvif },
   { originalName: "img-sample.bmp", type: "TYPE_BMP", content: imageSampleBmp },
+  { originalName: "img-sample.svg", type: "TYPE_SVG", content: imageSampleSvg },
   { originalName: "audio-sample.mp3", type: "TYPE_MP3", content: audioSampleMp3 },
   { originalName: "audio-sample.wav", type: "TYPE_WAV", content: audioSampleWav },
   { originalName: "audio-sample.aac", type: "TYPE_AAC", content: audioSampleAac },

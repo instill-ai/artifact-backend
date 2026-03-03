@@ -1012,7 +1012,7 @@ export function getStandardFileExtension(fileType) {
     "TYPE_HEIC": "heic", "TYPE_HEIF": "heif"
   };
   if (geminiNativeImages[fileType]) return geminiNativeImages[fileType];
-  const convertibleImages = ["TYPE_GIF", "TYPE_BMP", "TYPE_TIFF", "TYPE_AVIF"];
+  const convertibleImages = ["TYPE_GIF", "TYPE_BMP", "TYPE_TIFF", "TYPE_AVIF", "TYPE_SVG"];
   if (convertibleImages.includes(fileType)) return 'png';
 
   // Audio - Gemini-native formats (WAV, MP3, AIFF, AAC, OGG, FLAC) keep original extension

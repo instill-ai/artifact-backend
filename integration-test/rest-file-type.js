@@ -29,7 +29,7 @@ function getExpectedFormatInfo(fileType) {
     "TYPE_HEIF": { format: "HEIF", mimeType: "image/heif" },
   };
   if (geminiNativeImages[fileType]) return geminiNativeImages[fileType];
-  const convertibleImages = ["TYPE_GIF", "TYPE_BMP", "TYPE_TIFF", "TYPE_AVIF"];
+  const convertibleImages = ["TYPE_GIF", "TYPE_BMP", "TYPE_TIFF", "TYPE_AVIF", "TYPE_SVG"];
   if (convertibleImages.includes(fileType)) {
     return { format: "PNG", mimeType: "image/png" };
   }
@@ -119,7 +119,7 @@ export let options = {
       test_type_xlsx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_XLSX_INFERRED', startTime: '19s' },
       test_type_doc_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOC_INFERRED', startTime: '20s' },
       test_type_docx_inferred: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_DOCX_INFERRED', startTime: '21s' },
-      // Image file types (22-32s stagger)
+      // Image file types (22-33s stagger)
       test_type_png: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_PNG', startTime: '22s' },
       test_type_jpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPEG', startTime: '23s' },
       test_type_jpg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_JPG', startTime: '24s' },
@@ -131,26 +131,27 @@ export let options = {
       test_type_heif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_HEIF', startTime: '30s' },
       test_type_avif: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVIF', startTime: '31s' },
       test_type_bmp: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_BMP', startTime: '32s' },
-      // Audio file types (33-40s stagger)
-      test_type_wav: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WAV', startTime: '33s' },
-      test_type_aac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AAC', startTime: '34s' },
-      test_type_ogg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_OGG', startTime: '35s' },
-      test_type_flac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLAC', startTime: '36s' },
-      test_type_aiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AIFF', startTime: '37s' },
-      test_type_m4a: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_M4A', startTime: '38s' },
-      test_type_wma: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMA', startTime: '39s' },
-      test_type_webm_audio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_AUDIO', startTime: '40s' },
-      // Video file types (41-48s stagger)
-      test_type_mp4: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP4', startTime: '41s' },
-      test_type_mkv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MKV', startTime: '42s' },
-      test_type_avi: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVI', startTime: '43s' },
-      test_type_mov: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MOV', startTime: '44s' },
-      test_type_flv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLV', startTime: '45s' },
-      test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV', startTime: '46s' },
-      test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG', startTime: '47s' },
-      test_type_webm_video: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO', startTime: '48s' },
-      // Regression test: Verify process_status is always string enum, never integer (49s)
-      test_process_status_format: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_PROCESS_STATUS_FORMAT', startTime: '49s' },
+      test_type_svg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_SVG', startTime: '33s' },
+      // Audio file types (34-41s stagger)
+      test_type_wav: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WAV', startTime: '34s' },
+      test_type_aac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AAC', startTime: '35s' },
+      test_type_ogg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_OGG', startTime: '36s' },
+      test_type_flac: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLAC', startTime: '37s' },
+      test_type_aiff: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AIFF', startTime: '38s' },
+      test_type_m4a: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_M4A', startTime: '39s' },
+      test_type_wma: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMA', startTime: '40s' },
+      test_type_webm_audio: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_AUDIO', startTime: '41s' },
+      // Video file types (42-49s stagger)
+      test_type_mp4: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MP4', startTime: '42s' },
+      test_type_mkv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MKV', startTime: '43s' },
+      test_type_avi: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_AVI', startTime: '44s' },
+      test_type_mov: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MOV', startTime: '45s' },
+      test_type_flv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_FLV', startTime: '46s' },
+      test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV', startTime: '47s' },
+      test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG', startTime: '48s' },
+      test_type_webm_video: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO', startTime: '49s' },
+      // Regression test: Verify process_status is always string enum, never integer (50s)
+      test_process_status_format: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_PROCESS_STATUS_FORMAT', startTime: '50s' },
     },
   }),
 };
@@ -195,6 +196,7 @@ export default function (data) {
   TEST_TYPE_HEIF(data);
   TEST_TYPE_AVIF(data);
   TEST_TYPE_BMP(data);
+  TEST_TYPE_SVG(data);
   // Audio file types
   TEST_TYPE_WAV(data);
   TEST_TYPE_AAC(data);
@@ -326,6 +328,7 @@ export function TEST_TYPE_HEIC(data) { runFileTest(data, { originalName: "img-sa
 export function TEST_TYPE_HEIF(data) { runFileTest(data, { originalName: "img-sample.heif", fileType: "TYPE_HEIF" }); }
 export function TEST_TYPE_AVIF(data) { runFileTest(data, { originalName: "img-sample.avif", fileType: "TYPE_AVIF" }); }
 export function TEST_TYPE_BMP(data) { runFileTest(data, { originalName: "img-sample.bmp", fileType: "TYPE_BMP" }); }
+export function TEST_TYPE_SVG(data) { runFileTest(data, { originalName: "img-sample.svg", fileType: "TYPE_SVG" }); }
 
 // Audio file types
 export function TEST_TYPE_MP3(data) { runFileTest(data, { originalName: "audio-sample.mp3", fileType: "TYPE_MP3" }); }

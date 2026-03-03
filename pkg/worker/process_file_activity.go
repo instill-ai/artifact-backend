@@ -706,27 +706,20 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 
 	// Check if we have position data (passed from ProcessContent/ProcessSummary activities)
 	if param.PositionData == nil || len(param.PositionData.PageDelimiters) == 0 {
-		w.log.Info("ChunkContentActivity: No page delimiters, treating entire file as single chunk")
-		// For non-paginated files (TXT, MD, CSV, HTML), treat entire content as one chunk
-		// TODO: Replace EstimateTokenCount with actual AI token count from CountTokens API
-		// This estimation is inaccurate and should be replaced with actual token counts from the AI model
-		// For now, we use a simple heuristic: 1 token ≈ 4 characters
-		tokens := ai.EstimateTokenCount(param.Content)
-		chunk := types.Chunk{
-			Text:   param.Content,
-			Start:  0,
-			End:    len(param.Content),
-			Tokens: tokens,
-			Reference: &types.ChunkReference{
-				PageRange: [2]uint32{1, 1}, // Treat as single-page file
-			},
-			Type: param.Type, // Set type (chunk or summary)
-		}
-		w.log.Info("ChunkContentActivity: Created single chunk",
+		w.log.Info("ChunkContentActivity: No page delimiters, splitting non-paginated content")
+
+		// Milvus varchar fields are capped at 65 535 chars. Split large
+		// non-paginated files (TXT, MD, CSV, HTML) into multiple chunks so
+		// no content is lost during indexing.
+		const maxChunkChars = 65535
+
+		chunks := splitTextIntoChunks(param.Content, maxChunkChars, param.Type)
+
+		w.log.Info("ChunkContentActivity: Created chunks from non-paginated content",
 			zap.Int("contentLength", len(param.Content)),
-			zap.Int("tokens", tokens))
+			zap.Int("chunkCount", len(chunks)))
 		return &ChunkContentActivityResult{
-			Chunks: []types.Chunk{chunk},
+			Chunks: chunks,
 		}, nil
 	}
 
@@ -811,6 +804,57 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 	return &ChunkContentActivityResult{
 		Chunks: chunks,
 	}, nil
+}
+
+// splitTextIntoChunks splits content into chunks that each stay under
+// maxChars characters. It tries to break at newline boundaries first; if a
+// single line exceeds maxChars the line is hard-split at the limit.
+func splitTextIntoChunks(content string, maxChars int, chunkType artifactpb.Chunk_Type) []types.Chunk {
+	if len(content) <= maxChars {
+		tokens := ai.EstimateTokenCount(content)
+		return []types.Chunk{{
+			Text:   content,
+			Start:  0,
+			End:    len(content),
+			Tokens: tokens,
+			Reference: &types.ChunkReference{
+				PageRange: [2]uint32{1, 1},
+			},
+			Type: chunkType,
+		}}
+	}
+
+	var chunks []types.Chunk
+	pos := 0
+
+	for pos < len(content) {
+		end := pos + maxChars
+		if end >= len(content) {
+			end = len(content)
+		} else {
+			// Try to break at the last newline within the window.
+			if idx := strings.LastIndex(content[pos:end], "\n"); idx > 0 {
+				end = pos + idx + 1 // include the newline in this chunk
+			}
+		}
+
+		text := content[pos:end]
+		tokens := ai.EstimateTokenCount(text)
+		pageNum := uint32(len(chunks) + 1)
+		chunks = append(chunks, types.Chunk{
+			Text:   text,
+			Start:  pos,
+			End:    end,
+			Tokens: tokens,
+			Reference: &types.ChunkReference{
+				PageRange: [2]uint32{pageNum, pageNum},
+			},
+			Type: chunkType,
+		})
+		pos = end
+	}
+
+	return chunks
 }
 
 // DeleteOldTextChunksActivityParam for deleting old chunk DB records
@@ -1585,7 +1629,8 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 	if param.FileType == artifactpb.File_TYPE_TEXT ||
 		param.FileType == artifactpb.File_TYPE_MARKDOWN ||
 		param.FileType == artifactpb.File_TYPE_CSV ||
-		param.FileType == artifactpb.File_TYPE_HTML {
+		param.FileType == artifactpb.File_TYPE_HTML ||
+		param.FileType == artifactpb.File_TYPE_JSON {
 		logger.Info("Text-based file - using content as-is (no AI conversion needed)",
 			zap.String("fileType", param.FileType.String()))
 		contentInMarkdown = string(rawFileContent)
