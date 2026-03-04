@@ -398,6 +398,9 @@ func (r *repository) CreateKnowledgeBase(ctx context.Context, kb KnowledgeBaseMo
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return fmt.Errorf("knowledge base ID not found: %v, err:%w", kb.ID, gorm.ErrRecordNotFound)
 			}
+			if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+				return fmt.Errorf("knowledge base with slug %q already exists in namespace: %w", kb.Slug, errorsx.ErrAlreadyExists)
+			}
 			return err
 		}
 

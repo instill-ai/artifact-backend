@@ -187,9 +187,9 @@ type ServiceMock struct {
 	beforeGetNamespaceByNsIDCounter uint64
 	GetNamespaceByNsIDMock          mServiceMockGetNamespaceByNsID
 
-	funcGetObject          func(ctx context.Context, n1 types.NamespaceUIDType, s1 string) (op1 *artifactpb.Object, err error)
+	funcGetObject          func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string) (op1 *artifactpb.Object, err error)
 	funcGetObjectOrigin    string
-	inspectFuncGetObject   func(ctx context.Context, n1 types.NamespaceUIDType, s1 string)
+	inspectFuncGetObject   func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string)
 	afterGetObjectCounter  uint64
 	beforeGetObjectCounter uint64
 	GetObjectMock          mServiceMockGetObject
@@ -313,9 +313,9 @@ type ServiceMock struct {
 	beforeSetRollbackRetentionAdminCounter uint64
 	SetRollbackRetentionAdminMock          mServiceMockSetRollbackRetentionAdmin
 
-	funcUpdateObject          func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) (op2 *artifactpb.Object, err error)
+	funcUpdateObject          func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) (op2 *artifactpb.Object, err error)
 	funcUpdateObjectOrigin    string
-	inspectFuncUpdateObject   func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask)
+	inspectFuncUpdateObject   func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask)
 	afterUpdateObjectCounter  uint64
 	beforeUpdateObjectCounter uint64
 	UpdateObjectMock          mServiceMockUpdateObject
@@ -8785,6 +8785,7 @@ type ServiceMockGetObjectParams struct {
 	ctx context.Context
 	n1  types.NamespaceUIDType
 	s1  string
+	s2  string
 }
 
 // ServiceMockGetObjectParamPtrs contains pointers to parameters of the Service.GetObject
@@ -8792,6 +8793,7 @@ type ServiceMockGetObjectParamPtrs struct {
 	ctx *context.Context
 	n1  *types.NamespaceUIDType
 	s1  *string
+	s2  *string
 }
 
 // ServiceMockGetObjectResults contains results of the Service.GetObject
@@ -8806,6 +8808,7 @@ type ServiceMockGetObjectExpectationOrigins struct {
 	originCtx string
 	originN1  string
 	originS1  string
+	originS2  string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -8819,7 +8822,7 @@ func (mmGetObject *mServiceMockGetObject) Optional() *mServiceMockGetObject {
 }
 
 // Expect sets up expected params for Service.GetObject
-func (mmGetObject *mServiceMockGetObject) Expect(ctx context.Context, n1 types.NamespaceUIDType, s1 string) *mServiceMockGetObject {
+func (mmGetObject *mServiceMockGetObject) Expect(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string) *mServiceMockGetObject {
 	if mmGetObject.mock.funcGetObject != nil {
 		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Set")
 	}
@@ -8832,7 +8835,7 @@ func (mmGetObject *mServiceMockGetObject) Expect(ctx context.Context, n1 types.N
 		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by ExpectParams functions")
 	}
 
-	mmGetObject.defaultExpectation.params = &ServiceMockGetObjectParams{ctx, n1, s1}
+	mmGetObject.defaultExpectation.params = &ServiceMockGetObjectParams{ctx, n1, s1, s2}
 	mmGetObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmGetObject.expectations {
 		if minimock.Equal(e.params, mmGetObject.defaultExpectation.params) {
@@ -8912,8 +8915,31 @@ func (mmGetObject *mServiceMockGetObject) ExpectS1Param3(s1 string) *mServiceMoc
 	return mmGetObject
 }
 
+// ExpectS2Param4 sets up expected param s2 for Service.GetObject
+func (mmGetObject *mServiceMockGetObject) ExpectS2Param4(s2 string) *mServiceMockGetObject {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &ServiceMockGetObjectExpectation{}
+	}
+
+	if mmGetObject.defaultExpectation.params != nil {
+		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Expect")
+	}
+
+	if mmGetObject.defaultExpectation.paramPtrs == nil {
+		mmGetObject.defaultExpectation.paramPtrs = &ServiceMockGetObjectParamPtrs{}
+	}
+	mmGetObject.defaultExpectation.paramPtrs.s2 = &s2
+	mmGetObject.defaultExpectation.expectationOrigins.originS2 = minimock.CallerInfo(1)
+
+	return mmGetObject
+}
+
 // Inspect accepts an inspector function that has same arguments as the Service.GetObject
-func (mmGetObject *mServiceMockGetObject) Inspect(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string)) *mServiceMockGetObject {
+func (mmGetObject *mServiceMockGetObject) Inspect(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string)) *mServiceMockGetObject {
 	if mmGetObject.mock.inspectFuncGetObject != nil {
 		mmGetObject.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetObject")
 	}
@@ -8938,7 +8964,7 @@ func (mmGetObject *mServiceMockGetObject) Return(op1 *artifactpb.Object, err err
 }
 
 // Set uses given function f to mock the Service.GetObject method
-func (mmGetObject *mServiceMockGetObject) Set(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string) (op1 *artifactpb.Object, err error)) *ServiceMock {
+func (mmGetObject *mServiceMockGetObject) Set(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string) (op1 *artifactpb.Object, err error)) *ServiceMock {
 	if mmGetObject.defaultExpectation != nil {
 		mmGetObject.mock.t.Fatalf("Default expectation is already set for the Service.GetObject method")
 	}
@@ -8954,14 +8980,14 @@ func (mmGetObject *mServiceMockGetObject) Set(f func(ctx context.Context, n1 typ
 
 // When sets expectation for the Service.GetObject which will trigger the result defined by the following
 // Then helper
-func (mmGetObject *mServiceMockGetObject) When(ctx context.Context, n1 types.NamespaceUIDType, s1 string) *ServiceMockGetObjectExpectation {
+func (mmGetObject *mServiceMockGetObject) When(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string) *ServiceMockGetObjectExpectation {
 	if mmGetObject.mock.funcGetObject != nil {
 		mmGetObject.mock.t.Fatalf("ServiceMock.GetObject mock is already set by Set")
 	}
 
 	expectation := &ServiceMockGetObjectExpectation{
 		mock:               mmGetObject.mock,
-		params:             &ServiceMockGetObjectParams{ctx, n1, s1},
+		params:             &ServiceMockGetObjectParams{ctx, n1, s1, s2},
 		expectationOrigins: ServiceMockGetObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmGetObject.expectations = append(mmGetObject.expectations, expectation)
@@ -8996,17 +9022,17 @@ func (mmGetObject *mServiceMockGetObject) invocationsDone() bool {
 }
 
 // GetObject implements mm_service.Service
-func (mmGetObject *ServiceMock) GetObject(ctx context.Context, n1 types.NamespaceUIDType, s1 string) (op1 *artifactpb.Object, err error) {
+func (mmGetObject *ServiceMock) GetObject(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string) (op1 *artifactpb.Object, err error) {
 	mm_atomic.AddUint64(&mmGetObject.beforeGetObjectCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetObject.afterGetObjectCounter, 1)
 
 	mmGetObject.t.Helper()
 
 	if mmGetObject.inspectFuncGetObject != nil {
-		mmGetObject.inspectFuncGetObject(ctx, n1, s1)
+		mmGetObject.inspectFuncGetObject(ctx, n1, s1, s2)
 	}
 
-	mm_params := ServiceMockGetObjectParams{ctx, n1, s1}
+	mm_params := ServiceMockGetObjectParams{ctx, n1, s1, s2}
 
 	// Record call args
 	mmGetObject.GetObjectMock.mutex.Lock()
@@ -9025,7 +9051,7 @@ func (mmGetObject *ServiceMock) GetObject(ctx context.Context, n1 types.Namespac
 		mm_want := mmGetObject.GetObjectMock.defaultExpectation.params
 		mm_want_ptrs := mmGetObject.GetObjectMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockGetObjectParams{ctx, n1, s1}
+		mm_got := ServiceMockGetObjectParams{ctx, n1, s1, s2}
 
 		if mm_want_ptrs != nil {
 
@@ -9044,6 +9070,11 @@ func (mmGetObject *ServiceMock) GetObject(ctx context.Context, n1 types.Namespac
 					mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
 			}
 
+			if mm_want_ptrs.s2 != nil && !minimock.Equal(*mm_want_ptrs.s2, mm_got.s2) {
+				mmGetObject.t.Errorf("ServiceMock.GetObject got unexpected parameter s2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.originS2, *mm_want_ptrs.s2, mm_got.s2, minimock.Diff(*mm_want_ptrs.s2, mm_got.s2))
+			}
+
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
 			mmGetObject.t.Errorf("ServiceMock.GetObject got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 				mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
@@ -9056,9 +9087,9 @@ func (mmGetObject *ServiceMock) GetObject(ctx context.Context, n1 types.Namespac
 		return (*mm_results).op1, (*mm_results).err
 	}
 	if mmGetObject.funcGetObject != nil {
-		return mmGetObject.funcGetObject(ctx, n1, s1)
+		return mmGetObject.funcGetObject(ctx, n1, s1, s2)
 	}
-	mmGetObject.t.Fatalf("Unexpected call to ServiceMock.GetObject. %v %v %v", ctx, n1, s1)
+	mmGetObject.t.Fatalf("Unexpected call to ServiceMock.GetObject. %v %v %v %v", ctx, n1, s1, s2)
 	return
 }
 
@@ -15292,6 +15323,7 @@ type ServiceMockUpdateObjectParams struct {
 	ctx context.Context
 	n1  types.NamespaceUIDType
 	s1  string
+	s2  string
 	op1 *artifactpb.Object
 	fp1 *fieldmaskpb.FieldMask
 }
@@ -15301,6 +15333,7 @@ type ServiceMockUpdateObjectParamPtrs struct {
 	ctx *context.Context
 	n1  *types.NamespaceUIDType
 	s1  *string
+	s2  *string
 	op1 **artifactpb.Object
 	fp1 **fieldmaskpb.FieldMask
 }
@@ -15317,6 +15350,7 @@ type ServiceMockUpdateObjectExpectationOrigins struct {
 	originCtx string
 	originN1  string
 	originS1  string
+	originS2  string
 	originOp1 string
 	originFp1 string
 }
@@ -15332,7 +15366,7 @@ func (mmUpdateObject *mServiceMockUpdateObject) Optional() *mServiceMockUpdateOb
 }
 
 // Expect sets up expected params for Service.UpdateObject
-func (mmUpdateObject *mServiceMockUpdateObject) Expect(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) *mServiceMockUpdateObject {
+func (mmUpdateObject *mServiceMockUpdateObject) Expect(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) *mServiceMockUpdateObject {
 	if mmUpdateObject.mock.funcUpdateObject != nil {
 		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
 	}
@@ -15345,7 +15379,7 @@ func (mmUpdateObject *mServiceMockUpdateObject) Expect(ctx context.Context, n1 t
 		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by ExpectParams functions")
 	}
 
-	mmUpdateObject.defaultExpectation.params = &ServiceMockUpdateObjectParams{ctx, n1, s1, op1, fp1}
+	mmUpdateObject.defaultExpectation.params = &ServiceMockUpdateObjectParams{ctx, n1, s1, s2, op1, fp1}
 	mmUpdateObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmUpdateObject.expectations {
 		if minimock.Equal(e.params, mmUpdateObject.defaultExpectation.params) {
@@ -15425,8 +15459,31 @@ func (mmUpdateObject *mServiceMockUpdateObject) ExpectS1Param3(s1 string) *mServ
 	return mmUpdateObject
 }
 
-// ExpectOp1Param4 sets up expected param op1 for Service.UpdateObject
-func (mmUpdateObject *mServiceMockUpdateObject) ExpectOp1Param4(op1 *artifactpb.Object) *mServiceMockUpdateObject {
+// ExpectS2Param4 sets up expected param s2 for Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) ExpectS2Param4(s2 string) *mServiceMockUpdateObject {
+	if mmUpdateObject.mock.funcUpdateObject != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
+	}
+
+	if mmUpdateObject.defaultExpectation == nil {
+		mmUpdateObject.defaultExpectation = &ServiceMockUpdateObjectExpectation{}
+	}
+
+	if mmUpdateObject.defaultExpectation.params != nil {
+		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Expect")
+	}
+
+	if mmUpdateObject.defaultExpectation.paramPtrs == nil {
+		mmUpdateObject.defaultExpectation.paramPtrs = &ServiceMockUpdateObjectParamPtrs{}
+	}
+	mmUpdateObject.defaultExpectation.paramPtrs.s2 = &s2
+	mmUpdateObject.defaultExpectation.expectationOrigins.originS2 = minimock.CallerInfo(1)
+
+	return mmUpdateObject
+}
+
+// ExpectOp1Param5 sets up expected param op1 for Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) ExpectOp1Param5(op1 *artifactpb.Object) *mServiceMockUpdateObject {
 	if mmUpdateObject.mock.funcUpdateObject != nil {
 		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
 	}
@@ -15448,8 +15505,8 @@ func (mmUpdateObject *mServiceMockUpdateObject) ExpectOp1Param4(op1 *artifactpb.
 	return mmUpdateObject
 }
 
-// ExpectFp1Param5 sets up expected param fp1 for Service.UpdateObject
-func (mmUpdateObject *mServiceMockUpdateObject) ExpectFp1Param5(fp1 *fieldmaskpb.FieldMask) *mServiceMockUpdateObject {
+// ExpectFp1Param6 sets up expected param fp1 for Service.UpdateObject
+func (mmUpdateObject *mServiceMockUpdateObject) ExpectFp1Param6(fp1 *fieldmaskpb.FieldMask) *mServiceMockUpdateObject {
 	if mmUpdateObject.mock.funcUpdateObject != nil {
 		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
 	}
@@ -15472,7 +15529,7 @@ func (mmUpdateObject *mServiceMockUpdateObject) ExpectFp1Param5(fp1 *fieldmaskpb
 }
 
 // Inspect accepts an inspector function that has same arguments as the Service.UpdateObject
-func (mmUpdateObject *mServiceMockUpdateObject) Inspect(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask)) *mServiceMockUpdateObject {
+func (mmUpdateObject *mServiceMockUpdateObject) Inspect(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask)) *mServiceMockUpdateObject {
 	if mmUpdateObject.mock.inspectFuncUpdateObject != nil {
 		mmUpdateObject.mock.t.Fatalf("Inspect function is already set for ServiceMock.UpdateObject")
 	}
@@ -15497,7 +15554,7 @@ func (mmUpdateObject *mServiceMockUpdateObject) Return(op2 *artifactpb.Object, e
 }
 
 // Set uses given function f to mock the Service.UpdateObject method
-func (mmUpdateObject *mServiceMockUpdateObject) Set(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) (op2 *artifactpb.Object, err error)) *ServiceMock {
+func (mmUpdateObject *mServiceMockUpdateObject) Set(f func(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) (op2 *artifactpb.Object, err error)) *ServiceMock {
 	if mmUpdateObject.defaultExpectation != nil {
 		mmUpdateObject.mock.t.Fatalf("Default expectation is already set for the Service.UpdateObject method")
 	}
@@ -15513,14 +15570,14 @@ func (mmUpdateObject *mServiceMockUpdateObject) Set(f func(ctx context.Context, 
 
 // When sets expectation for the Service.UpdateObject which will trigger the result defined by the following
 // Then helper
-func (mmUpdateObject *mServiceMockUpdateObject) When(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) *ServiceMockUpdateObjectExpectation {
+func (mmUpdateObject *mServiceMockUpdateObject) When(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) *ServiceMockUpdateObjectExpectation {
 	if mmUpdateObject.mock.funcUpdateObject != nil {
 		mmUpdateObject.mock.t.Fatalf("ServiceMock.UpdateObject mock is already set by Set")
 	}
 
 	expectation := &ServiceMockUpdateObjectExpectation{
 		mock:               mmUpdateObject.mock,
-		params:             &ServiceMockUpdateObjectParams{ctx, n1, s1, op1, fp1},
+		params:             &ServiceMockUpdateObjectParams{ctx, n1, s1, s2, op1, fp1},
 		expectationOrigins: ServiceMockUpdateObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmUpdateObject.expectations = append(mmUpdateObject.expectations, expectation)
@@ -15555,17 +15612,17 @@ func (mmUpdateObject *mServiceMockUpdateObject) invocationsDone() bool {
 }
 
 // UpdateObject implements mm_service.Service
-func (mmUpdateObject *ServiceMock) UpdateObject(ctx context.Context, n1 types.NamespaceUIDType, s1 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) (op2 *artifactpb.Object, err error) {
+func (mmUpdateObject *ServiceMock) UpdateObject(ctx context.Context, n1 types.NamespaceUIDType, s1 string, s2 string, op1 *artifactpb.Object, fp1 *fieldmaskpb.FieldMask) (op2 *artifactpb.Object, err error) {
 	mm_atomic.AddUint64(&mmUpdateObject.beforeUpdateObjectCounter, 1)
 	defer mm_atomic.AddUint64(&mmUpdateObject.afterUpdateObjectCounter, 1)
 
 	mmUpdateObject.t.Helper()
 
 	if mmUpdateObject.inspectFuncUpdateObject != nil {
-		mmUpdateObject.inspectFuncUpdateObject(ctx, n1, s1, op1, fp1)
+		mmUpdateObject.inspectFuncUpdateObject(ctx, n1, s1, s2, op1, fp1)
 	}
 
-	mm_params := ServiceMockUpdateObjectParams{ctx, n1, s1, op1, fp1}
+	mm_params := ServiceMockUpdateObjectParams{ctx, n1, s1, s2, op1, fp1}
 
 	// Record call args
 	mmUpdateObject.UpdateObjectMock.mutex.Lock()
@@ -15584,7 +15641,7 @@ func (mmUpdateObject *ServiceMock) UpdateObject(ctx context.Context, n1 types.Na
 		mm_want := mmUpdateObject.UpdateObjectMock.defaultExpectation.params
 		mm_want_ptrs := mmUpdateObject.UpdateObjectMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockUpdateObjectParams{ctx, n1, s1, op1, fp1}
+		mm_got := ServiceMockUpdateObjectParams{ctx, n1, s1, s2, op1, fp1}
 
 		if mm_want_ptrs != nil {
 
@@ -15601,6 +15658,11 @@ func (mmUpdateObject *ServiceMock) UpdateObject(ctx context.Context, n1 types.Na
 			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
 				mmUpdateObject.t.Errorf("ServiceMock.UpdateObject got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmUpdateObject.UpdateObjectMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			}
+
+			if mm_want_ptrs.s2 != nil && !minimock.Equal(*mm_want_ptrs.s2, mm_got.s2) {
+				mmUpdateObject.t.Errorf("ServiceMock.UpdateObject got unexpected parameter s2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateObject.UpdateObjectMock.defaultExpectation.expectationOrigins.originS2, *mm_want_ptrs.s2, mm_got.s2, minimock.Diff(*mm_want_ptrs.s2, mm_got.s2))
 			}
 
 			if mm_want_ptrs.op1 != nil && !minimock.Equal(*mm_want_ptrs.op1, mm_got.op1) {
@@ -15625,9 +15687,9 @@ func (mmUpdateObject *ServiceMock) UpdateObject(ctx context.Context, n1 types.Na
 		return (*mm_results).op2, (*mm_results).err
 	}
 	if mmUpdateObject.funcUpdateObject != nil {
-		return mmUpdateObject.funcUpdateObject(ctx, n1, s1, op1, fp1)
+		return mmUpdateObject.funcUpdateObject(ctx, n1, s1, s2, op1, fp1)
 	}
-	mmUpdateObject.t.Fatalf("Unexpected call to ServiceMock.UpdateObject. %v %v %v %v %v", ctx, n1, s1, op1, fp1)
+	mmUpdateObject.t.Fatalf("Unexpected call to ServiceMock.UpdateObject. %v %v %v %v %v %v", ctx, n1, s1, s2, op1, fp1)
 	return
 }
 

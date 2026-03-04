@@ -422,24 +422,12 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		return nil, errorsx.AddMessage(err, msg)
 	}
 
-	// Duplicate content check: block uploads with identical SHA256 hash
+	// Duplicate content check: block uploads with identical SHA256 hash within the same KB
 	if kbFile.ContentSHA256 != "" {
-		existingFile, err := ph.service.Repository().GetFileByContentSHA256(ctx, kbFile.ContentSHA256)
+		existingFile, err := ph.service.Repository().GetFileByContentSHA256InKB(ctx, kb.UID, kbFile.ContentSHA256)
 		if err != nil {
 			logger.Warn("failed to check for duplicate file content", zap.Error(err))
 		} else if existingFile != nil {
-			existingNsID := namespaceID
-
-			// Resolve the KB ID for the link
-			existingKBID := ""
-			kbUIDs, _ := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, existingFile.UID)
-			if len(kbUIDs) > 0 {
-				existingKB, _ := ph.service.Repository().GetKnowledgeBaseByUID(ctx, kbUIDs[0])
-				if existingKB != nil {
-					existingKBID = existingKB.ID
-				}
-			}
-
 			st := status.New(codes.AlreadyExists, "A file with identical content already exists. Duplicate uploads are not allowed.")
 			st, _ = st.WithDetails(&errdetails.ErrorInfo{
 				Reason: "DUPLICATE_FILE_CONTENT",
@@ -447,8 +435,8 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 				Metadata: map[string]string{
 					"existing_file_name":         existingFile.DisplayName,
 					"existing_file_id":           existingFile.ID,
-					"existing_namespace_id":      existingNsID,
-					"existing_knowledge_base_id": existingKBID,
+					"existing_namespace_id":      namespaceID,
+					"existing_knowledge_base_id": kb.ID,
 				},
 			})
 			return nil, st.Err()

@@ -106,9 +106,9 @@ type File interface {
 	// Returns files, next page token, total count, and error.
 	ListKnowledgeBaseFilesAdmin(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) ([]FileModel, string, int32, error)
 
-	// GetFileByContentSHA256 returns a non-deleted file matching the given SHA256 hash.
-	// Returns nil with no error if no match is found.
-	GetFileByContentSHA256(ctx context.Context, sha256 string) (*FileModel, error)
+	// GetFileByContentSHA256InKB returns a non-deleted file matching the given SHA256 hash
+	// within a specific knowledge base. Returns nil with no error if no match is found.
+	GetFileByContentSHA256InKB(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string) (*FileModel, error)
 
 	// Deprecated methods
 
@@ -1374,18 +1374,20 @@ func (r *repository) GetFileByKBUIDAndFileID(ctx context.Context, kbUID types.KB
 	return &file, nil
 }
 
-// GetFileByContentSHA256 returns a non-deleted file matching the given SHA256 hash.
-// Returns nil with no error if no match is found. Used for content-based deduplication.
-func (r *repository) GetFileByContentSHA256(ctx context.Context, sha256 string) (*FileModel, error) {
+// GetFileByContentSHA256InKB returns a non-deleted file with the given SHA256 hash
+// that belongs to the specified knowledge base. Returns nil with no error if no
+// match is found. Used for content-based deduplication scoped to a single KB.
+func (r *repository) GetFileByContentSHA256InKB(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string) (*FileModel, error) {
 	var file FileModel
 	err := r.db.WithContext(ctx).
-		Where("content_sha256 = ? AND delete_time IS NULL", sha256).
+		Joins("JOIN file_knowledge_base fkb ON fkb.file_uid = file.uid").
+		Where("file.content_sha256 = ? AND file.delete_time IS NULL AND fkb.kb_uid = ?", sha256, kbUID).
 		First(&file).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("querying file by content SHA256: %w", err)
+		return nil, fmt.Errorf("querying file by content SHA256 in KB: %w", err)
 	}
 	return &file, nil
 }
