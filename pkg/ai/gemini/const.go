@@ -22,12 +22,14 @@ const (
 	ModelFamily = "gemini"
 
 	// DefaultModel is the default Gemini model for multimodal content conversion
-	DefaultModel = "gemini-2.5-flash"
+	DefaultModel = "gemini-3-flash"
 
-	// DefaultCacheTTL is the default time-to-live for cached content (1 minute)
-	// Both Gemini cache and Redis cache metadata use this TTL
-	// Every call to VIEW_CACHE renews the TTL for both caches
-	DefaultCacheTTL = time.Minute
+	// DefaultCacheTTL is the default time-to-live for cached content.
+	// Must be long enough to survive the full processing pipeline including
+	// chunked conversion fallback. The Gemini API minimum is 1 minute;
+	// we use 10 minutes so the cache outlives even large-document conversions
+	// that may take several minutes before falling back to chunked processing.
+	DefaultCacheTTL = 10 * time.Minute
 
 	// MinCacheTokens is the minimum token count for Gemini cache creation
 	// Gemini API requires 1024 tokens minimum

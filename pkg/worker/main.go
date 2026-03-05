@@ -53,10 +53,18 @@ const (
 // AI Processing timeout constants for dynamic timeout calculation
 // These are used by ProcessContentActivity and ProcessSummaryActivity
 const (
-	AIProcessingMinTimeout     = 3 * time.Minute  // Minimum timeout for small files
+	AIProcessingMinTimeout     = 5 * time.Minute  // Minimum timeout (accounts for chunked conversion overhead)
 	AIProcessingMaxTimeout     = 30 * time.Minute // Maximum timeout cap for very large files
 	AIProcessingBaseTimeout    = 2 * time.Minute  // Base timeout added to calculated time
 	AIProcessingBytesPerSecond = 50 * 1024        // Estimated processing rate: ~50KB/sec for AI conversion
+)
+
+// Chunked conversion constants for large document fallback.
+// When single-shot conversion hits DEADLINE_EXCEEDED, the document is split into
+// page-range chunks and each chunk is converted independently using the existing cache.
+const (
+	ChunkedConversionPagesPerChunk  = 50
+	ChunkedConversionPageCountPrompt = "How many pages does this document have? Respond with ONLY the number, nothing else."
 )
 
 // CalculateAIProcessingTimeout returns a dynamic timeout based on file size.
@@ -64,14 +72,15 @@ const (
 // The timeout scales with file size but is capped at AIProcessingMaxTimeout.
 //
 // Formula: base_timeout + (file_size_bytes / bytes_per_second) * safety_factor
-// Safety factor of 2x accounts for API latency, rate limiting, and processing variance.
+// Safety factor of 3x accounts for API latency, rate limiting, processing variance,
+// and the overhead of multiple API calls in chunked conversion mode.
 func CalculateAIProcessingTimeout(fileSizeBytes int) time.Duration {
 	if fileSizeBytes <= 0 {
 		return AIProcessingMinTimeout
 	}
 
-	// Calculate estimated processing time with 2x safety factor
-	estimatedSeconds := float64(fileSizeBytes) / float64(AIProcessingBytesPerSecond) * 2.0
+	// Calculate estimated processing time with 3x safety factor
+	estimatedSeconds := float64(fileSizeBytes) / float64(AIProcessingBytesPerSecond) * 3.0
 	calculatedTimeout := AIProcessingBaseTimeout + time.Duration(estimatedSeconds)*time.Second
 
 	// Apply bounds

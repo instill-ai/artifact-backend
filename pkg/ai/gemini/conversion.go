@@ -303,8 +303,9 @@ func retryConversion(ctx context.Context, maxRetries int, fn func() (*conversion
 
 		lastErr = err
 
-		// Don't retry on certain errors (validation or unsupported formats)
-		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "unsupported") {
+		// Don't retry on certain errors (validation, unsupported formats, or server-side timeouts)
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "invalid") || strings.Contains(errMsg, "unsupported") || strings.Contains(errMsg, "DEADLINE_EXCEEDED") {
 			break
 		}
 	}
@@ -348,7 +349,7 @@ func createGenerateContentConfig(cacheName string) *genai.GenerateContentConfig 
 	config := &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr(float32(1.0)),
 		TopP:            genai.Ptr(float32(0.95)),
-		MaxOutputTokens: 65536, // Gemini 2.5 Flash supports up to 65k output tokens
+		MaxOutputTokens: 65536, // Gemini 3 Flash supports up to 65k output tokens
 	}
 
 	if cacheName != "" {

@@ -17,6 +17,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/ai"
+	"github.com/instill-ai/artifact-backend/pkg/ai/gemini"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -1424,8 +1425,7 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 		zap.String("destination", param.Destination),
 		zap.Int("contentSize", len(content)))
 
-	// Set cache TTL (5 minutes default)
-	cacheTTL := 5 * time.Minute
+	cacheTTL := gemini.GetCacheTTL()
 
 	// Create the cache using AI client
 	// Note: Cache creation is optional - if it fails, we continue without cache
@@ -1750,6 +1750,35 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 				}
 			}
 
+			// Chunked fallback: if single-shot cached conversion hit a server-side timeout,
+			// split the document into page ranges and convert each chunk independently.
+			if contentInMarkdown == "" && conversionErr != nil && isDeadlineExceeded(conversionErr) && param.CacheName != "" {
+				logger.Info("Single-shot conversion timed out, falling back to chunked page-range conversion",
+					zap.String("cacheName", param.CacheName))
+
+				pgCount, pgErr := w.getPageCount(authCtx, param.CacheName)
+				if pgErr != nil {
+					logger.Warn("Could not determine page count for chunked conversion", zap.Error(pgErr))
+				} else {
+					chunkedMarkdown, chunkedErr := w.convertInPageRanges(authCtx, param.CacheName, pgCount, w.getGenerateContentPrompt())
+					if chunkedErr == nil {
+						logger.Info("Chunked conversion successful",
+							zap.Int("pageCount", pgCount),
+							zap.Int("markdownLength", len(chunkedMarkdown)))
+
+						contentInMarkdown, positionData, length, pageCount = ExtractPageDelimiters(
+							chunkedMarkdown,
+							w.log,
+							map[string]any{"cacheName": param.CacheName, "chunked": true, "chunkPages": ChunkedConversionPagesPerChunk},
+						)
+						conversionErr = nil
+					} else {
+						logger.Error("Chunked conversion also failed", zap.Error(chunkedErr))
+						conversionErr = chunkedErr
+					}
+				}
+			}
+
 			// Try AI client without cache if cached attempt failed or wasn't available
 			if contentInMarkdown == "" {
 				logger.Info("Attempting AI conversion without cache",
@@ -1809,6 +1838,52 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					)
 					usageMetadata = conversion.UsageMetadata
 					modelName = conversion.Model
+				}
+			}
+
+			// Last resort: if both cached and non-cached single-shot conversions hit
+			// DEADLINE_EXCEEDED, create a fresh cache and do chunked page-range conversion.
+			if contentInMarkdown == "" && conversionErr != nil && isDeadlineExceeded(conversionErr) {
+				logger.Info("All single-shot conversions timed out, creating fresh cache for chunked conversion")
+
+				freshCache, cacheErr := w.aiClient.CreateCache(authCtx, []ai.FileContent{
+					{
+						Content:         rawFileContent,
+						FileType:        param.FileType,
+						FileDisplayName: param.FileDisplayName,
+					},
+				}, gemini.GetCacheTTL())
+
+				if cacheErr != nil {
+					logger.Warn("Failed to create fresh cache for chunked conversion", zap.Error(cacheErr))
+				} else {
+					defer func() {
+						if delErr := w.aiClient.DeleteCache(authCtx, freshCache.CacheName); delErr != nil {
+							logger.Warn("Failed to clean up fresh cache", zap.Error(delErr))
+						}
+					}()
+
+					pgCount, pgErr := w.getPageCount(authCtx, freshCache.CacheName)
+					if pgErr != nil {
+						logger.Warn("Could not determine page count from fresh cache", zap.Error(pgErr))
+					} else {
+						chunkedMarkdown, chunkedErr := w.convertInPageRanges(authCtx, freshCache.CacheName, pgCount, w.getGenerateContentPrompt())
+						if chunkedErr == nil {
+							logger.Info("Chunked conversion with fresh cache successful",
+								zap.Int("pageCount", pgCount),
+								zap.Int("markdownLength", len(chunkedMarkdown)))
+
+							contentInMarkdown, positionData, length, pageCount = ExtractPageDelimiters(
+								chunkedMarkdown,
+								w.log,
+								map[string]any{"freshCache": true, "chunked": true, "chunkPages": ChunkedConversionPagesPerChunk},
+							)
+							conversionErr = nil
+						} else {
+							logger.Error("Chunked conversion with fresh cache also failed", zap.Error(chunkedErr))
+							conversionErr = chunkedErr
+						}
+					}
 				}
 			}
 

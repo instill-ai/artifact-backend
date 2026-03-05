@@ -113,6 +113,9 @@ export const docSamplePdf = encoding.b64encode(
 export const docSampleMultiPagePdf = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/doc-sample-multi-page.pdf`, "b")
 );
+export const docSampleLargePdf = encoding.b64encode(
+  open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/doc-sample-large.pdf`, "b")
+);
 export const docSamplePpt = encoding.b64encode(
   open(`${__ENV.TEST_FOLDER_ABS_PATH}/integration-test/data/doc-sample.ppt`, "b")
 );

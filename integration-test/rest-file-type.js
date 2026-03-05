@@ -150,8 +150,10 @@ export let options = {
       test_type_wmv: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WMV', startTime: '47s' },
       test_type_mpeg: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_MPEG', startTime: '48s' },
       test_type_webm_video: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_WEBM_VIDEO', startTime: '49s' },
-      // Regression test: Verify process_status is always string enum, never integer (50s)
-      test_process_status_format: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_PROCESS_STATUS_FORMAT', startTime: '50s' },
+      // Large PDF: Verify chunked conversion for 120-page document (51s)
+      test_type_large_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_TYPE_LARGE_PDF', startTime: '51s' },
+      // Regression test: Verify process_status is always string enum, never integer (52s)
+      test_process_status_format: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_PROCESS_STATUS_FORMAT', startTime: '52s' },
     },
   }),
 };
@@ -215,6 +217,8 @@ export default function (data) {
   TEST_TYPE_WMV(data);
   TEST_TYPE_MPEG(data);
   TEST_TYPE_WEBM_VIDEO(data);
+  // Large PDF (chunked conversion)
+  TEST_TYPE_LARGE_PDF(data);
   // Regression test
   TEST_PROCESS_STATUS_FORMAT(data);
 }
@@ -350,6 +354,77 @@ export function TEST_TYPE_FLV(data) { runFileTest(data, { originalName: "video-s
 export function TEST_TYPE_WMV(data) { runFileTest(data, { originalName: "video-sample.wmv", fileType: "TYPE_WMV" }); }
 export function TEST_TYPE_MPEG(data) { runFileTest(data, { originalName: "video-sample.mpeg", fileType: "TYPE_MPEG" }); }
 export function TEST_TYPE_WEBM_VIDEO(data) { runFileTest(data, { originalName: "video-sample.webm", fileType: "TYPE_WEBM_VIDEO" }); }
+
+// Large PDF test: Verify processing of a 120-page document (may trigger chunked conversion)
+export function TEST_TYPE_LARGE_PDF(data) {
+  const groupName = "Artifact API: Large PDF (120 pages) processing";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    // Create a dedicated KB for the large PDF test
+    const cRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases`, JSON.stringify({ displayName: data.dbIDPrefix + "large-pdf-" + randomString(6) }), data.header);
+    logUnexpected(cRes, 'POST /v1alpha/namespaces/{namespace_id}/knowledge-bases');
+    const kb = ((() => { try { return cRes.json(); } catch (e) { return {}; } })()).knowledgeBase || {};
+    const knowledgeBaseId = kb.id;
+    check(cRes, { [`POST KB for large PDF 200 (${knowledgeBaseId})`]: (r) => r.status === 200 });
+
+    if (cRes.status !== 200) {
+      console.error("Failed to create KB for large PDF test, skipping");
+      return;
+    }
+
+    // Upload the 120-page PDF
+    const filename = data.dbIDPrefix + "large-doc.pdf";
+    const uRes = http.request("POST", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`, JSON.stringify({
+      displayName: filename,
+      type: "TYPE_PDF",
+      content: constant.docSampleLargePdf,
+    }), data.header);
+    logUnexpected(uRes, 'POST large PDF file');
+    const file = ((() => { try { return uRes.json(); } catch (e) { return {}; } })()).file || {};
+    const fileId = file.id;
+    check(uRes, { [`Upload large PDF 200 (${fileId})`]: (r) => r.status === 200 });
+
+    if (uRes.status !== 200) {
+      console.error("Failed to upload large PDF, skipping");
+      return;
+    }
+
+    // Wait for processing with an extended timeout (600s) to allow for chunked conversion
+    console.log(`Waiting for large PDF (120 pages) to complete processing...`);
+    const result = helper.waitForFileProcessingComplete(
+      data.expectedOwner.id,
+      knowledgeBaseId,
+      fileId,
+      data.header,
+      600,
+      30
+    );
+
+    check(result, {
+      "Large PDF processing completed": () => result.completed === true,
+      "Large PDF status is COMPLETED": () => result.status === "COMPLETED",
+    });
+
+    if (result.completed && result.status === "COMPLETED") {
+      // Verify the processed file has page delimiters covering all pages
+      const fRes = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}`, null, data.header);
+      let fileData; try { fileData = fRes.json(); } catch (e) { fileData = {}; }
+      const processedFile = fileData.file || {};
+
+      check(processedFile, {
+        "Large PDF has processStatus COMPLETED": () => processedFile.processStatus === "FILE_PROCESS_STATUS_COMPLETED",
+        "Large PDF has totalPages > 0": () => (processedFile.totalPages || 0) > 0,
+        "Large PDF has totalChunks > 0": () => (processedFile.totalChunks || 0) > 0,
+        "Large PDF has totalTokens > 0": () => (processedFile.totalTokens || 0) > 0,
+      });
+
+      console.log(`Large PDF processed: pages=${processedFile.totalPages}, chunks=${processedFile.totalChunks}, tokens=${processedFile.totalTokens}`);
+    } else {
+      console.error(`Large PDF processing failed or timed out: status=${result.status}, completed=${result.completed}`);
+    }
+  });
+}
 
 // Regression test: Verify all enum fields are always stored as string enums, never as integers
 // This test guards against a bug where protobuf enum values could be accidentally stored as integers
