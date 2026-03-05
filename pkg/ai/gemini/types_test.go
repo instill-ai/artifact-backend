@@ -73,7 +73,7 @@ func TestConstants(t *testing.T) {
 	})
 
 	t.Run("DefaultCacheTTL", func(t *testing.T) {
-		c.Assert(DefaultCacheTTL, qt.Equals, time.Minute)
+		c.Assert(DefaultCacheTTL, qt.Equals, 10*time.Minute)
 	})
 
 	t.Run("RAG system instruction loaded from prompt", func(t *testing.T) {
