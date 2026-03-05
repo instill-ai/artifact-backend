@@ -141,37 +141,13 @@ func (c *Client) generateContentAndExtractMarkdown(ctx context.Context, model st
 			)
 		}
 
-		// DEADLINE_EXCEEDED (504) - Transient timeout error, should be retried
-		// Include "RETRYABLE:" prefix so upstream can identify this as retryable
-		if strings.Contains(errStr, "DEADLINE_EXCEEDED") || strings.Contains(errStr, "504") ||
-			strings.Contains(errStr, "Deadline expired") {
-			return nil, errorsx.AddMessage(
-				fmt.Errorf("RETRYABLE: failed to generate content: %v", err),
-				"AI service timed out processing the file. This is usually temporary - the file will be retried automatically.",
-			)
-		}
-
-		// RESOURCE_EXHAUSTED (429) - Rate limit, should be retried with backoff
-		if strings.Contains(errStr, "RESOURCE_EXHAUSTED") || strings.Contains(errStr, "429") ||
-			strings.Contains(errStr, "quota") || strings.Contains(errStr, "rate limit") {
-			return nil, errorsx.AddMessage(
-				fmt.Errorf("RETRYABLE: failed to generate content: %v", err),
-				"AI service is temporarily busy. The file will be retried automatically.",
-			)
-		}
-
-		// UNAVAILABLE (503) - Service temporarily unavailable, should be retried
-		if strings.Contains(errStr, "UNAVAILABLE") || strings.Contains(errStr, "503") {
-			return nil, errorsx.AddMessage(
-				fmt.Errorf("RETRYABLE: failed to generate content: %v", err),
-				"AI service is temporarily unavailable. The file will be retried automatically.",
-			)
-		}
-
-		// Don't wrap with %w - create a flat error with user-facing message
+		// Return the API error with a user-friendly message.
+		// Retryability is decided at the Temporal activity layer, not here.
+		// The activity defaults to retryable — only known-permanent errors
+		// (e.g., "no pages") are marked non-retryable.
 		return nil, errorsx.AddMessage(
-			fmt.Errorf("gemini API call failed: %v", err),
-			"AI service is temporarily unavailable. Please try again in a few moments.",
+			fmt.Errorf("failed to generate content: %v", err),
+			"AI service encountered an error processing the file. The file will be retried automatically.",
 		)
 	}
 

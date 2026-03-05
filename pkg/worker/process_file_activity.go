@@ -1818,19 +1818,7 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 				if conversionErr != nil {
 					errStr := conversionErr.Error()
 
-					// Check for retryable errors (DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, UNAVAILABLE)
-					// These are transient and should be retried by Temporal
-					if strings.Contains(errStr, "RETRYABLE:") {
-						logger.Warn("AI conversion failed with retryable error, will retry",
-							zap.String("error", errStr))
-						return nil, activityErrorWithCauseFlat(
-							errorsx.MessageOrErr(conversionErr),
-							processContentActivityError,
-							fmt.Errorf("AI conversion failed (retryable): %s", conversionErr.Error()),
-						)
-					}
-
-					// Check if it's a "no pages" error and provide a more helpful message
+					// Non-retryable: document has no readable content (permanent issue with the file itself)
 					if strings.Contains(errStr, "no pages") || strings.Contains(errStr, "has no pages") {
 						return nil, activityErrorNonRetryableFlat(
 							fmt.Sprintf("The document '%s' appears to have no readable content or its format is not supported. Please try converting it to a different format (e.g., save as text or re-export the PDF) and upload again.", param.FileDisplayName),
@@ -1839,10 +1827,12 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 						)
 					}
 
-					// Use NonRetryable for other AI conversion failures (they won't succeed on retry)
-					// Break the error chain: use MessageOrErr for display, Error() for internal details
-					// This prevents deeply nested error structures in Temporal logs
-					return nil, activityErrorNonRetryableFlat(
+					// Default: retryable. Transient server errors (DEADLINE_EXCEEDED/504,
+					// RESOURCE_EXHAUSTED/429, UNAVAILABLE/503) and unknown errors are retried
+					// by Temporal with exponential backoff. This is the safer default for
+					// production reliability — only known-permanent errors are marked
+					// non-retryable above. Temporal's MaximumAttempts caps total retries.
+					return nil, activityErrorWithCauseFlat(
 						errorsx.MessageOrErr(conversionErr),
 						processContentActivityError,
 						fmt.Errorf("AI conversion failed: %s", conversionErr.Error()),
