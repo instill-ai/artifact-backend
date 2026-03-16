@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -705,14 +708,13 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		zap.String("type", param.Type.String()),
 		zap.Bool("hasPositionData", param.PositionData != nil))
 
+	// Milvus varchar fields are capped at 65,535 chars. Keep a small safety
+	// margin so chunks remain valid even with edge-case conversions.
+	const maxChunkChars = 60000
+
 	// Check if we have position data (passed from ProcessContent/ProcessSummary activities)
 	if param.PositionData == nil || len(param.PositionData.PageDelimiters) == 0 {
 		w.log.Info("ChunkContentActivity: No page delimiters, splitting non-paginated content")
-
-		// Milvus varchar fields are capped at 65 535 chars. Split large
-		// non-paginated files (TXT, MD, CSV, HTML) into multiple chunks so
-		// no content is lost during indexing.
-		const maxChunkChars = 65535
 
 		chunks := splitTextIntoChunks(param.Content, maxChunkChars, param.Type)
 
@@ -734,24 +736,15 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		w.log.Info("ChunkContentActivity: Content length mismatch with page delimiters, treating as single chunk",
 			zap.Uint32("contentLen", contentLen),
 			zap.Uint32("expectedLen", lastDelimiter))
-		// Fall back to single chunk for summaries or mismatched content
-		// TODO: Replace EstimateTokenCount with actual AI token count from CountTokens API
-		tokens := ai.EstimateTokenCount(param.Content)
-		chunk := types.Chunk{
-			Text:   param.Content,
-			Start:  0,
-			End:    len(param.Content),
-			Tokens: tokens,
-			Reference: &types.ChunkReference{
-				PageRange: [2]uint32{1, 1}, // Treat as single-page file
-			},
-			Type: param.Type, // Set type (chunk or summary)
-		}
-		w.log.Info("ChunkContentActivity: Created single chunk (fallback)",
+
+		// Fall back to chunk-splitting for summaries or mismatched content while
+		// still respecting Milvus varchar length limits.
+		chunks := splitTextIntoChunks(param.Content, maxChunkChars, param.Type)
+		w.log.Info("ChunkContentActivity: Created fallback chunks",
 			zap.Int("contentLength", len(param.Content)),
-			zap.Int("tokens", tokens))
+			zap.Int("chunkCount", len(chunks)))
 		return &ChunkContentActivityResult{
-			Chunks: []types.Chunk{chunk},
+			Chunks: chunks,
 		}, nil
 	}
 
@@ -780,20 +773,18 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 			continue
 		}
 
-		// Create chunk for this page
-		// TODO: Replace EstimateTokenCount with actual AI token count from CountTokens API
-		tokens := ai.EstimateTokenCount(pageText)
-		chunk := types.Chunk{
-			Text:   pageText,
-			Start:  int(startPos),
-			End:    int(endPos),
-			Tokens: tokens,
-			Reference: &types.ChunkReference{
-				PageRange: [2]uint32{uint32(pageNum + 1), uint32(pageNum + 1)}, // Single page
-			},
-			Type: param.Type, // Set type (chunk or summary)
+		// Create one or more chunks for this page, enforcing max chunk size.
+		pageChunks := splitTextIntoChunks(pageText, maxChunkChars, param.Type)
+		pageOffset := int(startPos)
+		for _, pageChunk := range pageChunks {
+			pageChunk.Start = pageOffset
+			pageChunk.End = pageOffset + len(pageChunk.Text)
+			pageChunk.Reference = &types.ChunkReference{
+				PageRange: [2]uint32{uint32(pageNum + 1), uint32(pageNum + 1)},
+			}
+			chunks = append(chunks, pageChunk)
+			pageOffset += len(pageChunk.Text)
 		}
-		chunks = append(chunks, chunk)
 
 		startPos = endPos
 	}
@@ -1377,8 +1368,8 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 		zap.String("bucket", param.Bucket),
 		zap.String("destination", param.Destination))
 
-	// Check if AI client is available
-	if w.aiClient == nil {
+	aiClient := w.getAIClientForFileType(param.FileType)
+	if aiClient == nil {
 		w.log.Info("CacheFileContextActivity: AI client not available, skipping cache creation")
 		return &CacheFileContextActivityResult{
 			CachedContextEnabled: false,
@@ -1429,7 +1420,7 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 
 	// Create the cache using AI client
 	// Note: Cache creation is optional - if it fails, we continue without cache
-	cacheOutput, err := w.aiClient.CreateCache(authCtx, []ai.FileContent{
+	cacheOutput, err := aiClient.CreateCache(authCtx, []ai.FileContent{
 		{
 			Content:         content,
 			FileType:        param.FileType,
@@ -1468,6 +1459,56 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 	}
 
 	return result, nil
+}
+
+// ===== GET MEDIA DURATION ACTIVITY =====
+
+// GetMediaDurationActivityParam defines the parameters for GetMediaDurationActivity
+type GetMediaDurationActivityParam struct {
+	Bucket      string           // MinIO bucket containing the standardized file
+	Destination string           // MinIO path to the standardized file
+	Metadata    *structpb.Struct // Request metadata for authentication
+}
+
+// GetMediaDurationActivityResult contains the probed media duration
+type GetMediaDurationActivityResult struct {
+	DurationSeconds float64 // Media duration in seconds from ffprobe
+}
+
+// GetMediaDurationActivity downloads a standardized media file from MinIO,
+// runs ffprobe to extract its duration, and returns the result. This replaces
+// the previous dependency on CacheFileContextActivity for media duration,
+// which failed for videos exceeding Gemini's ~45-minute cache limit.
+func (w *Worker) GetMediaDurationActivity(ctx context.Context, param *GetMediaDurationActivityParam) (*GetMediaDurationActivityResult, error) {
+	w.log.Info("GetMediaDurationActivity: Probing media duration",
+		zap.String("bucket", param.Bucket),
+		zap.String("destination", param.Destination))
+
+	authCtx := ctx
+	if param.Metadata != nil {
+		var err error
+		authCtx, err = CreateAuthenticatedContext(ctx, param.Metadata)
+		if err != nil {
+			w.log.Warn("GetMediaDurationActivity: Failed to create authenticated context, proceeding without auth",
+				zap.Error(err))
+		}
+	}
+
+	content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download media file for duration probe: %w", err)
+	}
+
+	duration, err := probeMediaDuration(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to probe media duration: %w", err)
+	}
+
+	w.log.Info("GetMediaDurationActivity: Duration probed",
+		zap.Float64("durationSeconds", duration),
+		zap.String("destination", param.Destination))
+
+	return &GetMediaDurationActivityResult{DurationSeconds: duration}, nil
 }
 
 // DeleteCacheActivityParam defines the parameters for DeleteCacheActivity
@@ -1534,6 +1575,10 @@ type ProcessContentActivityResult struct {
 	// Error is set when the LLM call succeeded but post-processing failed.
 	// UsageMetadata is still valid for usage tracking. Empty means success.
 	Error string
+	// NeedsChunkedConversion is set when single-shot Gemini conversion failed
+	// with a transient error. The workflow should orchestrate per-batch chunked
+	// conversion instead. Returned without an error so Temporal does not retry.
+	NeedsChunkedConversion bool
 }
 
 // ProcessContentActivity handles the entire content processing pipeline:
@@ -1722,16 +1767,21 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			var conversionErr error
 
 			// For other file types: Try AI client with cache first (if available)
+			// Each conversion step gets a bounded time budget (SingleShotConversionTimeout)
+			// to prevent a slow Gemini response from starving subsequent fallbacks.
+			aiClient := w.getAIClientForFileType(param.FileType)
 			if param.CacheName != "" {
 				logger.Info("Attempting AI conversion with cache",
 					zap.String("cacheName", param.CacheName),
-					zap.String("client", w.aiClient.Name()))
+					zap.String("client", aiClient.Name()))
 
-				conversion, err := w.aiClient.ConvertToMarkdownWithCache(
-					authCtx,
-					param.CacheName,
-					w.getGenerateContentPrompt(),
-				)
+			singleShotCtx, singleShotCancel := context.WithTimeout(authCtx, SingleShotConversionTimeout)
+			conversion, err := aiClient.ConvertToMarkdownWithCache(
+				singleShotCtx,
+				param.CacheName,
+				w.getContentPromptForFileType(param.FileType),
+			)
+			singleShotCancel()
 				if err != nil {
 					logger.Warn("Cached AI conversion failed, will try without cache", zap.Error(err))
 					conversionErr = err
@@ -1750,70 +1800,35 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 				}
 			}
 
-			// Chunked fallback: if single-shot cached conversion hit a server-side timeout,
-			// split the document into page ranges and convert each chunk independently.
-			if contentInMarkdown == "" && conversionErr != nil && isDeadlineExceeded(conversionErr) && param.CacheName != "" {
-				logger.Info("Single-shot conversion timed out, falling back to chunked page-range conversion",
-					zap.String("cacheName", param.CacheName))
-
-				pgCount, pgErr := w.getPageCount(authCtx, param.CacheName)
-				if pgErr != nil {
-					logger.Warn("Could not determine page count for chunked conversion", zap.Error(pgErr))
-				} else {
-					chunkedMarkdown, chunkedErr := w.convertInPageRanges(authCtx, param.CacheName, pgCount, w.getGenerateContentPrompt())
-					if chunkedErr == nil {
-						logger.Info("Chunked conversion successful",
-							zap.Int("pageCount", pgCount),
-							zap.Int("markdownLength", len(chunkedMarkdown)))
-
-						contentInMarkdown, positionData, length, pageCount = ExtractPageDelimiters(
-							chunkedMarkdown,
-							w.log,
-							map[string]any{"cacheName": param.CacheName, "chunked": true, "chunkPages": ChunkedConversionPagesPerChunk},
-						)
-						conversionErr = nil
-					} else {
-						logger.Error("Chunked conversion also failed", zap.Error(chunkedErr))
-						conversionErr = chunkedErr
-					}
-				}
-			}
-
 			// Try AI client without cache if cached attempt failed or wasn't available
 			if contentInMarkdown == "" {
 				logger.Info("Attempting AI conversion without cache",
 					zap.String("fileType", param.FileType.String()),
-					zap.String("client", w.aiClient.Name()))
+					zap.String("client", aiClient.Name()))
 
-				conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
-					authCtx,
-					rawFileContent,
-					param.FileType,
-					param.FileDisplayName,
-					w.getGenerateContentPrompt(),
-				)
+			singleShotCtx, singleShotCancel := context.WithTimeout(authCtx, SingleShotConversionTimeout)
+			conversion, err := aiClient.ConvertToMarkdownWithoutCache(
+				singleShotCtx,
+				rawFileContent,
+				param.FileType,
+				param.FileDisplayName,
+				w.getContentPromptForFileType(param.FileType),
+			)
+			singleShotCancel()
 				if err != nil {
-					logger.Error("AI conversion failed", zap.Error(err))
+					logger.Error("AI conversion without cache failed", zap.Error(err))
 					conversionErr = err
 
-					// Check for "no pages" error - the document may have content but Gemini couldn't parse page structure
-					// In this case, treat the raw content as a single-page document if it's text-based
 					errStr := err.Error()
 					isNoPages := strings.Contains(errStr, "no pages") || strings.Contains(errStr, "has no pages")
 
 					if isNoPages {
-						logger.Warn("Document has no parseable pages, attempting text extraction fallback",
-							zap.String("fileType", param.FileType.String()))
-
-						// For text-based files, we can use the raw content directly
-						// This shouldn't happen as text files are handled earlier, but just in case
 						if param.FileType == artifactpb.File_TYPE_TEXT ||
 							param.FileType == artifactpb.File_TYPE_MARKDOWN ||
 							param.FileType == artifactpb.File_TYPE_CSV ||
 							param.FileType == artifactpb.File_TYPE_HTML {
 							rawText := string(rawFileContent)
 							if len(rawText) > 0 {
-								// Wrap with page tag for consistency
 								contentInMarkdown = "[Page: 1]\n\n" + rawText
 								length = []uint32{uint32(len(contentInMarkdown))}
 								pageCount = 1
@@ -1821,16 +1836,13 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 									PageDelimiters: []uint32{uint32(len(contentInMarkdown))},
 								}
 								conversionErr = nil
-								logger.Info("Text extraction fallback successful",
-									zap.Int("contentLength", len(contentInMarkdown)))
 							}
 						}
 					}
 				} else {
-					logger.Info("AI conversion successful",
+					logger.Info("AI conversion without cache successful",
 						zap.Int("markdownLength", len(conversion.Markdown)))
 
-					// Process AI conversion result
 					contentInMarkdown, positionData, length, pageCount = ExtractPageDelimiters(
 						conversion.Markdown,
 						w.log,
@@ -1841,50 +1853,18 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 				}
 			}
 
-			// Last resort: if both cached and non-cached single-shot conversions hit
-			// DEADLINE_EXCEEDED, create a fresh cache and do chunked page-range conversion.
-			if contentInMarkdown == "" && conversionErr != nil && isDeadlineExceeded(conversionErr) {
-				logger.Info("All single-shot conversions timed out, creating fresh cache for chunked conversion")
-
-				freshCache, cacheErr := w.aiClient.CreateCache(authCtx, []ai.FileContent{
-					{
-						Content:         rawFileContent,
-						FileType:        param.FileType,
-						FileDisplayName: param.FileDisplayName,
-					},
-				}, gemini.GetCacheTTL())
-
-				if cacheErr != nil {
-					logger.Warn("Failed to create fresh cache for chunked conversion", zap.Error(cacheErr))
-				} else {
-					defer func() {
-						if delErr := w.aiClient.DeleteCache(authCtx, freshCache.CacheName); delErr != nil {
-							logger.Warn("Failed to clean up fresh cache", zap.Error(delErr))
-						}
-					}()
-
-					pgCount, pgErr := w.getPageCount(authCtx, freshCache.CacheName)
-					if pgErr != nil {
-						logger.Warn("Could not determine page count from fresh cache", zap.Error(pgErr))
-					} else {
-						chunkedMarkdown, chunkedErr := w.convertInPageRanges(authCtx, freshCache.CacheName, pgCount, w.getGenerateContentPrompt())
-						if chunkedErr == nil {
-							logger.Info("Chunked conversion with fresh cache successful",
-								zap.Int("pageCount", pgCount),
-								zap.Int("markdownLength", len(chunkedMarkdown)))
-
-							contentInMarkdown, positionData, length, pageCount = ExtractPageDelimiters(
-								chunkedMarkdown,
-								w.log,
-								map[string]any{"freshCache": true, "chunked": true, "chunkPages": ChunkedConversionPagesPerChunk},
-							)
-							conversionErr = nil
-						} else {
-							logger.Error("Chunked conversion with fresh cache also failed", zap.Error(chunkedErr))
-							conversionErr = chunkedErr
-						}
-					}
-				}
+			// If both single-shot paths failed with a transient error, signal the
+			// workflow to orchestrate per-batch chunked conversion instead of retrying
+			// the monolithic activity. Return as a result flag (not an error) so
+			// Temporal's retry policy only fires for true infrastructure errors.
+			if contentInMarkdown == "" && conversionErr != nil && isTransientError(conversionErr) {
+				logger.Info("Single-shot conversions failed with transient error, signaling workflow for per-batch chunked conversion",
+					zap.Error(conversionErr))
+				return &ProcessContentActivityResult{
+					OriginalType:           param.FileType,
+					ConvertedType:          param.FileType,
+					NeedsChunkedConversion: true,
+				}, nil
 			}
 
 			// If conversion still failed, return the actual error
@@ -1893,7 +1873,6 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 				if conversionErr != nil {
 					errStr := conversionErr.Error()
 
-					// Non-retryable: document has no readable content (permanent issue with the file itself)
 					if strings.Contains(errStr, "no pages") || strings.Contains(errStr, "has no pages") {
 						return nil, activityErrorNonRetryableFlat(
 							fmt.Sprintf("The document '%s' appears to have no readable content or its format is not supported. Please try converting it to a different format (e.g., save as text or re-export the PDF) and upload again.", param.FileDisplayName),
@@ -1902,11 +1881,6 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 						)
 					}
 
-					// Default: retryable. Transient server errors (DEADLINE_EXCEEDED/504,
-					// RESOURCE_EXHAUSTED/429, UNAVAILABLE/503) and unknown errors are retried
-					// by Temporal with exponential backoff. This is the safer default for
-					// production reliability — only known-permanent errors are marked
-					// non-retryable above. Temporal's MaximumAttempts caps total retries.
 					return nil, activityErrorWithCauseFlat(
 						errorsx.MessageOrErr(conversionErr),
 						processContentActivityError,
@@ -2062,11 +2036,12 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 	var contentStr string
 
 	if param.ContentMarkdown != "" {
-		// OpenAI route: Use pre-processed markdown content from content generation
-		// This is necessary because OpenAI summary pipeline expects markdown input, not raw file
-		logger.Info("Using pre-processed markdown content (OpenAI route)",
+		// Pre-processed markdown content (e.g., assembled transcript from long media chunking).
+		// Also used by the OpenAI summary pipeline which expects markdown input, not raw file.
+		logger.Info("Using pre-processed markdown content",
 			zap.Int("contentLength", len(param.ContentMarkdown)))
 		contentStr = param.ContentMarkdown
+		content = []byte(contentStr)
 	} else {
 		// Gemini route: Read raw file content and process independently
 		// Fetch content from MinIO
@@ -2175,8 +2150,14 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 			summaryPrompt = strings.ReplaceAll(summaryPromptTemplate, "[filename]", param.FileDisplayName)
 		}
 
-		// Use the file type from parameter (already converted in workflow)
+		// When ContentMarkdown is provided (e.g., assembled transcript from long
+		// media chunking), the content is markdown text regardless of the original
+		// file type. Override to TYPE_MARKDOWN so the AI client passes it inline
+		// instead of trying to upload it as a binary (e.g., video/mp4).
 		fileType := param.FileType
+		if param.ContentMarkdown != "" {
+			fileType = artifactpb.File_TYPE_MARKDOWN
+		}
 
 		// Try AI client with cache first (if available)
 		if param.CacheName != "" {
@@ -2438,4 +2419,38 @@ func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTa
 	}
 
 	return result, nil
+}
+
+// ===== MEDIA DURATION HELPERS =====
+
+// probeMediaDuration writes content to a temp file and runs ffprobe to extract
+// the media duration in seconds.
+func probeMediaDuration(content []byte) (float64, error) {
+	tmp, err := os.CreateTemp("", "media-probe-*.mp4")
+	if err != nil {
+		return 0, fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+
+	if _, err := tmp.Write(content); err != nil {
+		tmp.Close()
+		return 0, fmt.Errorf("write temp file: %w", err)
+	}
+	tmp.Close()
+
+	out, err := exec.Command("ffprobe",
+		"-v", "quiet",
+		"-show_entries", "format=duration",
+		"-of", "csv=p=0",
+		tmp.Name(),
+	).Output()
+	if err != nil {
+		return 0, fmt.Errorf("ffprobe failed: %w", err)
+	}
+
+	dur, err := strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse ffprobe output %q: %w", strings.TrimSpace(string(out)), err)
+	}
+	return dur, nil
 }

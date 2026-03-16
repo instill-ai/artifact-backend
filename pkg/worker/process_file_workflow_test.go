@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/gofrs/uuid"
@@ -271,10 +272,15 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 	// Mock for DeleteOldConvertedFilesActivity - return empty list (no old files to delete)
 	mockRepository.GetAllConvertedFilesByFileUIDMock.Return([]repository.ConvertedFileModel{}, nil)
 
+	// Mock for StandardizeFileTypeActivity reprocessing optimization - no existing standardized file.
+	// Optional because the workflow may fail before reaching this call path.
+	mockRepository.GetConvertedFileByFileUIDAndTypeMock.Optional().Return(nil, fmt.Errorf("not found"))
+
 	// Mock for StandardizeFileTypeActivity - mock MinIO storage for file retrieval and saving
 	mockStorage := mock.NewStorageMock(mc)
 	mockStorage.GetFileMock.Return([]byte("test file content"), nil)
-	mockStorage.SaveConvertedFileMock.Return("converted/test.pdf", nil) // Mock saving converted file to storage
+	mockStorage.SaveConvertedFileMock.Return("converted/test.pdf", nil)
+	mockStorage.ListTextChunksByFileUIDMock.Optional().Return([]string{}, nil)
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	// Mock for creating converted file record
 	mockRepository.CreateConvertedFileWithDestinationMock.Return(&repository.ConvertedFileModel{

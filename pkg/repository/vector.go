@@ -19,6 +19,8 @@ import (
 	logx "github.com/instill-ai/x/log"
 )
 
+const milvusMaxVarcharLength = 65535
+
 // VectorEmbedding is a vector representation of an object (extracted from a file as
 // part or the whole of its contents) in a collection.
 type VectorEmbedding struct {
@@ -345,6 +347,15 @@ func (m *milvusClient) InsertVectorsInCollection(ctx context.Context, collection
 	if hasNativeBM25 {
 		texts := make([]string, len(embeddings))
 		for i, emb := range embeddings {
+			if len(emb.Text) > milvusMaxVarcharLength {
+				logger.Warn("Truncating oversized BM25 text for Milvus insert",
+					zap.Int("original_length", len(emb.Text)),
+					zap.Int("max_length", milvusMaxVarcharLength),
+					zap.String("source_uid", emb.SourceUID),
+					zap.String("embedding_uid", emb.EmbeddingUID))
+				texts[i] = emb.Text[:milvusMaxVarcharLength]
+				continue
+			}
 			texts[i] = emb.Text
 		}
 

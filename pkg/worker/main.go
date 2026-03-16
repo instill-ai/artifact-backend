@@ -50,26 +50,244 @@ const (
 	ActivityTimeoutEmbedding = 10 * time.Minute // Embeddings: 100+ chunks @ ~3s/chunk = 5-10 min for large files
 )
 
-// AI Processing timeout constants for dynamic timeout calculation
-// These are used by ProcessContentActivity and ProcessSummaryActivity
+// Standardization timeout constants for dynamic timeout calculation.
+// Used by StandardizeFileTypeActivity which calls the file-type-conversion
+// pipeline via gRPC. Large video/audio files may trigger a two-pass ffmpeg
+// conversion (fast stream-copy + slow audio re-encode fallback).
 const (
-	AIProcessingMinTimeout     = 5 * time.Minute  // Minimum timeout (accounts for chunked conversion overhead)
-	AIProcessingMaxTimeout     = 30 * time.Minute // Maximum timeout cap for very large files
-	AIProcessingBaseTimeout    = 2 * time.Minute  // Base timeout added to calculated time
-	AIProcessingBytesPerSecond = 50 * 1024        // Estimated processing rate: ~50KB/sec for AI conversion
+	StdMinTimeout     = 5 * time.Minute  // Enough for small files and fast stream-copy
+	StdMaxTimeout     = 30 * time.Minute // Cap for very large files (2 GB)
+	StdBaseTimeout    = 2 * time.Minute  // Fixed overhead: gRPC round-trip, MinIO I/O, DB writes
+	StdBytesPerSecond = 512 * 1024       // ~512 KB/s: worst-case two-pass ffmpeg (audio re-encode) + gRPC round-trip
+)
+
+// AI Processing timeout constants for dynamic timeout calculation.
+// These are used by ProcessContentActivity (single-shot only) and ProcessSummaryActivity.
+// The per-batch chunked conversion is handled by separate Temporal activities with their own timeouts.
+const (
+	AIProcessingMinTimeout     = 15 * time.Minute  // Enough for single-shot + without-cache fallback
+	AIProcessingMaxTimeout     = 2 * time.Hour     // For very large single-shot attempts; chunked path uses profile.ActivityTimeout
+	AIProcessingBaseTimeout    = 5 * time.Minute   // Fixed overhead: cache creation, GCS upload, retries
+	AIProcessingBytesPerSecond = 20 * 1024         // ~20KB/sec: dense PDFs (financial, legal) process much slower than simple text
+)
+
+// Step-level timeout constants for the fallback chain inside ProcessContentActivity.
+// Each step gets a bounded time budget to prevent any single step from starving
+// subsequent fallbacks. Without these, a Gemini 504 on single-shot conversion
+// consumes the entire activity timeout, leaving nothing for chunked conversion.
+const (
+	SingleShotConversionTimeout = 4 * time.Minute // Max wait for a single-shot Gemini call (Gemini's own server-side limit is ~5 min)
+	PageCountQueryTimeout       = 3 * time.Minute // Max wait for page-count query (large video caches need more warm-up time)
+	ChunkConversionTimeout      = 3 * time.Minute // Max wait per chunk in chunked conversion
 )
 
 // Chunked conversion constants for large document fallback.
 // When single-shot conversion hits DEADLINE_EXCEEDED, the document is split into
 // page-range chunks and each chunk is converted independently using the existing cache.
 const (
-	ChunkedConversionPagesPerChunk  = 50
+	ChunkedConversionMinChunkPages   = 5  // Minimum chunk size for adaptive retry
 	ChunkedConversionPageCountPrompt = "How many pages does this document have? Respond with ONLY the number, nothing else."
+	RateLimitCooldown                = 60 * time.Second // Sleep before batch start and between retry rounds to let API quota recover
 )
 
+// Long media chunk processing constants.
+// Gemini has hard limits on how much media it can accept in a single cache/request.
+// Videos exceeding MaxVideoChunkDuration are physically split into chunks using
+// ffmpeg, each processed independently through the existing cache+batch pipeline.
+const (
+	MaxVideoChunkDuration = 30 * time.Minute // Gemini limit ~45 min for video with audio; 30 min gives safety margin
+	MaxAudioChunkDuration = 8 * time.Hour    // Gemini limit ~9.5 hours for audio-only
+	ChunkOverlap          = 30 * time.Second // Overlap between adjacent chunks to avoid boundary content loss
+)
+
+// BatchProfile holds per-file-type tuning parameters for the concurrent batch
+// conversion pipeline. The struct supports two modes:
+//
+//   - Page-based (documents): batches are page ranges (e.g., pages 1-10).
+//     Requires a GetPageCountActivity call. Used when SegmentDuration == 0.
+//   - Time-range (video/audio): batches are fixed-duration time segments
+//     (e.g., 00:05:00-00:10:00). Deterministic from known media duration,
+//     no page count query needed. Used when SegmentDuration > 0.
+//
+// Callers invoke batchProfile(fileType) once to get the right profile.
+type BatchProfile struct {
+	// Document-mode parameters (used when SegmentDuration == 0)
+	PagesPerBatch  int // Pages per batch activity in page-based mode
+	PagesPerChunk  int // Pages per sub-chunk within a batch activity
+	DirectMaxPages int // Page count threshold: below this, use single-shot conversion
+
+	// Media-mode parameters (used when SegmentDuration > 0)
+	SegmentDuration   time.Duration // Fixed duration per segment (e.g., 5 min). 0 = page-based.
+	DirectMaxDuration time.Duration // Duration threshold: below this, use single-shot conversion.
+
+	// Shared parameters
+	ChunkTimeout         time.Duration // Per-chunk/segment AI call timeout
+	ActivityTimeout      time.Duration // Temporal activity-level timeout
+	MaxConcurrentBatches int           // Max parallel batch activities dispatched via Selector
+}
+
+// isMediaFileType returns true for video and audio file types that benefit
+// from time-range based segmentation instead of page-based batching.
+func isMediaFileType(ft artifactpb.File_Type) bool {
+	switch ft {
+	case artifactpb.File_TYPE_MP4,
+		artifactpb.File_TYPE_AVI,
+		artifactpb.File_TYPE_MOV,
+		artifactpb.File_TYPE_MKV,
+		artifactpb.File_TYPE_FLV,
+		artifactpb.File_TYPE_WMV,
+		artifactpb.File_TYPE_MPEG,
+		artifactpb.File_TYPE_WEBM_VIDEO,
+		artifactpb.File_TYPE_MP3,
+		artifactpb.File_TYPE_WAV,
+		artifactpb.File_TYPE_AAC,
+		artifactpb.File_TYPE_OGG,
+		artifactpb.File_TYPE_FLAC,
+		artifactpb.File_TYPE_M4A,
+		artifactpb.File_TYPE_WMA,
+		artifactpb.File_TYPE_AIFF,
+		artifactpb.File_TYPE_WEBM_AUDIO:
+		return true
+	default:
+		return false
+	}
+}
+
+// isAudioFileType returns true for audio-only file types (no video track).
+func isAudioFileType(ft artifactpb.File_Type) bool {
+	switch ft {
+	case artifactpb.File_TYPE_MP3,
+		artifactpb.File_TYPE_WAV,
+		artifactpb.File_TYPE_AAC,
+		artifactpb.File_TYPE_OGG,
+		artifactpb.File_TYPE_FLAC,
+		artifactpb.File_TYPE_M4A,
+		artifactpb.File_TYPE_WMA,
+		artifactpb.File_TYPE_AIFF,
+		artifactpb.File_TYPE_WEBM_AUDIO:
+		return true
+	default:
+		return false
+	}
+}
+
+// fileTypeToModality maps a file type to a modality key for prompt lookup.
+func fileTypeToModality(ft artifactpb.File_Type) string {
+	if isAudioFileType(ft) {
+		return ModalityAudio
+	}
+	if isVideoFileType(ft) {
+		return ModalityVideo
+	}
+	if isImageFileType(ft) {
+		return ModalityImage
+	}
+	return ModalityDocument
+}
+
+// isVideoFileType returns true for video file types.
+func isVideoFileType(ft artifactpb.File_Type) bool {
+	switch ft {
+	case artifactpb.File_TYPE_MP4,
+		artifactpb.File_TYPE_AVI,
+		artifactpb.File_TYPE_MOV,
+		artifactpb.File_TYPE_MKV,
+		artifactpb.File_TYPE_FLV,
+		artifactpb.File_TYPE_WMV,
+		artifactpb.File_TYPE_MPEG,
+		artifactpb.File_TYPE_WEBM_VIDEO:
+		return true
+	default:
+		return false
+	}
+}
+
+// isImageFileType returns true for standalone image file types.
+func isImageFileType(ft artifactpb.File_Type) bool {
+	switch ft {
+	case artifactpb.File_TYPE_PNG,
+		artifactpb.File_TYPE_JPEG,
+		artifactpb.File_TYPE_GIF,
+		artifactpb.File_TYPE_WEBP,
+		artifactpb.File_TYPE_TIFF,
+		artifactpb.File_TYPE_BMP,
+		artifactpb.File_TYPE_HEIC,
+		artifactpb.File_TYPE_HEIF,
+		artifactpb.File_TYPE_AVIF,
+		artifactpb.File_TYPE_SVG:
+		return true
+	default:
+		return false
+	}
+}
+
+// getContentPromptForFileType returns the modality-appropriate content prompt.
+// Resolution order: per-modality override → default override → CE fallback.
+func (w *Worker) getContentPromptForFileType(ft artifactpb.File_Type) string {
+	modality := fileTypeToModality(ft)
+
+	if w.generateContentPrompts != nil {
+		if p, ok := w.generateContentPrompts[modality]; ok {
+			return p
+		}
+	}
+
+	if w.generateContentPrompt != "" {
+		return w.generateContentPrompt
+	}
+
+	return gemini.GetGenerateContentPrompt()
+}
+
+// formatTimestamp formats a time.Duration as "HH:MM:SS" for use in
+// time-range prompts sent to the AI model.
+func formatTimestamp(d time.Duration) string {
+	total := int(d.Seconds())
+	h := total / 3600
+	m := (total % 3600) / 60
+	s := total % 60
+	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+}
+
+// batchProfile returns tuning parameters appropriate for the given file type.
+//
+// Media files (video/audio) use time-range segmentation: fixed 5-minute
+// segments with 32 concurrent batches, eliminating the need for a page count
+// query. Page-based fields are retained as fallback if duration is unavailable.
+//
+// Document files use page-based batching with 16 concurrent batches.
+func batchProfile(ft artifactpb.File_Type) BatchProfile {
+	if isMediaFileType(ft) {
+		return BatchProfile{
+			// Time-range mode (primary for media)
+			SegmentDuration:   5 * time.Minute,
+			DirectMaxDuration: 10 * time.Minute,
+
+			// Page-based fallback (used when duration is unavailable)
+			PagesPerBatch:  3,
+			PagesPerChunk:  3,
+			DirectMaxPages: 5,
+
+			// Shared
+			ChunkTimeout:         5 * time.Minute,
+			ActivityTimeout:      20 * time.Minute,
+			MaxConcurrentBatches: 32,
+		}
+	}
+	return BatchProfile{
+		PagesPerBatch:        10,
+		PagesPerChunk:        10,
+		DirectMaxPages:       10,
+		ChunkTimeout:         ChunkConversionTimeout,
+		ActivityTimeout:      15 * time.Minute,
+		MaxConcurrentBatches: 16,
+	}
+}
+
 // CalculateAIProcessingTimeout returns a dynamic timeout based on file size.
-// Larger files need more time for AI processing (conversion, summarization).
-// The timeout scales with file size but is capped at AIProcessingMaxTimeout.
+// The timeout must be large enough for the full fallback chain (single-shot →
+// chunked → without-cache → fresh-cache+chunked) since each step may consume
+// significant time before failing.
 //
 // Formula: base_timeout + (file_size_bytes / bytes_per_second) * safety_factor
 // Safety factor of 3x accounts for API latency, rate limiting, processing variance,
@@ -89,6 +307,27 @@ func CalculateAIProcessingTimeout(fileSizeBytes int) time.Duration {
 	}
 	if calculatedTimeout > AIProcessingMaxTimeout {
 		return AIProcessingMaxTimeout
+	}
+
+	return calculatedTimeout
+}
+
+// CalculateStandardizationTimeout returns a file-size-aware timeout for
+// StandardizeFileTypeActivity. Large media files need extra time for the
+// two-pass ffmpeg conversion plus gRPC transfer of the raw bytes.
+func CalculateStandardizationTimeout(fileSizeBytes int) time.Duration {
+	if fileSizeBytes <= 0 {
+		return StdMinTimeout
+	}
+
+	estimatedSeconds := float64(fileSizeBytes) / float64(StdBytesPerSecond)
+	calculatedTimeout := StdBaseTimeout + time.Duration(estimatedSeconds)*time.Second
+
+	if calculatedTimeout < StdMinTimeout {
+		return StdMinTimeout
+	}
+	if calculatedTimeout > StdMaxTimeout {
+		return StdMaxTimeout
 	}
 
 	return calculatedTimeout
@@ -218,8 +457,10 @@ type Worker struct {
 	postContentConversion PostContentConversionFn
 	postStandardization   PostStandardizationFn
 	postSummaryConversion PostSummaryConversionFn
-	generateContentPrompt string // Prompt for AI content generation
-	generateSummaryPrompt string // Prompt for AI summary generation
+	generateContentPrompt  string            // Default prompt for AI content generation (backward compat)
+	generateContentPrompts map[string]string // Per-modality prompts: "document", "image", "video", "audio"
+	generateSummaryPrompt  string            // Prompt for AI summary generation
+	aiClientOverrides      map[string]ai.Client // Per-modality AI client overrides
 }
 
 // TemporalClient returns the Temporal client for workflow execution
@@ -286,10 +527,28 @@ func (w *Worker) SetPostSummaryConversionFn(fn PostSummaryConversionFn) {
 	w.postSummaryConversion = fn
 }
 
-// SetGenerateContentPrompt allows clients to override the content generation prompt.
+// SetGenerateContentPrompt allows clients to override the default content generation prompt.
 // If not set, defaults to CE's embedded prompt.
 func (w *Worker) SetGenerateContentPrompt(prompt string) {
 	w.generateContentPrompt = prompt
+}
+
+// Modality keys for per-modality prompt overrides.
+const (
+	ModalityDocument = "document"
+	ModalityImage    = "image"
+	ModalityVideo    = "video"
+	ModalityAudio    = "audio"
+)
+
+// SetGenerateContentPromptForModality sets a content generation prompt for a
+// specific modality (document, image, video, audio). When set, this prompt is
+// used instead of the default for files of the corresponding type.
+func (w *Worker) SetGenerateContentPromptForModality(modality, prompt string) {
+	if w.generateContentPrompts == nil {
+		w.generateContentPrompts = make(map[string]string, 4)
+	}
+	w.generateContentPrompts[modality] = prompt
 }
 
 // SetGenerateSummaryPrompt allows clients to override the summary generation prompt.
@@ -299,7 +558,7 @@ func (w *Worker) SetGenerateSummaryPrompt(prompt string) {
 }
 
 // getGenerateContentPrompt returns the prompt to use, falling back to CE default if not set.
-func (w *Worker) getGenerateContentPrompt() string {
+func (w *Worker) getGenerateContentPrompt() string { //nolint:unused
 	if w.generateContentPrompt != "" {
 		return w.generateContentPrompt
 	}
@@ -312,6 +571,28 @@ func (w *Worker) getGenerateSummaryPrompt() string {
 		return w.generateSummaryPrompt
 	}
 	return gemini.GetGenerateSummaryPrompt()
+}
+
+// SetAIClientForModality registers an AI client override for a specific
+// modality. When set, this client is used instead of the default for files
+// of the corresponding type (e.g., a different model for audio processing).
+func (w *Worker) SetAIClientForModality(modality string, client ai.Client) {
+	if w.aiClientOverrides == nil {
+		w.aiClientOverrides = make(map[string]ai.Client, 4)
+	}
+	w.aiClientOverrides[modality] = client
+}
+
+// getAIClientForFileType returns the modality-appropriate AI client.
+// Resolution: per-modality override → default aiClient.
+func (w *Worker) getAIClientForFileType(ft artifactpb.File_Type) ai.Client {
+	if w.aiClientOverrides != nil {
+		modality := fileTypeToModality(ft)
+		if c, ok := w.aiClientOverrides[modality]; ok {
+			return c
+		}
+	}
+	return w.aiClient
 }
 
 // New creates a new worker instance with direct dependencies (no circular dependency)

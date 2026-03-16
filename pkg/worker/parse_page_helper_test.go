@@ -534,3 +534,97 @@ End of document.`
 	t.Logf("✅ All 13 pages verified with accurate delimiters")
 	t.Logf("Delimiters: %v", positionData.PageDelimiters)
 }
+
+func TestDeduplicatePageTags_NoDuplicates(t *testing.T) {
+	c := qt.New(t)
+
+	input := "[Page: 1]\nFirst page\n\n[Page: 2]\nSecond page\n\n[Page: 3]\nThird page"
+	result := deduplicatePageTags(input)
+	c.Assert(result, qt.Equals, input)
+}
+
+func TestDeduplicatePageTags_SingleDuplicate(t *testing.T) {
+	c := qt.New(t)
+
+	// Batch A (pages 1-2) overflows into page 3; Batch B (pages 3-4) starts at page 3.
+	input := "[Page: 1]\nFirst\n\n[Page: 2]\nSecond with table\n<table><tr><td>row</td></tr>\n\n" +
+		"[Page: 3]\n<tr><td>overflow row</td></tr></table>\n\n" +
+		"[Page: 3]\nThird page full content\n\n[Page: 4]\nFourth page"
+
+	result := deduplicatePageTags(input)
+
+	// The first [Page: 3] (overflow) should be removed; its content folds into page 2 area.
+	// The second [Page: 3] (correct batch) is kept.
+	_, pages, _ := parseMarkdownPages(result)
+	c.Assert(len(pages), qt.Equals, 4)
+
+	// Page 2 should now include the overflow table rows
+	c.Assert(strings.Contains(pages[1], "overflow row"), qt.IsTrue,
+		qt.Commentf("Overflow content should fold into preceding page"))
+	// Page 3 should be the correct batch's content
+	c.Assert(strings.Contains(pages[2], "Third page full content"), qt.IsTrue)
+}
+
+func TestDeduplicatePageTags_MultipleDuplicates(t *testing.T) {
+	c := qt.New(t)
+
+	// Batch A (1-3) overflows into pages 4 and 5; Batch B (4-6) is normal.
+	input := "[Page: 1]\nP1\n\n[Page: 2]\nP2\n\n[Page: 3]\nP3 table\n\n" +
+		"[Page: 4]\noverflow-4\n\n[Page: 5]\noverflow-5\n\n" +
+		"[Page: 4]\nReal P4\n\n[Page: 5]\nReal P5\n\n[Page: 6]\nP6"
+
+	result := deduplicatePageTags(input)
+
+	_, pages, _ := parseMarkdownPages(result)
+	c.Assert(len(pages), qt.Equals, 6)
+
+	// Page 3 should contain overflow content that was under the removed [Page: 4] and [Page: 5]
+	c.Assert(strings.Contains(pages[2], "overflow-4"), qt.IsTrue)
+	c.Assert(strings.Contains(pages[2], "overflow-5"), qt.IsTrue)
+	// Real pages 4 and 5 are preserved
+	c.Assert(strings.Contains(pages[3], "Real P4"), qt.IsTrue)
+	c.Assert(strings.Contains(pages[4], "Real P5"), qt.IsTrue)
+}
+
+func TestDeduplicatePageTags_EmptyAndNoTags(t *testing.T) {
+	c := qt.New(t)
+
+	c.Assert(deduplicatePageTags(""), qt.Equals, "")
+	c.Assert(deduplicatePageTags("no page tags here"), qt.Equals, "no page tags here")
+}
+
+func TestDeduplicatePageTags_RealisticBatchAssembly(t *testing.T) {
+	c := qt.New(t)
+
+	// Simulates mergeHTMLTables output for a 10-page doc with batches of 5.
+	// Batch 1 (pages 1-5) has a table on page 5 that overflows to page 6.
+	// Batch 2 (pages 6-10) starts normally with page 6.
+	batch1 := "[Page: 1]\n# Introduction\n\n" +
+		"[Page: 2]\nSome content\n\n" +
+		"[Page: 3]\nMore content\n\n" +
+		"[Page: 4]\nEven more\n\n" +
+		"[Page: 5]\n<table>\n<tr><td>Header</td></tr>\n<tr><td>P5 row</td></tr>\n" +
+		"[Page: 6]\n<tr><td>P6 overflow row</td></tr>\n</table>"
+
+	batch2 := "[Page: 6]\n<table>\n<tr><td>Header</td></tr>\n<tr><td>P5 row</td></tr>\n<tr><td>P6 overflow row</td></tr>\n</table>\n\nRest of page 6\n\n" +
+		"[Page: 7]\nPage 7\n\n" +
+		"[Page: 8]\nPage 8\n\n" +
+		"[Page: 9]\nPage 9\n\n" +
+		"[Page: 10]\nPage 10"
+
+	assembled := batch1 + "\n\n" + batch2
+	result := deduplicatePageTags(assembled)
+
+	_, pages, positionData := parseMarkdownPages(result)
+	c.Assert(len(pages), qt.Equals, 10, qt.Commentf("Should produce exactly 10 pages"))
+	c.Assert(positionData, qt.IsNotNil)
+	c.Assert(len(positionData.PageDelimiters), qt.Equals, 10)
+
+	// Page 5 should contain the overflow row (table continuation folds in)
+	c.Assert(strings.Contains(pages[4], "P6 overflow row"), qt.IsTrue,
+		qt.Commentf("Overflow content should be part of page 5"))
+
+	// Page 6 should be the real batch 2 content
+	c.Assert(strings.Contains(pages[5], "Rest of page 6"), qt.IsTrue,
+		qt.Commentf("Page 6 should have the correct batch content"))
+}

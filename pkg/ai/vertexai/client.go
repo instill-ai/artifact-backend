@@ -23,6 +23,7 @@ type Client struct {
 	client  *genai.Client
 	storage object.Storage
 	config  Config
+	model   string
 }
 
 // NewClient creates a new VertexAI client with object storage support (GCS)
@@ -37,12 +38,6 @@ func NewClient(ctx context.Context, config Config, storage object.Storage) (*Cli
 		return nil, errorsx.AddMessage(
 			errorsx.ErrInvalidArgument,
 			"VertexAI configuration is missing project ID.",
-		)
-	}
-	if config.Region == "" {
-		return nil, errorsx.AddMessage(
-			errorsx.ErrInvalidArgument,
-			"VertexAI configuration is missing region.",
 		)
 	}
 	if storage == nil {
@@ -111,7 +106,7 @@ func NewClient(ctx context.Context, config Config, storage object.Storage) (*Cli
 	genaiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
 		Backend:  genai.BackendVertexAI,
 		Project:  config.ProjectID,
-		Location: config.Region,
+		Location: "global",
 	})
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -120,10 +115,16 @@ func NewClient(ctx context.Context, config Config, storage object.Storage) (*Cli
 		)
 	}
 
+	model := config.Model
+	if model == "" {
+		model = DefaultModel
+	}
+
 	return &Client{
 		client:  genaiClient,
 		storage: storage,
 		config:  config,
+		model:   model,
 	}, nil
 }
 
@@ -186,7 +187,7 @@ func (c *Client) CountTokens(ctx context.Context, content []byte, fileType artif
 	}
 
 	// Count tokens using the VertexAI API
-	resp, err := c.client.Models.CountTokens(ctx, GetModel(), contents, nil)
+	resp, err := c.client.Models.CountTokens(ctx, c.model, contents, nil)
 	if err != nil {
 		return 0, nil, errorsx.AddMessage(
 			fmt.Errorf("failed to count tokens: %w", err),

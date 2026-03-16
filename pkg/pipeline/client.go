@@ -186,8 +186,11 @@ func GenerateSummaryPipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 // requesterUID parameter is kept for API compatibility but not used - service-to-service auth is sufficient.
 // Using empty requesterUID avoids "namespace error" when the original file owner's namespace was deleted.
 func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, content []byte, sourceType artifactpb.File_Type, mimeType string, requesterUID string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, 300*time.Second)
-	defer cancel()
+	// No hard-coded timeout — inherit the parent context's deadline.
+	// The caller (StandardizeFileTypeActivity) sets a file-size-aware timeout
+	// via CalculateStandardizationTimeout, which accounts for two-pass ffmpeg
+	// conversion of large video files.
+
 	// Use empty requesterUID for service-to-service calls, consistent with other pipeline calls
 	// (GenerateContentPipe, GenerateSummaryPipe, EmbedPipe all use empty requesterUID)
 	// This prevents "fetching requester namespace: namespace error" when the KB owner's

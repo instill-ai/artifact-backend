@@ -28,7 +28,7 @@ func TestConversionOutput(t *testing.T) {
 			Markdown:      "# Converted Content",
 			UsageMetadata: usageMetadata,
 			CacheName:     &cacheName,
-			Model:         "gemini-2.5-flash",
+			Model:         "gemini-3-flash-preview",
 		}
 
 		c.Assert(output.Markdown, qt.Equals, "# Converted Content")
@@ -38,7 +38,7 @@ func TestConversionOutput(t *testing.T) {
 		c.Assert(output.UsageMetadata.TotalTokenCount, qt.Equals, int32(300))
 		c.Assert(output.UsageMetadata.CachedContentTokenCount, qt.Equals, int32(50))
 		c.Assert(*output.CacheName, qt.Equals, "cache-123")
-		c.Assert(output.Model, qt.Equals, "gemini-2.5-flash")
+		c.Assert(output.Model, qt.Equals, "gemini-3-flash-preview")
 	})
 
 	t.Run("nil cache name for direct conversion", func(t *testing.T) {
@@ -46,7 +46,7 @@ func TestConversionOutput(t *testing.T) {
 			Markdown:      "# Content",
 			UsageMetadata: nil,
 			CacheName:     nil,
-			Model:         "gemini-2.5-flash",
+			Model:         "gemini-3-flash-preview",
 		}
 
 		c.Assert(output.CacheName, qt.IsNil)
@@ -73,7 +73,7 @@ func TestConstants(t *testing.T) {
 	})
 
 	t.Run("DefaultCacheTTL", func(t *testing.T) {
-		c.Assert(DefaultCacheTTL, qt.Equals, 10*time.Minute)
+		c.Assert(DefaultCacheTTL, qt.Equals, 2*time.Hour)
 	})
 
 	t.Run("RAG system instruction loaded from prompt", func(t *testing.T) {

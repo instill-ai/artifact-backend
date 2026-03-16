@@ -995,11 +995,20 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			file.ProcessOutcome = kbFile.ExtraMetaDataUnmarshal.StatusMessage
 		}
 
-		if kbFile.ExtraMetaDataUnmarshal != nil && len(kbFile.ExtraMetaDataUnmarshal.Length) > 0 {
+		if kbFile.ExtraMetaDataUnmarshal != nil {
 			fileType := artifactpb.File_Type(artifactpb.File_Type_value[kbFile.FileType])
-			file.Length = &artifactpb.File_Position{
-				Unit:        getPositionUnit(fileType),
-				Coordinates: kbFile.ExtraMetaDataUnmarshal.Length,
+			posUnit := getPositionUnit(fileType)
+
+			if posUnit == artifactpb.File_Position_UNIT_TIME_MS && kbFile.ExtraMetaDataUnmarshal.DurationSeconds > 0 {
+				file.Length = &artifactpb.File_Position{
+					Unit:        posUnit,
+					Coordinates: []uint32{uint32(kbFile.ExtraMetaDataUnmarshal.DurationSeconds) * 1000},
+				}
+			} else if len(kbFile.ExtraMetaDataUnmarshal.Length) > 0 {
+				file.Length = &artifactpb.File_Position{
+					Unit:        posUnit,
+					Coordinates: kbFile.ExtraMetaDataUnmarshal.Length,
+				}
 			}
 		}
 
@@ -1382,6 +1391,11 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		// - Images → PNG
 		// - Audio → OGG
 		// - Video → MP4
+		//
+		// No processStatus check here: the standardized file is a format-normalized
+		// copy of the original (e.g., PDF → PDF) that doesn't change during
+		// reprocessing. The preview should remain available while content/summary
+		// are being regenerated.
 
 		// Parse file type to determine which converted file type to query
 		fileType, ok := artifactpb.File_Type_value[kbFile.FileType]
@@ -2451,6 +2465,24 @@ func getPositionUnit(fileType artifactpb.File_Type) artifactpb.File_Position_Uni
 		artifactpb.File_TYPE_XLSX,
 		artifactpb.File_TYPE_XLS:
 		return artifactpb.File_Position_UNIT_PAGE
+	case artifactpb.File_TYPE_MP3,
+		artifactpb.File_TYPE_WAV,
+		artifactpb.File_TYPE_AAC,
+		artifactpb.File_TYPE_OGG,
+		artifactpb.File_TYPE_FLAC,
+		artifactpb.File_TYPE_M4A,
+		artifactpb.File_TYPE_WMA,
+		artifactpb.File_TYPE_AIFF,
+		artifactpb.File_TYPE_WEBM_AUDIO,
+		artifactpb.File_TYPE_MP4,
+		artifactpb.File_TYPE_AVI,
+		artifactpb.File_TYPE_MOV,
+		artifactpb.File_TYPE_MKV,
+		artifactpb.File_TYPE_FLV,
+		artifactpb.File_TYPE_WMV,
+		artifactpb.File_TYPE_MPEG,
+		artifactpb.File_TYPE_WEBM_VIDEO:
+		return artifactpb.File_Position_UNIT_TIME_MS
 	}
 
 	return artifactpb.File_Position_UNIT_UNSPECIFIED

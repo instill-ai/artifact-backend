@@ -22,14 +22,15 @@ const (
 	ModelFamily = "gemini"
 
 	// DefaultModel is the default Gemini model for multimodal content conversion
-	DefaultModel = "gemini-3-flash"
+	DefaultModel = "gemini-3.1-pro-preview"
 
 	// DefaultCacheTTL is the default time-to-live for cached content.
-	// Must be long enough to survive the full processing pipeline including
-	// chunked conversion fallback. The Gemini API minimum is 1 minute;
-	// we use 10 minutes so the cache outlives even large-document conversions
-	// that may take several minutes before falling back to chunked processing.
-	DefaultCacheTTL = 10 * time.Minute
+	// Must be long enough for per-batch processing of 1000+ page documents.
+	// Budget: single-shot attempt (4 min) + 20 batch activities × 10 min each
+	// = ~200 min worst case. 2 hours covers this with margin for retries.
+	// If the cache expires mid-processing, the workflow detects it and creates
+	// a fresh cache automatically.
+	DefaultCacheTTL = 2 * time.Hour
 
 	// MinCacheTokens is the minimum token count for Gemini cache creation
 	// Gemini API requires 1024 tokens minimum

@@ -344,19 +344,20 @@ func validatePrompt(prompt string) error {
 	return nil
 }
 
-// createGenerateContentConfig creates a standard GenerateContentConfig with common settings
+// createGenerateContentConfig creates a standard GenerateContentConfig with common settings.
+// AudioTimestamp is always enabled so the model returns precise timestamps for audio content;
+// it has no effect on non-audio modalities.
 func createGenerateContentConfig(cacheName string) *genai.GenerateContentConfig {
 	config := &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr(float32(1.0)),
 		TopP:            genai.Ptr(float32(0.95)),
-		MaxOutputTokens: 65536, // Gemini 3 Flash supports up to 65k output tokens
+		MaxOutputTokens: 65536,
+		AudioTimestamp:  true,
 	}
 
 	if cacheName != "" {
-		// Using cached content - system instruction is already baked into the cache
 		config.CachedContent = cacheName
 	} else {
-		// Not using cache - set system instruction directly
 		config.SystemInstruction = &genai.Content{
 			Parts: []*genai.Part{
 				{Text: GetSystemInstruction()},

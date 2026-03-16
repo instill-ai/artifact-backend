@@ -83,12 +83,13 @@ func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []by
 	}
 
 	// Generate response using VertexAI Models API
-	resp, err := c.client.Models.GenerateContent(ctx, GetModel(), promptContent, &genai.GenerateContentConfig{
+	resp, err := c.client.Models.GenerateContent(ctx, c.model, promptContent, &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{
 			Parts: []*genai.Part{
 				{Text: getSystemInstruction()},
 			},
 		},
+		AudioTimestamp: true,
 	})
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -105,7 +106,7 @@ func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []by
 		PositionData:  nil, // VertexAI doesn't provide position data
 		Length:        nil,
 		Client:        "vertexai",
-		Model:         GetModel(),
+		Model:         c.model,
 		UsageMetadata: resp.UsageMetadata,
 	}, nil
 }
@@ -129,8 +130,9 @@ func (c *Client) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prom
 
 	// Generate response using cached content
 	// The cache name is passed via CachedContent field in config
-	resp, err := c.client.Models.GenerateContent(ctx, GetModel(), promptContent, &genai.GenerateContentConfig{
-		CachedContent: cacheName,
+	resp, err := c.client.Models.GenerateContent(ctx, c.model, promptContent, &genai.GenerateContentConfig{
+		CachedContent:  cacheName,
+		AudioTimestamp: true,
 	})
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -147,7 +149,7 @@ func (c *Client) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prom
 		PositionData:  nil,
 		Length:        nil,
 		Client:        "vertexai",
-		Model:         GetModel(),
+		Model:         c.model,
 		UsageMetadata: resp.UsageMetadata,
 	}, nil
 }

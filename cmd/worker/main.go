@@ -193,6 +193,10 @@ func main() {
 	w.RegisterActivity(cw.DeleteFilesBatchActivity) // Delete multiple files from MinIO (parallel)
 	w.RegisterActivity(cw.GetFilesBatchActivity)    // Retrieve multiple files from MinIO (parallel)
 
+	// Media processing
+	w.RegisterActivity(cw.GetMediaDurationActivity)  // Probe media duration with ffprobe
+	w.RegisterActivity(cw.SplitMediaChunksActivity)  // Split long media into physical chunks
+
 	// File status management
 	w.RegisterActivity(cw.GetFileStatusActivity)    // Retrieve current file processing status
 	w.RegisterActivity(cw.UpdateFileStatusActivity) // Update file processing status
@@ -262,6 +266,12 @@ func main() {
 	w.RegisterActivity(cw.ProcessContentActivity) // Complete content processing: markdown conversion → save to DB
 	w.RegisterActivity(cw.ProcessSummaryActivity) // Complete summary processing: generate → save to DB
 
+	// Per-Batch Chunked Conversion Activities (for large files that exceed single-shot limits)
+	w.RegisterActivity(cw.GetPageCountActivity)         // Query cached document for total page count
+	w.RegisterActivity(cw.IdentifySpeakersActivity)     // Identify speakers in cached media for cross-chunk consistency
+	w.RegisterActivity(cw.ConvertBatchActivity)         // Convert a batch (page range or time segment), write result to MinIO
+	w.RegisterActivity(cw.SaveAssembledContentActivity) // Read batch results from MinIO, assemble, save final content
+
 	// Chunking Phase - Combined content and summary chunking (sequential after parallel AI operations)
 	w.RegisterActivity(cw.DeleteOldTextChunksActivity) // Delete old text chunk records before creating new ones
 	w.RegisterActivity(cw.ChunkContentActivity)        // Split markdown content into semantic chunks
@@ -300,6 +310,10 @@ func main() {
 			logger.Info("GCS cleanup continuous workflow started successfully")
 		}
 	}()
+
+	// Start orphan file sweeper to reconcile files stuck in non-terminal states
+	// after workflow termination, crashes, or infrastructure failures
+	cw.StartOrphanSweeper(ctx)
 
 	// Workflows are triggered by API handlers (e.g., ProcessCatalogFiles in cmd/main)
 	// No dispatcher needed - Temporal handles task distribution and retries automatically

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
@@ -118,6 +119,65 @@ func calculatePagePositions(markdown string, pageMatches [][]int, pageTagIndices
 	return &types.PositionData{
 		PageDelimiters: pageDelimiters,
 	}
+}
+
+// deduplicatePageTags removes duplicate [Page: X] tags from assembled batch
+// output. When batch conversion tells the AI to include table continuation rows
+// beyond its assigned range, the AI may emit extra [Page: X] tags for pages
+// that belong to the next batch. After assembly these appear as duplicates.
+//
+// For each page number that appears more than once, only the LAST occurrence is
+// kept (the one from the batch actually assigned that page). Earlier occurrences
+// have their tag line deleted; their content folds into the preceding page,
+// which is correct because the table started on that page.
+func deduplicatePageTags(markdown string) string {
+	matches := pageTagPattern.FindAllStringSubmatchIndex(markdown, -1)
+	if len(matches) == 0 {
+		return markdown
+	}
+
+	// Record the last occurrence index for each page number.
+	lastIdx := make(map[int]int)
+	for i, m := range matches {
+		pageNum, _ := strconv.Atoi(markdown[m[2]:m[3]])
+		lastIdx[pageNum] = i
+	}
+
+	// Collect match indices that are duplicates (not the last occurrence).
+	var toRemove []int
+	seen := make(map[int]int) // pageNum -> count
+	for i, m := range matches {
+		pageNum, _ := strconv.Atoi(markdown[m[2]:m[3]])
+		seen[pageNum]++
+		if lastIdx[pageNum] != i {
+			toRemove = append(toRemove, i)
+		}
+	}
+
+	if len(toRemove) == 0 {
+		return markdown
+	}
+
+	// Build the output, skipping the tag lines of duplicate occurrences.
+	var b strings.Builder
+	b.Grow(len(markdown))
+	lastEnd := 0
+	for _, idx := range toRemove {
+		m := matches[idx]
+		tagStart := m[0]
+		tagEnd := m[1]
+
+		b.WriteString(markdown[lastEnd:tagStart])
+
+		// Skip trailing newline after the tag line if present.
+		if tagEnd < len(markdown) && markdown[tagEnd] == '\n' {
+			tagEnd++
+		}
+		lastEnd = tagEnd
+	}
+	b.WriteString(markdown[lastEnd:])
+
+	return b.String()
 }
 
 // ExtractPageContent extracts the content of a specific page using the [Page: X] tags.

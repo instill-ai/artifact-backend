@@ -14,7 +14,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	github.com/iancoleman/strcase v0.3.0
 	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260303010248-9dda50abe5bb
-	github.com/instill-ai/x v0.10.1-alpha.0.20260303010308-bdc5aa97f167
+	github.com/instill-ai/x v0.10.1-alpha.0.20260316103754-d72af039ae90
 	github.com/knadh/koanf v1.5.0
 	github.com/mennanov/fieldmask-utils v1.1.2
 	github.com/milvus-io/milvus/client/v2 v2.6.1

@@ -10,7 +10,7 @@ const (
 	ModelFamily = "gemini"
 
 	// DefaultModel is the default VertexAI model for multimodal content conversion
-	DefaultModel = "gemini-2.5-flash"
+	DefaultModel = "gemini-3.1-pro-preview"
 
 	// DefaultCacheTTL is the default time-to-live for cached content (1 minute)
 	// Matches CE's default

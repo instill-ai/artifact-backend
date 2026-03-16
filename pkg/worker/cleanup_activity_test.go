@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gofrs/uuid"
@@ -11,9 +12,13 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
+
+	miniox "github.com/instill-ai/x/minio"
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 func TestCleanupFileWorkflowParam_Validation(t *testing.T) {
@@ -360,4 +365,127 @@ func TestDropVectorDBCollectionActivity_AlreadyDropped(t *testing.T) {
 	// Should not error when collection doesn't exist (already dropped)
 	err := w.DropVectorDBCollectionActivity(ctx, param)
 	c.Assert(err, qt.IsNil)
+}
+
+// ===== DeleteOldConvertedFilesActivity Orphan Cleanup Tests =====
+
+func TestDeleteOldConvertedFilesActivity_NoConvertedFiles(t *testing.T) {
+	c := qt.New(t)
+	mc := minimock.NewController(t)
+
+	config.Config.Minio = miniox.Config{BucketName: "test-bucket"}
+
+	ctx := context.Background()
+	fileUID := uuid.Must(uuid.NewV4())
+
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetAllConvertedFilesByFileUIDMock.
+		When(minimock.AnyContext, fileUID).
+		Then([]repository.ConvertedFileModel{}, nil)
+
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+
+	param := &DeleteOldConvertedFilesActivityParam{
+		FileUID: fileUID,
+	}
+
+	err := w.DeleteOldConvertedFilesActivity(ctx, param)
+	c.Assert(err, qt.IsNil)
+}
+
+func TestDeleteOldConvertedFilesActivity_SingleConvertedFileNoChunks(t *testing.T) {
+	c := qt.New(t)
+	mc := minimock.NewController(t)
+
+	config.Config.Minio = miniox.Config{BucketName: "test-bucket"}
+
+	ctx := context.Background()
+	fileUID := uuid.Must(uuid.NewV4())
+	convertedFileUID := uuid.Must(uuid.NewV4())
+
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.DeleteFileMock.Return(nil)
+
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetAllConvertedFilesByFileUIDMock.
+		When(minimock.AnyContext, fileUID).
+		Then([]repository.ConvertedFileModel{
+			{
+				UID:           convertedFileUID,
+				ConvertedType: artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT.String(),
+				StoragePath:   "kb/file/converted-file/content.md",
+			},
+		}, nil)
+	mockRepository.GetTextChunksBySourceMock.Return([]repository.ChunkModel{}, nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
+	mockRepository.DeleteConvertedFileMock.Return(nil)
+
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+
+	param := &DeleteOldConvertedFilesActivityParam{
+		FileUID: fileUID,
+	}
+
+	err := w.DeleteOldConvertedFilesActivity(ctx, param)
+	c.Assert(err, qt.IsNil)
+
+	// 1 converted file blob deleted
+	c.Assert(mockStorage.DeleteFileAfterCounter(), qt.Equals, uint64(1))
+}
+
+func TestDeleteOldConvertedFilesActivity_ConvertedFileWithChunks(t *testing.T) {
+	c := qt.New(t)
+	mc := minimock.NewController(t)
+
+	config.Config.Minio = miniox.Config{BucketName: "test-bucket"}
+
+	ctx := context.Background()
+	fileUID := uuid.Must(uuid.NewV4())
+	convertedFileUID := uuid.Must(uuid.NewV4())
+	chunk1UID := uuid.Must(uuid.NewV4())
+	chunk2UID := uuid.Must(uuid.NewV4())
+	chunk3UID := uuid.Must(uuid.NewV4())
+
+	dbChunkPaths := []string{
+		"kb/file/chunk/" + chunk1UID.String() + ".txt",
+		"kb/file/chunk/" + chunk2UID.String() + ".txt",
+		"kb/file/chunk/" + chunk3UID.String() + ".txt",
+	}
+
+	var deleteCount atomic.Int64
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.DeleteFileMock.Set(func(_ context.Context, _ string, _ string) error {
+		deleteCount.Add(1)
+		return nil
+	})
+
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetAllConvertedFilesByFileUIDMock.
+		When(minimock.AnyContext, fileUID).
+		Then([]repository.ConvertedFileModel{
+			{
+				UID:           convertedFileUID,
+				ConvertedType: artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT.String(),
+				StoragePath:   "kb/file/converted-file/content.md",
+			},
+		}, nil)
+	mockRepository.GetTextChunksBySourceMock.Return([]repository.ChunkModel{
+		{UID: chunk1UID, StoragePath: dbChunkPaths[0]},
+		{UID: chunk2UID, StoragePath: dbChunkPaths[1]},
+		{UID: chunk3UID, StoragePath: dbChunkPaths[2]},
+	}, nil)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
+	mockRepository.DeleteConvertedFileMock.Return(nil)
+
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+
+	param := &DeleteOldConvertedFilesActivityParam{
+		FileUID: fileUID,
+	}
+
+	err := w.DeleteOldConvertedFilesActivity(ctx, param)
+	c.Assert(err, qt.IsNil)
+
+	// 3 DB chunk blobs + 1 converted file blob = 4 total deletes
+	c.Assert(deleteCount.Load(), qt.Equals, int64(4))
 }

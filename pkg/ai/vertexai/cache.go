@@ -31,7 +31,7 @@ func (c *Client) CreateCache(ctx context.Context, files []ai.FileContent, ttl ti
 		displayName = fmt.Sprintf("cache-%s", files[0].FileDisplayName)
 	}
 
-	output, err := c.createBatchCache(ctx, GetModel(), files, ttl, displayName)
+	output, err := c.createBatchCache(ctx, c.model, files, ttl, displayName)
 	if err != nil {
 		return nil, errorsx.AddMessage(err, "Unable to create VertexAI cache. The file will be processed without optimization.")
 	}

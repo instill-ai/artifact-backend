@@ -58,14 +58,14 @@ func TestCacheOutput(t *testing.T) {
 
 		output := &CacheOutput{
 			CacheName:     "test-cache-123",
-			Model:         "gemini-2.5-flash",
+			Model:         "gemini-3-flash-preview",
 			CreateTime:    now,
 			ExpireTime:    expiry,
 			UsageMetadata: usageMetadata,
 		}
 
 		c.Assert(output.CacheName, qt.Equals, "test-cache-123")
-		c.Assert(output.Model, qt.Equals, "gemini-2.5-flash")
+		c.Assert(output.Model, qt.Equals, "gemini-3-flash-preview")
 		c.Assert(output.CreateTime, qt.Equals, now)
 		c.Assert(output.ExpireTime, qt.Equals, expiry)
 		c.Assert(output.UsageMetadata, qt.Not(qt.IsNil))
@@ -267,7 +267,7 @@ func TestConvertToCacheResult(t *testing.T) {
 
 		output := &CacheOutput{
 			CacheName:     "test-cache-456",
-			Model:         "gemini-2.5-flash",
+			Model:         "gemini-3-flash-preview",
 			CreateTime:    now,
 			ExpireTime:    expiry,
 			UsageMetadata: usageMetadata,
@@ -277,7 +277,7 @@ func TestConvertToCacheResult(t *testing.T) {
 
 		c.Assert(result, qt.Not(qt.IsNil))
 		c.Assert(result.CacheName, qt.Equals, "test-cache-456")
-		c.Assert(result.Model, qt.Equals, "gemini-2.5-flash")
+		c.Assert(result.Model, qt.Equals, "gemini-3-flash-preview")
 		c.Assert(result.CreateTime, qt.Equals, now)
 		c.Assert(result.ExpireTime, qt.Equals, expiry)
 		c.Assert(result.UsageMetadata, qt.Not(qt.IsNil))
@@ -290,7 +290,7 @@ func TestConvertToCacheResult(t *testing.T) {
 	t.Run("handles nil usage metadata", func(t *testing.T) {
 		output := &CacheOutput{
 			CacheName:     "test-cache",
-			Model:         "gemini-2.5-flash",
+			Model:         "gemini-3-flash-preview",
 			CreateTime:    time.Now(),
 			ExpireTime:    time.Now().Add(time.Hour),
 			UsageMetadata: nil,

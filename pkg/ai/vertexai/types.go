@@ -8,4 +8,6 @@ type Config struct {
 	Region string
 	// SAKey is the JSON string of the service account key
 	SAKey string
+	// Model overrides the default model. If empty, DefaultModel is used.
+	Model string
 }
