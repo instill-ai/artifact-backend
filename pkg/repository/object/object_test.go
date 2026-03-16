@@ -3,8 +3,8 @@ package object
 import (
 	"testing"
 
-	"github.com/gofrs/uuid"
 	qt "github.com/frankban/quicktest"
+	"github.com/gofrs/uuid"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
 )
@@ -13,10 +13,10 @@ func TestGetBlobObjectPath(t *testing.T) {
 	c := qt.New(t)
 
 	tests := []struct {
-		name      string
-		nsUID     types.NamespaceUIDType
-		objUID    types.ObjectUIDType
-		wantPath  string
+		name     string
+		nsUID    types.NamespaceUIDType
+		objUID   types.ObjectUIDType
+		wantPath string
 	}{
 		{
 			name:     "standard UUIDs",

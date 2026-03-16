@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gofrs/uuid"
 	qt "github.com/frankban/quicktest"
+	"github.com/gofrs/uuid"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
