@@ -362,12 +362,12 @@ type RepositoryMock struct {
 	beforeGetEmbeddingCountByKBUIDCounter uint64
 	GetEmbeddingCountByKBUIDMock          mRepositoryMockGetEmbeddingCountByKBUID
 
-	funcGetFileByContentSHA256          func(ctx context.Context, sha256 string) (fp1 *mm_repository.FileModel, err error)
-	funcGetFileByContentSHA256Origin    string
-	inspectFuncGetFileByContentSHA256   func(ctx context.Context, sha256 string)
-	afterGetFileByContentSHA256Counter  uint64
-	beforeGetFileByContentSHA256Counter uint64
-	GetFileByContentSHA256Mock          mRepositoryMockGetFileByContentSHA256
+	funcGetFileByContentSHA256InKB          func(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string) (fp1 *mm_repository.FileModel, err error)
+	funcGetFileByContentSHA256InKBOrigin    string
+	inspectFuncGetFileByContentSHA256InKB   func(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string)
+	afterGetFileByContentSHA256InKBCounter  uint64
+	beforeGetFileByContentSHA256InKBCounter uint64
+	GetFileByContentSHA256InKBMock          mRepositoryMockGetFileByContentSHA256InKB
 
 	funcGetFileByIDOrAlias          func(ctx context.Context, kbUID types.KBUIDType, id string) (fp1 *mm_repository.FileModel, err error)
 	funcGetFileByIDOrAliasOrigin    string
@@ -1184,8 +1184,8 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.GetEmbeddingCountByKBUIDMock = mRepositoryMockGetEmbeddingCountByKBUID{mock: m}
 	m.GetEmbeddingCountByKBUIDMock.callArgs = []*RepositoryMockGetEmbeddingCountByKBUIDParams{}
 
-	m.GetFileByContentSHA256Mock = mRepositoryMockGetFileByContentSHA256{mock: m}
-	m.GetFileByContentSHA256Mock.callArgs = []*RepositoryMockGetFileByContentSHA256Params{}
+	m.GetFileByContentSHA256InKBMock = mRepositoryMockGetFileByContentSHA256InKB{mock: m}
+	m.GetFileByContentSHA256InKBMock.callArgs = []*RepositoryMockGetFileByContentSHA256InKBParams{}
 
 	m.GetFileByIDOrAliasMock = mRepositoryMockGetFileByIDOrAlias{mock: m}
 	m.GetFileByIDOrAliasMock.callArgs = []*RepositoryMockGetFileByIDOrAliasParams{}
@@ -18639,52 +18639,55 @@ func (m *RepositoryMock) MinimockGetEmbeddingCountByKBUIDInspect() {
 	}
 }
 
-type mRepositoryMockGetFileByContentSHA256 struct {
+type mRepositoryMockGetFileByContentSHA256InKB struct {
 	optional           bool
 	mock               *RepositoryMock
-	defaultExpectation *RepositoryMockGetFileByContentSHA256Expectation
-	expectations       []*RepositoryMockGetFileByContentSHA256Expectation
+	defaultExpectation *RepositoryMockGetFileByContentSHA256InKBExpectation
+	expectations       []*RepositoryMockGetFileByContentSHA256InKBExpectation
 
-	callArgs []*RepositoryMockGetFileByContentSHA256Params
+	callArgs []*RepositoryMockGetFileByContentSHA256InKBParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// RepositoryMockGetFileByContentSHA256Expectation specifies expectation struct of the Repository.GetFileByContentSHA256
-type RepositoryMockGetFileByContentSHA256Expectation struct {
+// RepositoryMockGetFileByContentSHA256InKBExpectation specifies expectation struct of the Repository.GetFileByContentSHA256InKB
+type RepositoryMockGetFileByContentSHA256InKBExpectation struct {
 	mock               *RepositoryMock
-	params             *RepositoryMockGetFileByContentSHA256Params
-	paramPtrs          *RepositoryMockGetFileByContentSHA256ParamPtrs
-	expectationOrigins RepositoryMockGetFileByContentSHA256ExpectationOrigins
-	results            *RepositoryMockGetFileByContentSHA256Results
+	params             *RepositoryMockGetFileByContentSHA256InKBParams
+	paramPtrs          *RepositoryMockGetFileByContentSHA256InKBParamPtrs
+	expectationOrigins RepositoryMockGetFileByContentSHA256InKBExpectationOrigins
+	results            *RepositoryMockGetFileByContentSHA256InKBResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// RepositoryMockGetFileByContentSHA256Params contains parameters of the Repository.GetFileByContentSHA256
-type RepositoryMockGetFileByContentSHA256Params struct {
+// RepositoryMockGetFileByContentSHA256InKBParams contains parameters of the Repository.GetFileByContentSHA256InKB
+type RepositoryMockGetFileByContentSHA256InKBParams struct {
 	ctx    context.Context
+	kbUID  types.KnowledgeBaseUIDType
 	sha256 string
 }
 
-// RepositoryMockGetFileByContentSHA256ParamPtrs contains pointers to parameters of the Repository.GetFileByContentSHA256
-type RepositoryMockGetFileByContentSHA256ParamPtrs struct {
+// RepositoryMockGetFileByContentSHA256InKBParamPtrs contains pointers to parameters of the Repository.GetFileByContentSHA256InKB
+type RepositoryMockGetFileByContentSHA256InKBParamPtrs struct {
 	ctx    *context.Context
+	kbUID  *types.KnowledgeBaseUIDType
 	sha256 *string
 }
 
-// RepositoryMockGetFileByContentSHA256Results contains results of the Repository.GetFileByContentSHA256
-type RepositoryMockGetFileByContentSHA256Results struct {
+// RepositoryMockGetFileByContentSHA256InKBResults contains results of the Repository.GetFileByContentSHA256InKB
+type RepositoryMockGetFileByContentSHA256InKBResults struct {
 	fp1 *mm_repository.FileModel
 	err error
 }
 
-// RepositoryMockGetFileByContentSHA256Origins contains origins of expectations of the Repository.GetFileByContentSHA256
-type RepositoryMockGetFileByContentSHA256ExpectationOrigins struct {
+// RepositoryMockGetFileByContentSHA256InKBOrigins contains origins of expectations of the Repository.GetFileByContentSHA256InKB
+type RepositoryMockGetFileByContentSHA256InKBExpectationOrigins struct {
 	origin       string
 	originCtx    string
+	originKbUID  string
 	originSha256 string
 }
 
@@ -18693,292 +18696,320 @@ type RepositoryMockGetFileByContentSHA256ExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) Optional() *mRepositoryMockGetFileByContentSHA256 {
-	mmGetFileByContentSHA256.optional = true
-	return mmGetFileByContentSHA256
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) Optional() *mRepositoryMockGetFileByContentSHA256InKB {
+	mmGetFileByContentSHA256InKB.optional = true
+	return mmGetFileByContentSHA256InKB
 }
 
-// Expect sets up expected params for Repository.GetFileByContentSHA256
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) Expect(ctx context.Context, sha256 string) *mRepositoryMockGetFileByContentSHA256 {
-	if mmGetFileByContentSHA256.mock.funcGetFileByContentSHA256 != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256 mock is already set by Set")
+// Expect sets up expected params for Repository.GetFileByContentSHA256InKB
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) Expect(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string) *mRepositoryMockGetFileByContentSHA256InKB {
+	if mmGetFileByContentSHA256InKB.mock.funcGetFileByContentSHA256InKB != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by Set")
 	}
 
-	if mmGetFileByContentSHA256.defaultExpectation == nil {
-		mmGetFileByContentSHA256.defaultExpectation = &RepositoryMockGetFileByContentSHA256Expectation{}
+	if mmGetFileByContentSHA256InKB.defaultExpectation == nil {
+		mmGetFileByContentSHA256InKB.defaultExpectation = &RepositoryMockGetFileByContentSHA256InKBExpectation{}
 	}
 
-	if mmGetFileByContentSHA256.defaultExpectation.paramPtrs != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256 mock is already set by ExpectParams functions")
+	if mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by ExpectParams functions")
 	}
 
-	mmGetFileByContentSHA256.defaultExpectation.params = &RepositoryMockGetFileByContentSHA256Params{ctx, sha256}
-	mmGetFileByContentSHA256.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmGetFileByContentSHA256.expectations {
-		if minimock.Equal(e.params, mmGetFileByContentSHA256.defaultExpectation.params) {
-			mmGetFileByContentSHA256.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetFileByContentSHA256.defaultExpectation.params)
+	mmGetFileByContentSHA256InKB.defaultExpectation.params = &RepositoryMockGetFileByContentSHA256InKBParams{ctx, kbUID, sha256}
+	mmGetFileByContentSHA256InKB.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetFileByContentSHA256InKB.expectations {
+		if minimock.Equal(e.params, mmGetFileByContentSHA256InKB.defaultExpectation.params) {
+			mmGetFileByContentSHA256InKB.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetFileByContentSHA256InKB.defaultExpectation.params)
 		}
 	}
 
-	return mmGetFileByContentSHA256
+	return mmGetFileByContentSHA256InKB
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Repository.GetFileByContentSHA256
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetFileByContentSHA256 {
-	if mmGetFileByContentSHA256.mock.funcGetFileByContentSHA256 != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256 mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetFileByContentSHA256InKB
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetFileByContentSHA256InKB {
+	if mmGetFileByContentSHA256InKB.mock.funcGetFileByContentSHA256InKB != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by Set")
 	}
 
-	if mmGetFileByContentSHA256.defaultExpectation == nil {
-		mmGetFileByContentSHA256.defaultExpectation = &RepositoryMockGetFileByContentSHA256Expectation{}
+	if mmGetFileByContentSHA256InKB.defaultExpectation == nil {
+		mmGetFileByContentSHA256InKB.defaultExpectation = &RepositoryMockGetFileByContentSHA256InKBExpectation{}
 	}
 
-	if mmGetFileByContentSHA256.defaultExpectation.params != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256 mock is already set by Expect")
+	if mmGetFileByContentSHA256InKB.defaultExpectation.params != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by Expect")
 	}
 
-	if mmGetFileByContentSHA256.defaultExpectation.paramPtrs == nil {
-		mmGetFileByContentSHA256.defaultExpectation.paramPtrs = &RepositoryMockGetFileByContentSHA256ParamPtrs{}
+	if mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs == nil {
+		mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs = &RepositoryMockGetFileByContentSHA256InKBParamPtrs{}
 	}
-	mmGetFileByContentSHA256.defaultExpectation.paramPtrs.ctx = &ctx
-	mmGetFileByContentSHA256.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetFileByContentSHA256InKB.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmGetFileByContentSHA256
+	return mmGetFileByContentSHA256InKB
 }
 
-// ExpectSha256Param2 sets up expected param sha256 for Repository.GetFileByContentSHA256
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) ExpectSha256Param2(sha256 string) *mRepositoryMockGetFileByContentSHA256 {
-	if mmGetFileByContentSHA256.mock.funcGetFileByContentSHA256 != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256 mock is already set by Set")
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.GetFileByContentSHA256InKB
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) ExpectKbUIDParam2(kbUID types.KnowledgeBaseUIDType) *mRepositoryMockGetFileByContentSHA256InKB {
+	if mmGetFileByContentSHA256InKB.mock.funcGetFileByContentSHA256InKB != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by Set")
 	}
 
-	if mmGetFileByContentSHA256.defaultExpectation == nil {
-		mmGetFileByContentSHA256.defaultExpectation = &RepositoryMockGetFileByContentSHA256Expectation{}
+	if mmGetFileByContentSHA256InKB.defaultExpectation == nil {
+		mmGetFileByContentSHA256InKB.defaultExpectation = &RepositoryMockGetFileByContentSHA256InKBExpectation{}
 	}
 
-	if mmGetFileByContentSHA256.defaultExpectation.params != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256 mock is already set by Expect")
+	if mmGetFileByContentSHA256InKB.defaultExpectation.params != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by Expect")
 	}
 
-	if mmGetFileByContentSHA256.defaultExpectation.paramPtrs == nil {
-		mmGetFileByContentSHA256.defaultExpectation.paramPtrs = &RepositoryMockGetFileByContentSHA256ParamPtrs{}
+	if mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs == nil {
+		mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs = &RepositoryMockGetFileByContentSHA256InKBParamPtrs{}
 	}
-	mmGetFileByContentSHA256.defaultExpectation.paramPtrs.sha256 = &sha256
-	mmGetFileByContentSHA256.defaultExpectation.expectationOrigins.originSha256 = minimock.CallerInfo(1)
+	mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmGetFileByContentSHA256InKB.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
 
-	return mmGetFileByContentSHA256
+	return mmGetFileByContentSHA256InKB
 }
 
-// Inspect accepts an inspector function that has same arguments as the Repository.GetFileByContentSHA256
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) Inspect(f func(ctx context.Context, sha256 string)) *mRepositoryMockGetFileByContentSHA256 {
-	if mmGetFileByContentSHA256.mock.inspectFuncGetFileByContentSHA256 != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetFileByContentSHA256")
+// ExpectSha256Param3 sets up expected param sha256 for Repository.GetFileByContentSHA256InKB
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) ExpectSha256Param3(sha256 string) *mRepositoryMockGetFileByContentSHA256InKB {
+	if mmGetFileByContentSHA256InKB.mock.funcGetFileByContentSHA256InKB != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by Set")
 	}
 
-	mmGetFileByContentSHA256.mock.inspectFuncGetFileByContentSHA256 = f
+	if mmGetFileByContentSHA256InKB.defaultExpectation == nil {
+		mmGetFileByContentSHA256InKB.defaultExpectation = &RepositoryMockGetFileByContentSHA256InKBExpectation{}
+	}
 
-	return mmGetFileByContentSHA256
+	if mmGetFileByContentSHA256InKB.defaultExpectation.params != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by Expect")
+	}
+
+	if mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs == nil {
+		mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs = &RepositoryMockGetFileByContentSHA256InKBParamPtrs{}
+	}
+	mmGetFileByContentSHA256InKB.defaultExpectation.paramPtrs.sha256 = &sha256
+	mmGetFileByContentSHA256InKB.defaultExpectation.expectationOrigins.originSha256 = minimock.CallerInfo(1)
+
+	return mmGetFileByContentSHA256InKB
 }
 
-// Return sets up results that will be returned by Repository.GetFileByContentSHA256
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) Return(fp1 *mm_repository.FileModel, err error) *RepositoryMock {
-	if mmGetFileByContentSHA256.mock.funcGetFileByContentSHA256 != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256 mock is already set by Set")
+// Inspect accepts an inspector function that has same arguments as the Repository.GetFileByContentSHA256InKB
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) Inspect(f func(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string)) *mRepositoryMockGetFileByContentSHA256InKB {
+	if mmGetFileByContentSHA256InKB.mock.inspectFuncGetFileByContentSHA256InKB != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetFileByContentSHA256InKB")
 	}
 
-	if mmGetFileByContentSHA256.defaultExpectation == nil {
-		mmGetFileByContentSHA256.defaultExpectation = &RepositoryMockGetFileByContentSHA256Expectation{mock: mmGetFileByContentSHA256.mock}
-	}
-	mmGetFileByContentSHA256.defaultExpectation.results = &RepositoryMockGetFileByContentSHA256Results{fp1, err}
-	mmGetFileByContentSHA256.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmGetFileByContentSHA256.mock
+	mmGetFileByContentSHA256InKB.mock.inspectFuncGetFileByContentSHA256InKB = f
+
+	return mmGetFileByContentSHA256InKB
 }
 
-// Set uses given function f to mock the Repository.GetFileByContentSHA256 method
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) Set(f func(ctx context.Context, sha256 string) (fp1 *mm_repository.FileModel, err error)) *RepositoryMock {
-	if mmGetFileByContentSHA256.defaultExpectation != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("Default expectation is already set for the Repository.GetFileByContentSHA256 method")
+// Return sets up results that will be returned by Repository.GetFileByContentSHA256InKB
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) Return(fp1 *mm_repository.FileModel, err error) *RepositoryMock {
+	if mmGetFileByContentSHA256InKB.mock.funcGetFileByContentSHA256InKB != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by Set")
 	}
 
-	if len(mmGetFileByContentSHA256.expectations) > 0 {
-		mmGetFileByContentSHA256.mock.t.Fatalf("Some expectations are already set for the Repository.GetFileByContentSHA256 method")
+	if mmGetFileByContentSHA256InKB.defaultExpectation == nil {
+		mmGetFileByContentSHA256InKB.defaultExpectation = &RepositoryMockGetFileByContentSHA256InKBExpectation{mock: mmGetFileByContentSHA256InKB.mock}
 	}
-
-	mmGetFileByContentSHA256.mock.funcGetFileByContentSHA256 = f
-	mmGetFileByContentSHA256.mock.funcGetFileByContentSHA256Origin = minimock.CallerInfo(1)
-	return mmGetFileByContentSHA256.mock
+	mmGetFileByContentSHA256InKB.defaultExpectation.results = &RepositoryMockGetFileByContentSHA256InKBResults{fp1, err}
+	mmGetFileByContentSHA256InKB.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetFileByContentSHA256InKB.mock
 }
 
-// When sets expectation for the Repository.GetFileByContentSHA256 which will trigger the result defined by the following
+// Set uses given function f to mock the Repository.GetFileByContentSHA256InKB method
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) Set(f func(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string) (fp1 *mm_repository.FileModel, err error)) *RepositoryMock {
+	if mmGetFileByContentSHA256InKB.defaultExpectation != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("Default expectation is already set for the Repository.GetFileByContentSHA256InKB method")
+	}
+
+	if len(mmGetFileByContentSHA256InKB.expectations) > 0 {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("Some expectations are already set for the Repository.GetFileByContentSHA256InKB method")
+	}
+
+	mmGetFileByContentSHA256InKB.mock.funcGetFileByContentSHA256InKB = f
+	mmGetFileByContentSHA256InKB.mock.funcGetFileByContentSHA256InKBOrigin = minimock.CallerInfo(1)
+	return mmGetFileByContentSHA256InKB.mock
+}
+
+// When sets expectation for the Repository.GetFileByContentSHA256InKB which will trigger the result defined by the following
 // Then helper
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) When(ctx context.Context, sha256 string) *RepositoryMockGetFileByContentSHA256Expectation {
-	if mmGetFileByContentSHA256.mock.funcGetFileByContentSHA256 != nil {
-		mmGetFileByContentSHA256.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256 mock is already set by Set")
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) When(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string) *RepositoryMockGetFileByContentSHA256InKBExpectation {
+	if mmGetFileByContentSHA256InKB.mock.funcGetFileByContentSHA256InKB != nil {
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("RepositoryMock.GetFileByContentSHA256InKB mock is already set by Set")
 	}
 
-	expectation := &RepositoryMockGetFileByContentSHA256Expectation{
-		mock:               mmGetFileByContentSHA256.mock,
-		params:             &RepositoryMockGetFileByContentSHA256Params{ctx, sha256},
-		expectationOrigins: RepositoryMockGetFileByContentSHA256ExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &RepositoryMockGetFileByContentSHA256InKBExpectation{
+		mock:               mmGetFileByContentSHA256InKB.mock,
+		params:             &RepositoryMockGetFileByContentSHA256InKBParams{ctx, kbUID, sha256},
+		expectationOrigins: RepositoryMockGetFileByContentSHA256InKBExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmGetFileByContentSHA256.expectations = append(mmGetFileByContentSHA256.expectations, expectation)
+	mmGetFileByContentSHA256InKB.expectations = append(mmGetFileByContentSHA256InKB.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Repository.GetFileByContentSHA256 return parameters for the expectation previously defined by the When method
-func (e *RepositoryMockGetFileByContentSHA256Expectation) Then(fp1 *mm_repository.FileModel, err error) *RepositoryMock {
-	e.results = &RepositoryMockGetFileByContentSHA256Results{fp1, err}
+// Then sets up Repository.GetFileByContentSHA256InKB return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetFileByContentSHA256InKBExpectation) Then(fp1 *mm_repository.FileModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetFileByContentSHA256InKBResults{fp1, err}
 	return e.mock
 }
 
-// Times sets number of times Repository.GetFileByContentSHA256 should be invoked
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) Times(n uint64) *mRepositoryMockGetFileByContentSHA256 {
+// Times sets number of times Repository.GetFileByContentSHA256InKB should be invoked
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) Times(n uint64) *mRepositoryMockGetFileByContentSHA256InKB {
 	if n == 0 {
-		mmGetFileByContentSHA256.mock.t.Fatalf("Times of RepositoryMock.GetFileByContentSHA256 mock can not be zero")
+		mmGetFileByContentSHA256InKB.mock.t.Fatalf("Times of RepositoryMock.GetFileByContentSHA256InKB mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmGetFileByContentSHA256.expectedInvocations, n)
-	mmGetFileByContentSHA256.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmGetFileByContentSHA256
+	mm_atomic.StoreUint64(&mmGetFileByContentSHA256InKB.expectedInvocations, n)
+	mmGetFileByContentSHA256InKB.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetFileByContentSHA256InKB
 }
 
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) invocationsDone() bool {
-	if len(mmGetFileByContentSHA256.expectations) == 0 && mmGetFileByContentSHA256.defaultExpectation == nil && mmGetFileByContentSHA256.mock.funcGetFileByContentSHA256 == nil {
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) invocationsDone() bool {
+	if len(mmGetFileByContentSHA256InKB.expectations) == 0 && mmGetFileByContentSHA256InKB.defaultExpectation == nil && mmGetFileByContentSHA256InKB.mock.funcGetFileByContentSHA256InKB == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmGetFileByContentSHA256.mock.afterGetFileByContentSHA256Counter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetFileByContentSHA256.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmGetFileByContentSHA256InKB.mock.afterGetFileByContentSHA256InKBCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetFileByContentSHA256InKB.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// GetFileByContentSHA256 implements mm_repository.Repository
-func (mmGetFileByContentSHA256 *RepositoryMock) GetFileByContentSHA256(ctx context.Context, sha256 string) (fp1 *mm_repository.FileModel, err error) {
-	mm_atomic.AddUint64(&mmGetFileByContentSHA256.beforeGetFileByContentSHA256Counter, 1)
-	defer mm_atomic.AddUint64(&mmGetFileByContentSHA256.afterGetFileByContentSHA256Counter, 1)
+// GetFileByContentSHA256InKB implements mm_repository.Repository
+func (mmGetFileByContentSHA256InKB *RepositoryMock) GetFileByContentSHA256InKB(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string) (fp1 *mm_repository.FileModel, err error) {
+	mm_atomic.AddUint64(&mmGetFileByContentSHA256InKB.beforeGetFileByContentSHA256InKBCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetFileByContentSHA256InKB.afterGetFileByContentSHA256InKBCounter, 1)
 
-	mmGetFileByContentSHA256.t.Helper()
+	mmGetFileByContentSHA256InKB.t.Helper()
 
-	if mmGetFileByContentSHA256.inspectFuncGetFileByContentSHA256 != nil {
-		mmGetFileByContentSHA256.inspectFuncGetFileByContentSHA256(ctx, sha256)
+	if mmGetFileByContentSHA256InKB.inspectFuncGetFileByContentSHA256InKB != nil {
+		mmGetFileByContentSHA256InKB.inspectFuncGetFileByContentSHA256InKB(ctx, kbUID, sha256)
 	}
 
-	mm_params := RepositoryMockGetFileByContentSHA256Params{ctx, sha256}
+	mm_params := RepositoryMockGetFileByContentSHA256InKBParams{ctx, kbUID, sha256}
 
 	// Record call args
-	mmGetFileByContentSHA256.GetFileByContentSHA256Mock.mutex.Lock()
-	mmGetFileByContentSHA256.GetFileByContentSHA256Mock.callArgs = append(mmGetFileByContentSHA256.GetFileByContentSHA256Mock.callArgs, &mm_params)
-	mmGetFileByContentSHA256.GetFileByContentSHA256Mock.mutex.Unlock()
+	mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.mutex.Lock()
+	mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.callArgs = append(mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.callArgs, &mm_params)
+	mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.mutex.Unlock()
 
-	for _, e := range mmGetFileByContentSHA256.GetFileByContentSHA256Mock.expectations {
+	for _, e := range mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.fp1, e.results.err
 		}
 	}
 
-	if mmGetFileByContentSHA256.GetFileByContentSHA256Mock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetFileByContentSHA256.GetFileByContentSHA256Mock.defaultExpectation.Counter, 1)
-		mm_want := mmGetFileByContentSHA256.GetFileByContentSHA256Mock.defaultExpectation.params
-		mm_want_ptrs := mmGetFileByContentSHA256.GetFileByContentSHA256Mock.defaultExpectation.paramPtrs
+	if mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.defaultExpectation.params
+		mm_want_ptrs := mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.defaultExpectation.paramPtrs
 
-		mm_got := RepositoryMockGetFileByContentSHA256Params{ctx, sha256}
+		mm_got := RepositoryMockGetFileByContentSHA256InKBParams{ctx, kbUID, sha256}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGetFileByContentSHA256.t.Errorf("RepositoryMock.GetFileByContentSHA256 got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetFileByContentSHA256.GetFileByContentSHA256Mock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmGetFileByContentSHA256InKB.t.Errorf("RepositoryMock.GetFileByContentSHA256InKB got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmGetFileByContentSHA256InKB.t.Errorf("RepositoryMock.GetFileByContentSHA256InKB got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
 			}
 
 			if mm_want_ptrs.sha256 != nil && !minimock.Equal(*mm_want_ptrs.sha256, mm_got.sha256) {
-				mmGetFileByContentSHA256.t.Errorf("RepositoryMock.GetFileByContentSHA256 got unexpected parameter sha256, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetFileByContentSHA256.GetFileByContentSHA256Mock.defaultExpectation.expectationOrigins.originSha256, *mm_want_ptrs.sha256, mm_got.sha256, minimock.Diff(*mm_want_ptrs.sha256, mm_got.sha256))
+				mmGetFileByContentSHA256InKB.t.Errorf("RepositoryMock.GetFileByContentSHA256InKB got unexpected parameter sha256, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.defaultExpectation.expectationOrigins.originSha256, *mm_want_ptrs.sha256, mm_got.sha256, minimock.Diff(*mm_want_ptrs.sha256, mm_got.sha256))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGetFileByContentSHA256.t.Errorf("RepositoryMock.GetFileByContentSHA256 got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmGetFileByContentSHA256.GetFileByContentSHA256Mock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmGetFileByContentSHA256InKB.t.Errorf("RepositoryMock.GetFileByContentSHA256InKB got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmGetFileByContentSHA256.GetFileByContentSHA256Mock.defaultExpectation.results
+		mm_results := mmGetFileByContentSHA256InKB.GetFileByContentSHA256InKBMock.defaultExpectation.results
 		if mm_results == nil {
-			mmGetFileByContentSHA256.t.Fatal("No results are set for the RepositoryMock.GetFileByContentSHA256")
+			mmGetFileByContentSHA256InKB.t.Fatal("No results are set for the RepositoryMock.GetFileByContentSHA256InKB")
 		}
 		return (*mm_results).fp1, (*mm_results).err
 	}
-	if mmGetFileByContentSHA256.funcGetFileByContentSHA256 != nil {
-		return mmGetFileByContentSHA256.funcGetFileByContentSHA256(ctx, sha256)
+	if mmGetFileByContentSHA256InKB.funcGetFileByContentSHA256InKB != nil {
+		return mmGetFileByContentSHA256InKB.funcGetFileByContentSHA256InKB(ctx, kbUID, sha256)
 	}
-	mmGetFileByContentSHA256.t.Fatalf("Unexpected call to RepositoryMock.GetFileByContentSHA256. %v %v", ctx, sha256)
+	mmGetFileByContentSHA256InKB.t.Fatalf("Unexpected call to RepositoryMock.GetFileByContentSHA256InKB. %v %v %v", ctx, kbUID, sha256)
 	return
 }
 
-// GetFileByContentSHA256AfterCounter returns a count of finished RepositoryMock.GetFileByContentSHA256 invocations
-func (mmGetFileByContentSHA256 *RepositoryMock) GetFileByContentSHA256AfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetFileByContentSHA256.afterGetFileByContentSHA256Counter)
+// GetFileByContentSHA256InKBAfterCounter returns a count of finished RepositoryMock.GetFileByContentSHA256InKB invocations
+func (mmGetFileByContentSHA256InKB *RepositoryMock) GetFileByContentSHA256InKBAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFileByContentSHA256InKB.afterGetFileByContentSHA256InKBCounter)
 }
 
-// GetFileByContentSHA256BeforeCounter returns a count of RepositoryMock.GetFileByContentSHA256 invocations
-func (mmGetFileByContentSHA256 *RepositoryMock) GetFileByContentSHA256BeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetFileByContentSHA256.beforeGetFileByContentSHA256Counter)
+// GetFileByContentSHA256InKBBeforeCounter returns a count of RepositoryMock.GetFileByContentSHA256InKB invocations
+func (mmGetFileByContentSHA256InKB *RepositoryMock) GetFileByContentSHA256InKBBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFileByContentSHA256InKB.beforeGetFileByContentSHA256InKBCounter)
 }
 
-// Calls returns a list of arguments used in each call to RepositoryMock.GetFileByContentSHA256.
+// Calls returns a list of arguments used in each call to RepositoryMock.GetFileByContentSHA256InKB.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGetFileByContentSHA256 *mRepositoryMockGetFileByContentSHA256) Calls() []*RepositoryMockGetFileByContentSHA256Params {
-	mmGetFileByContentSHA256.mutex.RLock()
+func (mmGetFileByContentSHA256InKB *mRepositoryMockGetFileByContentSHA256InKB) Calls() []*RepositoryMockGetFileByContentSHA256InKBParams {
+	mmGetFileByContentSHA256InKB.mutex.RLock()
 
-	argCopy := make([]*RepositoryMockGetFileByContentSHA256Params, len(mmGetFileByContentSHA256.callArgs))
-	copy(argCopy, mmGetFileByContentSHA256.callArgs)
+	argCopy := make([]*RepositoryMockGetFileByContentSHA256InKBParams, len(mmGetFileByContentSHA256InKB.callArgs))
+	copy(argCopy, mmGetFileByContentSHA256InKB.callArgs)
 
-	mmGetFileByContentSHA256.mutex.RUnlock()
+	mmGetFileByContentSHA256InKB.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockGetFileByContentSHA256Done returns true if the count of the GetFileByContentSHA256 invocations corresponds
+// MinimockGetFileByContentSHA256InKBDone returns true if the count of the GetFileByContentSHA256InKB invocations corresponds
 // the number of defined expectations
-func (m *RepositoryMock) MinimockGetFileByContentSHA256Done() bool {
-	if m.GetFileByContentSHA256Mock.optional {
+func (m *RepositoryMock) MinimockGetFileByContentSHA256InKBDone() bool {
+	if m.GetFileByContentSHA256InKBMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.GetFileByContentSHA256Mock.expectations {
+	for _, e := range m.GetFileByContentSHA256InKBMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.GetFileByContentSHA256Mock.invocationsDone()
+	return m.GetFileByContentSHA256InKBMock.invocationsDone()
 }
 
-// MinimockGetFileByContentSHA256Inspect logs each unmet expectation
-func (m *RepositoryMock) MinimockGetFileByContentSHA256Inspect() {
-	for _, e := range m.GetFileByContentSHA256Mock.expectations {
+// MinimockGetFileByContentSHA256InKBInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetFileByContentSHA256InKBInspect() {
+	for _, e := range m.GetFileByContentSHA256InKBMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to RepositoryMock.GetFileByContentSHA256 at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to RepositoryMock.GetFileByContentSHA256InKB at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterGetFileByContentSHA256Counter := mm_atomic.LoadUint64(&m.afterGetFileByContentSHA256Counter)
+	afterGetFileByContentSHA256InKBCounter := mm_atomic.LoadUint64(&m.afterGetFileByContentSHA256InKBCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.GetFileByContentSHA256Mock.defaultExpectation != nil && afterGetFileByContentSHA256Counter < 1 {
-		if m.GetFileByContentSHA256Mock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to RepositoryMock.GetFileByContentSHA256 at\n%s", m.GetFileByContentSHA256Mock.defaultExpectation.returnOrigin)
+	if m.GetFileByContentSHA256InKBMock.defaultExpectation != nil && afterGetFileByContentSHA256InKBCounter < 1 {
+		if m.GetFileByContentSHA256InKBMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetFileByContentSHA256InKB at\n%s", m.GetFileByContentSHA256InKBMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to RepositoryMock.GetFileByContentSHA256 at\n%s with params: %#v", m.GetFileByContentSHA256Mock.defaultExpectation.expectationOrigins.origin, *m.GetFileByContentSHA256Mock.defaultExpectation.params)
+			m.t.Errorf("Expected call to RepositoryMock.GetFileByContentSHA256InKB at\n%s with params: %#v", m.GetFileByContentSHA256InKBMock.defaultExpectation.expectationOrigins.origin, *m.GetFileByContentSHA256InKBMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcGetFileByContentSHA256 != nil && afterGetFileByContentSHA256Counter < 1 {
-		m.t.Errorf("Expected call to RepositoryMock.GetFileByContentSHA256 at\n%s", m.funcGetFileByContentSHA256Origin)
+	if m.funcGetFileByContentSHA256InKB != nil && afterGetFileByContentSHA256InKBCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetFileByContentSHA256InKB at\n%s", m.funcGetFileByContentSHA256InKBOrigin)
 	}
 
-	if !m.GetFileByContentSHA256Mock.invocationsDone() && afterGetFileByContentSHA256Counter > 0 {
-		m.t.Errorf("Expected %d calls to RepositoryMock.GetFileByContentSHA256 at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.GetFileByContentSHA256Mock.expectedInvocations), m.GetFileByContentSHA256Mock.expectedInvocationsOrigin, afterGetFileByContentSHA256Counter)
+	if !m.GetFileByContentSHA256InKBMock.invocationsDone() && afterGetFileByContentSHA256InKBCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetFileByContentSHA256InKB at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetFileByContentSHA256InKBMock.expectedInvocations), m.GetFileByContentSHA256InKBMock.expectedInvocationsOrigin, afterGetFileByContentSHA256InKBCounter)
 	}
 }
 
@@ -52764,7 +52795,7 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockGetEmbeddingCountByKBUIDInspect()
 
-			m.MinimockGetFileByContentSHA256Inspect()
+			m.MinimockGetFileByContentSHA256InKBInspect()
 
 			m.MinimockGetFileByIDOrAliasInspect()
 
@@ -53022,7 +53053,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockGetDefaultSystemDone() &&
 		m.MinimockGetDualProcessingTargetDone() &&
 		m.MinimockGetEmbeddingCountByKBUIDDone() &&
-		m.MinimockGetFileByContentSHA256Done() &&
+		m.MinimockGetFileByContentSHA256InKBDone() &&
 		m.MinimockGetFileByIDOrAliasDone() &&
 		m.MinimockGetFileByKBUIDAndFileIDDone() &&
 		m.MinimockGetFileCountByKnowledgeBaseUIDDone() &&
