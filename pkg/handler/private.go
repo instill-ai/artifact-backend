@@ -52,6 +52,11 @@ func NewPrivateHandler(s artifact.Service, log *zap.Logger) *PrivateHandler {
 	}
 }
 
+// GetService returns the underlying service for use by EE handler overrides.
+func (h *PrivateHandler) GetService() artifact.Service {
+	return h.service
+}
+
 // CreateKnowledgeBaseAdmin creates a system-level knowledge base without a creator.
 // This is used by internal services (e.g., agent-backend) to create shared knowledge bases
 // like "instill-agent" that are not owned by any specific user.

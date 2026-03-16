@@ -446,6 +446,16 @@ func (g *gcsStorage) GetGCSURI(objectPath string) string {
 	return fmt.Sprintf("gs://%s/%s", g.bucket, objectPath)
 }
 
+// CopyObject copies an object from one location to another in GCS.
+func (g *gcsStorage) CopyObject(ctx context.Context, srcBucket, srcPath, dstBucket, dstPath string) error {
+	src := g.client.Bucket(srcBucket).Object(srcPath)
+	dst := g.client.Bucket(dstBucket).Object(dstPath)
+	if _, err := dst.CopierFrom(src).Run(ctx); err != nil {
+		return fmt.Errorf("copying GCS object from %s/%s to %s/%s: %w", srcBucket, srcPath, dstBucket, dstPath, err)
+	}
+	return nil
+}
+
 // GetBucket returns the default GCS bucket name
 func (g *gcsStorage) GetBucket() string {
 	return g.bucket

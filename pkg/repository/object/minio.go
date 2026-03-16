@@ -324,6 +324,17 @@ func (m *minioStorage) GetPresignedURLForDownload(ctx context.Context, bucket st
 	return presignedURL, nil
 }
 
+// CopyObject copies an object from one location to another using MinIO server-side copy.
+func (m *minioStorage) CopyObject(ctx context.Context, srcBucket, srcPath, dstBucket, dstPath string) error {
+	src := minio.CopySrcOptions{Bucket: srcBucket, Object: srcPath}
+	dst := minio.CopyDestOptions{Bucket: dstBucket, Object: dstPath}
+	_, err := m.client.CopyObject(ctx, dst, src)
+	if err != nil {
+		return fmt.Errorf("copying object from %s/%s to %s/%s: %w", srcBucket, srcPath, dstBucket, dstPath, err)
+	}
+	return nil
+}
+
 // Helper functions
 
 func (m *minioStorage) authenticatedUser(ctx context.Context) string {

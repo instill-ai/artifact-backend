@@ -47,6 +47,10 @@ type Storage interface {
 	// This ensures proper browser download behavior with correct filename and MIME type handling.
 	GetPresignedURLForDownload(ctx context.Context, bucket string, objectPath string, filename string, contentType string, expiration time.Duration) (*url.URL, error)
 
+	// CopyObject copies an object from one location to another within or across buckets.
+	// Uses server-side copy when possible for near-zero cost.
+	CopyObject(ctx context.Context, srcBucket, srcPath, dstBucket, dstPath string) error
+
 	// GetBucket returns the default bucket name for this storage backend
 	// This is used by VertexAI to construct gs:// URIs for file caching
 	GetBucket() string
