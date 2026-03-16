@@ -778,10 +778,6 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 				},
 			},
 		}),
-		// Virtual filter: whether file belongs to any collection.
-		// Derived from tags with prefix "agent:collection:" — no DB column.
-		// Usage: in_collection = true | in_collection = false
-		filtering.DeclareIdent("in_collection", filtering.TypeBool),
 	}...)
 	if err != nil {
 		logger.Error("failed to create filter declarations", zap.Error(err))

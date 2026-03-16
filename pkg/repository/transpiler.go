@@ -201,20 +201,6 @@ func (t *transpiler) transpileComparisonCallExpr(e *expr.Expr, op interface{}) (
 				sql = "(id = ? OR ? = ANY(aliases))"
 				vars = append(vars, idVal, idVal)
 			}
-		// Virtual filter: checks whether a file belongs to any collection.
-		// Collections are tracked via tags with prefix "agent:collection:".
-		// in_collection = true  → file has at least one collection tag
-		// in_collection = false → file has no collection tags (unorganized)
-		case "in_collection":
-			boolVal, ok := con.Vars[0].(bool)
-			if !ok {
-				return nil, fmt.Errorf("in_collection filter requires a boolean value")
-			}
-			if boolVal {
-				sql = "EXISTS (SELECT 1 FROM unnest(COALESCE(file.tags, '{}')) t WHERE t LIKE 'agent:collection:%')"
-			} else {
-				sql = "NOT EXISTS (SELECT 1 FROM unnest(COALESCE(file.tags, '{}')) t WHERE t LIKE 'agent:collection:%')"
-			}
 		default:
 			sql = fmt.Sprintf("%s = ?", ident.SQL)
 			vars = append(vars, con.Vars...)
