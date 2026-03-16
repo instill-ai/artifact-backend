@@ -110,6 +110,12 @@ type File interface {
 	// within a specific knowledge base. Returns nil with no error if no match is found.
 	GetFileByContentSHA256InKB(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string) (*FileModel, error)
 
+	// CreateFileAdmin creates a file record and links it to a KB without
+	// triggering external service calls or updating KB usage. Used for admin
+	// operations like lightweight file copy where the caller manages storage
+	// operations separately.
+	CreateFileAdmin(ctx context.Context, file FileModel, kbUID types.KnowledgeBaseUIDType) (*FileModel, error)
+
 	// Deprecated methods
 
 	// GetFileByKBUIDAndFileID returns the file by
@@ -507,6 +513,32 @@ func (r *repository) CreateFile(ctx context.Context, file FileModel, kbUID types
 		return nil, err
 	}
 
+	return &file, nil
+}
+
+// CreateFileAdmin creates a file record and links it to a KB in a single
+// transaction. Unlike CreateFile, it does not lock the KB row, update KB
+// usage, or call external services. Intended for admin operations like
+// lightweight file copy.
+func (r *repository) CreateFileAdmin(ctx context.Context, file FileModel, kbUID types.KnowledgeBaseUIDType) (*FileModel, error) {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&file).Error; err != nil {
+			return fmt.Errorf("creating file record: %w", err)
+		}
+
+		association := FileKnowledgeBase{
+			FileUID: file.UID,
+			KBUID:   kbUID,
+		}
+		if err := tx.Create(&association).Error; err != nil {
+			return fmt.Errorf("creating file-kb association: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &file, nil
 }
 
