@@ -197,6 +197,14 @@ func main() {
 	w.RegisterActivity(cw.GetMediaDurationActivity)  // Probe media duration with ffprobe
 	w.RegisterActivity(cw.SplitMediaChunksActivity)  // Split long media into physical chunks
 
+	// Hybrid two-pass audio/visual processing
+	w.RegisterActivity(cw.ExtractAudioActivity)      // Extract audio track from video via FFmpeg
+	w.RegisterActivity(cw.UploadToGCSActivity)       // Upload file from MinIO to GCS
+	w.RegisterActivity(cw.TranscribeAudioActivity)   // Transcribe audio via ConvertAudioDirect
+	w.RegisterActivity(cw.DeleteFromGCSActivity)     // Clean up GCS temp files
+	w.RegisterActivity(cw.ReadMinIOFileActivity)     // Read text file from MinIO
+	w.RegisterActivity(cw.WriteMinIOFileActivity)    // Write/overwrite text file in MinIO
+
 	// File status management
 	w.RegisterActivity(cw.GetFileStatusActivity)    // Retrieve current file processing status
 	w.RegisterActivity(cw.UpdateFileStatusActivity) // Update file processing status

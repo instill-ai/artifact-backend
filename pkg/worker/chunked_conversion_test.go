@@ -642,7 +642,7 @@ func TestConvertTimeRange(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	result, err := w.convertTimeRange(context.Background(), "cache-123",
-		5*time.Minute, 10*time.Minute, 2, "base prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4)
+		5*time.Minute, 10*time.Minute, 2, "base prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
 	c.Assert(err, qt.IsNil)
 	// No [Page: N] tags in output
 	c.Assert(strings.Contains(result, "[Page:"), qt.IsFalse)
@@ -663,7 +663,7 @@ func TestConvertTimeRange_StripsPageTagsFromModel(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	result, err := w.convertTimeRange(context.Background(), "cache-123",
-		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4)
+		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
 	c.Assert(err, qt.IsNil)
 	c.Assert(strings.Contains(result, "[Page:"), qt.IsFalse,
 		qt.Commentf("Page tags should be stripped, got: %s", result))
@@ -684,7 +684,7 @@ func TestConvertTimeRange_TruncatesContentBeyondEndTime(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	result, err := w.convertTimeRange(context.Background(), "cache-123",
-		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4)
+		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
 	c.Assert(err, qt.IsNil)
 	// Content within range should be kept
 	c.Assert(strings.Contains(result, "First line"), qt.IsTrue)
@@ -713,7 +713,7 @@ func TestConvertTimeRangeRobust_RetriesTransient(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	result, err := w.convertTimeRangeRobust(context.Background(), "cache-123",
-		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4)
+		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
 	c.Assert(err, qt.IsNil)
 	c.Assert(strings.Contains(result, "Success after retries"), qt.IsTrue)
 	c.Assert(callCount.Load(), qt.Equals, int64(3))
@@ -730,7 +730,7 @@ func TestConvertTimeRangeRobust_PropagatesCacheExpired(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	_, err := w.convertTimeRangeRobust(context.Background(), "cache-123",
-		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4)
+		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(isCacheExpired(err), qt.IsTrue)
 	c.Assert(mockAI.ConvertToMarkdownWithCacheAfterCounter(), qt.Equals, uint64(1))
@@ -869,8 +869,8 @@ func TestClipToTimeRange_RespectsToleranceWindow(t *testing.T) {
 func TestClipToTimeRange_StartToleranceKeepsBorderline(t *testing.T) {
 	c := qt.New(t)
 
-	// 04:35 is within 30s tolerance of 05:00 start — should be kept
-	content := "[Audio: 00:04:35] Borderline\n[Audio: 00:05:10] In range"
+	// 04:50 is within 15s tolerance of 05:00 start — should be kept
+	content := "[Audio: 00:04:50] Borderline\n[Audio: 00:05:10] In range"
 	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute)
 	c.Assert(removed, qt.Equals, 0)
 	c.Assert(strings.Contains(result, "Borderline"), qt.IsTrue)
@@ -1015,4 +1015,177 @@ func TestOffsetTimestamps_PreservesNonTimestampContent(t *testing.T) {
 	input := "Plain text without any timestamps\nAnother line"
 	result := offsetTimestamps(input, 30*time.Minute)
 	c.Assert(result, qt.Equals, input)
+}
+
+// ===== parseHHMMSS Tests =====
+
+func TestParseHHMMSS_Valid(t *testing.T) {
+	c := qt.New(t)
+
+	c.Assert(parseHHMMSS("00:00:00"), qt.Equals, 0)
+	c.Assert(parseHHMMSS("00:00:30"), qt.Equals, 30)
+	c.Assert(parseHHMMSS("00:05:00"), qt.Equals, 300)
+	c.Assert(parseHHMMSS("01:00:00"), qt.Equals, 3600)
+	c.Assert(parseHHMMSS("02:30:45"), qt.Equals, 2*3600+30*60+45)
+}
+
+func TestParseHHMMSS_InvalidFormats(t *testing.T) {
+	c := qt.New(t)
+
+	c.Assert(parseHHMMSS(""), qt.Equals, 0)
+	c.Assert(parseHHMMSS("05:00"), qt.Equals, 0)
+	c.Assert(parseHHMMSS("not-a-time"), qt.Equals, 0)
+}
+
+// ===== splitIntoTimestampedEntries Tests =====
+
+func TestSplitIntoTimestampedEntries_AudioOnly(t *testing.T) {
+	c := qt.New(t)
+
+	input := "[Audio: 00:00:05] Hello world\n[Audio: 00:01:00] Second entry"
+	entries := splitIntoTimestampedEntries(input)
+	c.Assert(len(entries), qt.Equals, 2)
+	c.Assert(entries[0].seconds, qt.Equals, 5)
+	c.Assert(strings.Contains(entries[0].text, "Hello world"), qt.IsTrue)
+	c.Assert(entries[1].seconds, qt.Equals, 60)
+	c.Assert(strings.Contains(entries[1].text, "Second entry"), qt.IsTrue)
+}
+
+func TestSplitIntoTimestampedEntries_VideoOnly(t *testing.T) {
+	c := qt.New(t)
+
+	input := "[Video: 00:00:10] Scene one\n[Video: 00:02:00] Scene two"
+	entries := splitIntoTimestampedEntries(input)
+	c.Assert(len(entries), qt.Equals, 2)
+	c.Assert(entries[0].seconds, qt.Equals, 10)
+	c.Assert(entries[1].seconds, qt.Equals, 120)
+}
+
+func TestSplitIntoTimestampedEntries_MultilineBlocks(t *testing.T) {
+	c := qt.New(t)
+
+	input := "[Audio: 00:00:05] Speaker A says something\nContinuation of speech\n[Audio: 00:01:00] Speaker B replies"
+	entries := splitIntoTimestampedEntries(input)
+	c.Assert(len(entries), qt.Equals, 2)
+	c.Assert(strings.Contains(entries[0].text, "Continuation of speech"), qt.IsTrue)
+}
+
+func TestSplitIntoTimestampedEntries_Empty(t *testing.T) {
+	c := qt.New(t)
+
+	entries := splitIntoTimestampedEntries("")
+	c.Assert(len(entries), qt.Equals, 0)
+}
+
+func TestSplitIntoTimestampedEntries_NoTimestamps(t *testing.T) {
+	c := qt.New(t)
+
+	entries := splitIntoTimestampedEntries("Just some plain text\nNo timestamps here")
+	c.Assert(len(entries), qt.Equals, 0)
+}
+
+// ===== mergeAudioAndVisual Tests =====
+
+func TestMergeAudioAndVisual_InterleavedByTimestamp(t *testing.T) {
+	c := qt.New(t)
+
+	audio := "[Audio: 00:00:05] Hello\n[Audio: 00:00:30] World"
+	visual := "[Video: 00:00:10] A person speaking\n[Video: 00:00:25] Close-up of a whiteboard"
+
+	merged := mergeAudioAndVisual(audio, visual)
+
+	lines := strings.Split(merged, "\n")
+	c.Assert(len(lines) >= 4, qt.IsTrue, qt.Commentf("expected at least 4 lines, got %d: %q", len(lines), merged))
+
+	c.Assert(strings.Contains(lines[0], "[Audio: 00:00:05]"), qt.IsTrue,
+		qt.Commentf("first entry should be earliest timestamp (00:00:05), got: %s", lines[0]))
+
+	audioIdx := strings.Index(merged, "[Audio: 00:00:30]")
+	videoIdx := strings.Index(merged, "[Video: 00:00:25]")
+	c.Assert(videoIdx < audioIdx, qt.IsTrue,
+		qt.Commentf("[Video: 00:00:25] should come before [Audio: 00:00:30]"))
+}
+
+func TestMergeAudioAndVisual_AudioOnlyInput(t *testing.T) {
+	c := qt.New(t)
+
+	audio := "[Audio: 00:00:05] Only audio\n[Audio: 00:01:00] More audio"
+	merged := mergeAudioAndVisual(audio, "")
+
+	c.Assert(strings.Contains(merged, "[Audio: 00:00:05]"), qt.IsTrue)
+	c.Assert(strings.Contains(merged, "[Audio: 00:01:00]"), qt.IsTrue)
+}
+
+func TestMergeAudioAndVisual_VisualOnlyInput(t *testing.T) {
+	c := qt.New(t)
+
+	visual := "[Video: 00:00:10] Scene\n[Video: 00:02:00] Another scene"
+	merged := mergeAudioAndVisual("", visual)
+
+	c.Assert(strings.Contains(merged, "[Video: 00:00:10]"), qt.IsTrue)
+	c.Assert(strings.Contains(merged, "[Video: 00:02:00]"), qt.IsTrue)
+}
+
+func TestMergeAudioAndVisual_BothEmpty(t *testing.T) {
+	c := qt.New(t)
+
+	merged := mergeAudioAndVisual("", "")
+	c.Assert(merged, qt.Equals, "")
+}
+
+func TestMergeAudioAndVisual_StripsAccidentalAudioFromVisual(t *testing.T) {
+	c := qt.New(t)
+
+	audio := "[Audio: 00:00:05] Real audio"
+	visual := "[Audio: 00:00:10] Accidental audio\n[Video: 00:00:15] Real visual"
+
+	merged := mergeAudioAndVisual(audio, visual)
+
+	audioCount := strings.Count(merged, "[Audio:")
+	c.Assert(audioCount, qt.Equals, 1,
+		qt.Commentf("accidental audio should be stripped; got %d Audio tags in: %q", audioCount, merged))
+	c.Assert(strings.Contains(merged, "[Video: 00:00:15]"), qt.IsTrue)
+}
+
+func TestMergeAudioAndVisual_StripsAccidentalSoundFromVisual(t *testing.T) {
+	c := qt.New(t)
+
+	audio := "[Sound: 00:00:05] Real sound"
+	visual := "[Sound: 00:00:10] Accidental sound\n[Video: 00:00:15] Real visual"
+
+	merged := mergeAudioAndVisual(audio, visual)
+
+	soundCount := strings.Count(merged, "[Sound:")
+	c.Assert(soundCount, qt.Equals, 1,
+		qt.Commentf("accidental sound should be stripped; got %d Sound tags in: %q", soundCount, merged))
+}
+
+func TestMergeAudioAndVisual_EqualTimestampsPreserveOrder(t *testing.T) {
+	c := qt.New(t)
+
+	audio := "[Audio: 00:01:00] Audio at 1 min"
+	visual := "[Video: 00:01:00] Video at 1 min"
+
+	merged := mergeAudioAndVisual(audio, visual)
+
+	audioIdx := strings.Index(merged, "[Audio: 00:01:00]")
+	videoIdx := strings.Index(merged, "[Video: 00:01:00]")
+	c.Assert(audioIdx >= 0, qt.IsTrue)
+	c.Assert(videoIdx >= 0, qt.IsTrue)
+	c.Assert(audioIdx < videoIdx, qt.IsTrue,
+		qt.Commentf("stable sort: audio entries (appended first) should come before visual at equal timestamps"))
+}
+
+func TestMergeAudioAndVisual_LargeTimestamps(t *testing.T) {
+	c := qt.New(t)
+
+	audio := "[Audio: 02:30:00] Late in the video"
+	visual := "[Video: 01:15:00] Midway visual"
+
+	merged := mergeAudioAndVisual(audio, visual)
+
+	visualIdx := strings.Index(merged, "[Video: 01:15:00]")
+	audioIdx := strings.Index(merged, "[Audio: 02:30:00]")
+	c.Assert(visualIdx < audioIdx, qt.IsTrue,
+		qt.Commentf("01:15:00 should come before 02:30:00"))
 }

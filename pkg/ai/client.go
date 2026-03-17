@@ -106,6 +106,20 @@ type Client interface {
 	// This is more efficient when the same content is being processed multiple times
 	ConvertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*ConversionResult, error)
 
+	// ConvertAudioDirect transcribes an audio file already uploaded to GCS.
+	// Uses FileData with the gs:// URI and AudioTimestamp: true for timestamped output.
+	// Designed for single-call processing of audio up to ~8 hours (~720K tokens).
+	ConvertAudioDirect(ctx context.Context, gsURI string, mimeType string, prompt string) (*ConversionResult, error)
+
+	// UploadToGCS uploads content to GCS and returns the gs:// URI.
+	// objectPath is the destination path within the default GCS bucket.
+	// Only supported by VertexAI-backed clients (requires GCS storage).
+	UploadToGCS(ctx context.Context, content []byte, objectPath string, mimeType string) (gsURI string, err error)
+
+	// DeleteFromGCS removes a previously uploaded object from GCS.
+	// objectPath is the path within the default GCS bucket.
+	DeleteFromGCS(ctx context.Context, objectPath string) error
+
 	// CreateCache creates a cached context for efficient content understanding of unstructured data
 	// Supports both single file and batch operations (pass multiple files for batch caching)
 	CreateCache(ctx context.Context, files []FileContent, ttl time.Duration) (*CacheResult, error)

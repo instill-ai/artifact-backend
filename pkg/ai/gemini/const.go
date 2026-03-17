@@ -65,9 +65,11 @@ func loadPrompts() {
 		promptCache = make(map[string]string)
 
 		prompts := map[string]string{
-			"rag_system_instruction": "prompt/rag_system_instruction.md",
-			"rag_generate_content":   "prompt/rag_generate_content.md",
-			"rag_generate_summary":   "prompt/rag_generate_summary.md",
+			"rag_system_instruction":                  "prompt/rag_system_instruction.md",
+			"rag_generate_content":                    "prompt/rag_generate_content.md",
+			"rag_generate_summary":                    "prompt/rag_generate_summary.md",
+			"rag_generate_content_video_visual":       "prompt/rag_generate_content_video_visual.md",
+			"rag_generate_content_audio_transcription": "prompt/rag_generate_content_audio_transcription.md",
 		}
 
 		for key, path := range prompts {
@@ -107,6 +109,18 @@ func GetGenerateContentPrompt() string {
 func GetGenerateSummaryPrompt() string {
 	loadPrompts()
 	return getPrompt("rag_generate_summary")
+}
+
+// GetGenerateContentVideoVisualPrompt returns the visual-only video prompt (CE fallback)
+func GetGenerateContentVideoVisualPrompt() string {
+	loadPrompts()
+	return getPrompt("rag_generate_content_video_visual")
+}
+
+// GetGenerateContentAudioTranscriptionPrompt returns the speech-only audio prompt (CE fallback)
+func GetGenerateContentAudioTranscriptionPrompt() string {
+	loadPrompts()
+	return getPrompt("rag_generate_content_audio_transcription")
 }
 
 // GetModel returns the default Gemini model

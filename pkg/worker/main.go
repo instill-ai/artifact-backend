@@ -46,7 +46,7 @@ const EmbeddingBatchSize = 50
 // Too short = premature failures. Too long = blocked worker slots.
 const (
 	ActivityTimeoutStandard  = 1 * time.Minute  // File I/O, DB, MinIO
-	ActivityTimeoutLong      = 5 * time.Minute  // File conversion, caching, synchronization with reconciliation
+	ActivityTimeoutLong      = 15 * time.Minute // File conversion, caching (incl. GCS upload of large chunks), reconciliation
 	ActivityTimeoutEmbedding = 10 * time.Minute // Embeddings: 100+ chunks @ ~3s/chunk = 5-10 min for large files
 )
 
@@ -97,7 +97,7 @@ const (
 const (
 	MaxVideoChunkDuration = 30 * time.Minute // Gemini limit ~45 min for video with audio; 30 min gives safety margin
 	MaxAudioChunkDuration = 8 * time.Hour    // Gemini limit ~9.5 hours for audio-only
-	ChunkOverlap          = 30 * time.Second // Overlap between adjacent chunks to avoid boundary content loss
+	ChunkOverlap          = 60 * time.Second // Overlap between adjacent chunks to avoid boundary content loss
 )
 
 // BatchProfile holds per-file-type tuning parameters for the concurrent batch
@@ -171,6 +171,32 @@ func isAudioFileType(ft artifactpb.File_Type) bool {
 	}
 }
 
+// audioMIMETypeForFileType returns the MIME type for an audio file type.
+func audioMIMETypeForFileType(ft artifactpb.File_Type) string {
+	switch ft {
+	case artifactpb.File_TYPE_MP3:
+		return "audio/mpeg"
+	case artifactpb.File_TYPE_WAV:
+		return "audio/wav"
+	case artifactpb.File_TYPE_AAC:
+		return "audio/aac"
+	case artifactpb.File_TYPE_OGG:
+		return "audio/ogg"
+	case artifactpb.File_TYPE_FLAC:
+		return "audio/flac"
+	case artifactpb.File_TYPE_M4A:
+		return "audio/mp4"
+	case artifactpb.File_TYPE_WMA:
+		return "audio/x-ms-wma"
+	case artifactpb.File_TYPE_AIFF:
+		return "audio/aiff"
+	case artifactpb.File_TYPE_WEBM_AUDIO:
+		return "audio/webm"
+	default:
+		return "audio/mpeg"
+	}
+}
+
 // fileTypeToModality maps a file type to a modality key for prompt lookup.
 func fileTypeToModality(ft artifactpb.File_Type) string {
 	if isAudioFileType(ft) {
@@ -237,6 +263,17 @@ func (w *Worker) getContentPromptForFileType(ft artifactpb.File_Type) string {
 	}
 
 	return gemini.GetGenerateContentPrompt()
+}
+
+// getVisualOnlyPromptForFileType returns the visual-only prompt variant.
+// Resolution: per-modality override for "video_visual" → CE fallback.
+func (w *Worker) getVisualOnlyPromptForFileType(ft artifactpb.File_Type) string {
+	if w.generateContentPrompts != nil {
+		if p, ok := w.generateContentPrompts["video_visual"]; ok {
+			return p
+		}
+	}
+	return gemini.GetGenerateContentVideoVisualPrompt()
 }
 
 // formatTimestamp formats a time.Duration as "HH:MM:SS" for use in

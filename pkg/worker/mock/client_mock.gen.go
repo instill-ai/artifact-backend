@@ -26,6 +26,13 @@ type ClientMock struct {
 	beforeCloseCounter uint64
 	CloseMock          mClientMockClose
 
+	funcConvertAudioDirect          func(ctx context.Context, gsURI string, mimeType string, prompt string) (cp1 *mm_ai.ConversionResult, err error)
+	funcConvertAudioDirectOrigin    string
+	inspectFuncConvertAudioDirect   func(ctx context.Context, gsURI string, mimeType string, prompt string)
+	afterConvertAudioDirectCounter  uint64
+	beforeConvertAudioDirectCounter uint64
+	ConvertAudioDirectMock          mClientMockConvertAudioDirect
+
 	funcConvertToMarkdownWithCache          func(ctx context.Context, cacheName string, prompt string) (cp1 *mm_ai.ConversionResult, err error)
 	funcConvertToMarkdownWithCacheOrigin    string
 	inspectFuncConvertToMarkdownWithCache   func(ctx context.Context, cacheName string, prompt string)
@@ -60,6 +67,13 @@ type ClientMock struct {
 	afterDeleteCacheCounter  uint64
 	beforeDeleteCacheCounter uint64
 	DeleteCacheMock          mClientMockDeleteCache
+
+	funcDeleteFromGCS          func(ctx context.Context, objectPath string) (err error)
+	funcDeleteFromGCSOrigin    string
+	inspectFuncDeleteFromGCS   func(ctx context.Context, objectPath string)
+	afterDeleteFromGCSCounter  uint64
+	beforeDeleteFromGCSCounter uint64
+	DeleteFromGCSMock          mClientMockDeleteFromGCS
 
 	funcEmbedTexts          func(ctx context.Context, texts []string, taskType string, dimensionality int32) (ep1 *mm_ai.EmbedResult, err error)
 	funcEmbedTextsOrigin    string
@@ -109,6 +123,13 @@ type ClientMock struct {
 	afterUpdateCacheCounter  uint64
 	beforeUpdateCacheCounter uint64
 	UpdateCacheMock          mClientMockUpdateCache
+
+	funcUploadToGCS          func(ctx context.Context, content []byte, objectPath string, mimeType string) (gsURI string, err error)
+	funcUploadToGCSOrigin    string
+	inspectFuncUploadToGCS   func(ctx context.Context, content []byte, objectPath string, mimeType string)
+	afterUploadToGCSCounter  uint64
+	beforeUploadToGCSCounter uint64
+	UploadToGCSMock          mClientMockUploadToGCS
 }
 
 // NewClientMock returns a mock for mm_ai.Client
@@ -120,6 +141,9 @@ func NewClientMock(t minimock.Tester) *ClientMock {
 	}
 
 	m.CloseMock = mClientMockClose{mock: m}
+
+	m.ConvertAudioDirectMock = mClientMockConvertAudioDirect{mock: m}
+	m.ConvertAudioDirectMock.callArgs = []*ClientMockConvertAudioDirectParams{}
 
 	m.ConvertToMarkdownWithCacheMock = mClientMockConvertToMarkdownWithCache{mock: m}
 	m.ConvertToMarkdownWithCacheMock.callArgs = []*ClientMockConvertToMarkdownWithCacheParams{}
@@ -135,6 +159,9 @@ func NewClientMock(t minimock.Tester) *ClientMock {
 
 	m.DeleteCacheMock = mClientMockDeleteCache{mock: m}
 	m.DeleteCacheMock.callArgs = []*ClientMockDeleteCacheParams{}
+
+	m.DeleteFromGCSMock = mClientMockDeleteFromGCS{mock: m}
+	m.DeleteFromGCSMock.callArgs = []*ClientMockDeleteFromGCSParams{}
 
 	m.EmbedTextsMock = mClientMockEmbedTexts{mock: m}
 	m.EmbedTextsMock.callArgs = []*ClientMockEmbedTextsParams{}
@@ -154,6 +181,9 @@ func NewClientMock(t minimock.Tester) *ClientMock {
 
 	m.UpdateCacheMock = mClientMockUpdateCache{mock: m}
 	m.UpdateCacheMock.callArgs = []*ClientMockUpdateCacheParams{}
+
+	m.UploadToGCSMock = mClientMockUploadToGCS{mock: m}
+	m.UploadToGCSMock.callArgs = []*ClientMockUploadToGCSParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -343,6 +373,411 @@ func (m *ClientMock) MinimockCloseInspect() {
 	if !m.CloseMock.invocationsDone() && afterCloseCounter > 0 {
 		m.t.Errorf("Expected %d calls to ClientMock.Close at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CloseMock.expectedInvocations), m.CloseMock.expectedInvocationsOrigin, afterCloseCounter)
+	}
+}
+
+type mClientMockConvertAudioDirect struct {
+	optional           bool
+	mock               *ClientMock
+	defaultExpectation *ClientMockConvertAudioDirectExpectation
+	expectations       []*ClientMockConvertAudioDirectExpectation
+
+	callArgs []*ClientMockConvertAudioDirectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ClientMockConvertAudioDirectExpectation specifies expectation struct of the Client.ConvertAudioDirect
+type ClientMockConvertAudioDirectExpectation struct {
+	mock               *ClientMock
+	params             *ClientMockConvertAudioDirectParams
+	paramPtrs          *ClientMockConvertAudioDirectParamPtrs
+	expectationOrigins ClientMockConvertAudioDirectExpectationOrigins
+	results            *ClientMockConvertAudioDirectResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ClientMockConvertAudioDirectParams contains parameters of the Client.ConvertAudioDirect
+type ClientMockConvertAudioDirectParams struct {
+	ctx      context.Context
+	gsURI    string
+	mimeType string
+	prompt   string
+}
+
+// ClientMockConvertAudioDirectParamPtrs contains pointers to parameters of the Client.ConvertAudioDirect
+type ClientMockConvertAudioDirectParamPtrs struct {
+	ctx      *context.Context
+	gsURI    *string
+	mimeType *string
+	prompt   *string
+}
+
+// ClientMockConvertAudioDirectResults contains results of the Client.ConvertAudioDirect
+type ClientMockConvertAudioDirectResults struct {
+	cp1 *mm_ai.ConversionResult
+	err error
+}
+
+// ClientMockConvertAudioDirectOrigins contains origins of expectations of the Client.ConvertAudioDirect
+type ClientMockConvertAudioDirectExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originGsURI    string
+	originMimeType string
+	originPrompt   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) Optional() *mClientMockConvertAudioDirect {
+	mmConvertAudioDirect.optional = true
+	return mmConvertAudioDirect
+}
+
+// Expect sets up expected params for Client.ConvertAudioDirect
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) Expect(ctx context.Context, gsURI string, mimeType string, prompt string) *mClientMockConvertAudioDirect {
+	if mmConvertAudioDirect.mock.funcConvertAudioDirect != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Set")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation == nil {
+		mmConvertAudioDirect.defaultExpectation = &ClientMockConvertAudioDirectExpectation{}
+	}
+
+	if mmConvertAudioDirect.defaultExpectation.paramPtrs != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by ExpectParams functions")
+	}
+
+	mmConvertAudioDirect.defaultExpectation.params = &ClientMockConvertAudioDirectParams{ctx, gsURI, mimeType, prompt}
+	mmConvertAudioDirect.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmConvertAudioDirect.expectations {
+		if minimock.Equal(e.params, mmConvertAudioDirect.defaultExpectation.params) {
+			mmConvertAudioDirect.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmConvertAudioDirect.defaultExpectation.params)
+		}
+	}
+
+	return mmConvertAudioDirect
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Client.ConvertAudioDirect
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) ExpectCtxParam1(ctx context.Context) *mClientMockConvertAudioDirect {
+	if mmConvertAudioDirect.mock.funcConvertAudioDirect != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Set")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation == nil {
+		mmConvertAudioDirect.defaultExpectation = &ClientMockConvertAudioDirectExpectation{}
+	}
+
+	if mmConvertAudioDirect.defaultExpectation.params != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Expect")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation.paramPtrs == nil {
+		mmConvertAudioDirect.defaultExpectation.paramPtrs = &ClientMockConvertAudioDirectParamPtrs{}
+	}
+	mmConvertAudioDirect.defaultExpectation.paramPtrs.ctx = &ctx
+	mmConvertAudioDirect.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmConvertAudioDirect
+}
+
+// ExpectGsURIParam2 sets up expected param gsURI for Client.ConvertAudioDirect
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) ExpectGsURIParam2(gsURI string) *mClientMockConvertAudioDirect {
+	if mmConvertAudioDirect.mock.funcConvertAudioDirect != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Set")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation == nil {
+		mmConvertAudioDirect.defaultExpectation = &ClientMockConvertAudioDirectExpectation{}
+	}
+
+	if mmConvertAudioDirect.defaultExpectation.params != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Expect")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation.paramPtrs == nil {
+		mmConvertAudioDirect.defaultExpectation.paramPtrs = &ClientMockConvertAudioDirectParamPtrs{}
+	}
+	mmConvertAudioDirect.defaultExpectation.paramPtrs.gsURI = &gsURI
+	mmConvertAudioDirect.defaultExpectation.expectationOrigins.originGsURI = minimock.CallerInfo(1)
+
+	return mmConvertAudioDirect
+}
+
+// ExpectMimeTypeParam3 sets up expected param mimeType for Client.ConvertAudioDirect
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) ExpectMimeTypeParam3(mimeType string) *mClientMockConvertAudioDirect {
+	if mmConvertAudioDirect.mock.funcConvertAudioDirect != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Set")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation == nil {
+		mmConvertAudioDirect.defaultExpectation = &ClientMockConvertAudioDirectExpectation{}
+	}
+
+	if mmConvertAudioDirect.defaultExpectation.params != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Expect")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation.paramPtrs == nil {
+		mmConvertAudioDirect.defaultExpectation.paramPtrs = &ClientMockConvertAudioDirectParamPtrs{}
+	}
+	mmConvertAudioDirect.defaultExpectation.paramPtrs.mimeType = &mimeType
+	mmConvertAudioDirect.defaultExpectation.expectationOrigins.originMimeType = minimock.CallerInfo(1)
+
+	return mmConvertAudioDirect
+}
+
+// ExpectPromptParam4 sets up expected param prompt for Client.ConvertAudioDirect
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) ExpectPromptParam4(prompt string) *mClientMockConvertAudioDirect {
+	if mmConvertAudioDirect.mock.funcConvertAudioDirect != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Set")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation == nil {
+		mmConvertAudioDirect.defaultExpectation = &ClientMockConvertAudioDirectExpectation{}
+	}
+
+	if mmConvertAudioDirect.defaultExpectation.params != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Expect")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation.paramPtrs == nil {
+		mmConvertAudioDirect.defaultExpectation.paramPtrs = &ClientMockConvertAudioDirectParamPtrs{}
+	}
+	mmConvertAudioDirect.defaultExpectation.paramPtrs.prompt = &prompt
+	mmConvertAudioDirect.defaultExpectation.expectationOrigins.originPrompt = minimock.CallerInfo(1)
+
+	return mmConvertAudioDirect
+}
+
+// Inspect accepts an inspector function that has same arguments as the Client.ConvertAudioDirect
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) Inspect(f func(ctx context.Context, gsURI string, mimeType string, prompt string)) *mClientMockConvertAudioDirect {
+	if mmConvertAudioDirect.mock.inspectFuncConvertAudioDirect != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("Inspect function is already set for ClientMock.ConvertAudioDirect")
+	}
+
+	mmConvertAudioDirect.mock.inspectFuncConvertAudioDirect = f
+
+	return mmConvertAudioDirect
+}
+
+// Return sets up results that will be returned by Client.ConvertAudioDirect
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) Return(cp1 *mm_ai.ConversionResult, err error) *ClientMock {
+	if mmConvertAudioDirect.mock.funcConvertAudioDirect != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Set")
+	}
+
+	if mmConvertAudioDirect.defaultExpectation == nil {
+		mmConvertAudioDirect.defaultExpectation = &ClientMockConvertAudioDirectExpectation{mock: mmConvertAudioDirect.mock}
+	}
+	mmConvertAudioDirect.defaultExpectation.results = &ClientMockConvertAudioDirectResults{cp1, err}
+	mmConvertAudioDirect.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmConvertAudioDirect.mock
+}
+
+// Set uses given function f to mock the Client.ConvertAudioDirect method
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) Set(f func(ctx context.Context, gsURI string, mimeType string, prompt string) (cp1 *mm_ai.ConversionResult, err error)) *ClientMock {
+	if mmConvertAudioDirect.defaultExpectation != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("Default expectation is already set for the Client.ConvertAudioDirect method")
+	}
+
+	if len(mmConvertAudioDirect.expectations) > 0 {
+		mmConvertAudioDirect.mock.t.Fatalf("Some expectations are already set for the Client.ConvertAudioDirect method")
+	}
+
+	mmConvertAudioDirect.mock.funcConvertAudioDirect = f
+	mmConvertAudioDirect.mock.funcConvertAudioDirectOrigin = minimock.CallerInfo(1)
+	return mmConvertAudioDirect.mock
+}
+
+// When sets expectation for the Client.ConvertAudioDirect which will trigger the result defined by the following
+// Then helper
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) When(ctx context.Context, gsURI string, mimeType string, prompt string) *ClientMockConvertAudioDirectExpectation {
+	if mmConvertAudioDirect.mock.funcConvertAudioDirect != nil {
+		mmConvertAudioDirect.mock.t.Fatalf("ClientMock.ConvertAudioDirect mock is already set by Set")
+	}
+
+	expectation := &ClientMockConvertAudioDirectExpectation{
+		mock:               mmConvertAudioDirect.mock,
+		params:             &ClientMockConvertAudioDirectParams{ctx, gsURI, mimeType, prompt},
+		expectationOrigins: ClientMockConvertAudioDirectExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmConvertAudioDirect.expectations = append(mmConvertAudioDirect.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Client.ConvertAudioDirect return parameters for the expectation previously defined by the When method
+func (e *ClientMockConvertAudioDirectExpectation) Then(cp1 *mm_ai.ConversionResult, err error) *ClientMock {
+	e.results = &ClientMockConvertAudioDirectResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Client.ConvertAudioDirect should be invoked
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) Times(n uint64) *mClientMockConvertAudioDirect {
+	if n == 0 {
+		mmConvertAudioDirect.mock.t.Fatalf("Times of ClientMock.ConvertAudioDirect mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmConvertAudioDirect.expectedInvocations, n)
+	mmConvertAudioDirect.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmConvertAudioDirect
+}
+
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) invocationsDone() bool {
+	if len(mmConvertAudioDirect.expectations) == 0 && mmConvertAudioDirect.defaultExpectation == nil && mmConvertAudioDirect.mock.funcConvertAudioDirect == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmConvertAudioDirect.mock.afterConvertAudioDirectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmConvertAudioDirect.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ConvertAudioDirect implements mm_ai.Client
+func (mmConvertAudioDirect *ClientMock) ConvertAudioDirect(ctx context.Context, gsURI string, mimeType string, prompt string) (cp1 *mm_ai.ConversionResult, err error) {
+	mm_atomic.AddUint64(&mmConvertAudioDirect.beforeConvertAudioDirectCounter, 1)
+	defer mm_atomic.AddUint64(&mmConvertAudioDirect.afterConvertAudioDirectCounter, 1)
+
+	mmConvertAudioDirect.t.Helper()
+
+	if mmConvertAudioDirect.inspectFuncConvertAudioDirect != nil {
+		mmConvertAudioDirect.inspectFuncConvertAudioDirect(ctx, gsURI, mimeType, prompt)
+	}
+
+	mm_params := ClientMockConvertAudioDirectParams{ctx, gsURI, mimeType, prompt}
+
+	// Record call args
+	mmConvertAudioDirect.ConvertAudioDirectMock.mutex.Lock()
+	mmConvertAudioDirect.ConvertAudioDirectMock.callArgs = append(mmConvertAudioDirect.ConvertAudioDirectMock.callArgs, &mm_params)
+	mmConvertAudioDirect.ConvertAudioDirectMock.mutex.Unlock()
+
+	for _, e := range mmConvertAudioDirect.ConvertAudioDirectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation.Counter, 1)
+		mm_want := mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation.params
+		mm_want_ptrs := mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation.paramPtrs
+
+		mm_got := ClientMockConvertAudioDirectParams{ctx, gsURI, mimeType, prompt}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmConvertAudioDirect.t.Errorf("ClientMock.ConvertAudioDirect got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.gsURI != nil && !minimock.Equal(*mm_want_ptrs.gsURI, mm_got.gsURI) {
+				mmConvertAudioDirect.t.Errorf("ClientMock.ConvertAudioDirect got unexpected parameter gsURI, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation.expectationOrigins.originGsURI, *mm_want_ptrs.gsURI, mm_got.gsURI, minimock.Diff(*mm_want_ptrs.gsURI, mm_got.gsURI))
+			}
+
+			if mm_want_ptrs.mimeType != nil && !minimock.Equal(*mm_want_ptrs.mimeType, mm_got.mimeType) {
+				mmConvertAudioDirect.t.Errorf("ClientMock.ConvertAudioDirect got unexpected parameter mimeType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation.expectationOrigins.originMimeType, *mm_want_ptrs.mimeType, mm_got.mimeType, minimock.Diff(*mm_want_ptrs.mimeType, mm_got.mimeType))
+			}
+
+			if mm_want_ptrs.prompt != nil && !minimock.Equal(*mm_want_ptrs.prompt, mm_got.prompt) {
+				mmConvertAudioDirect.t.Errorf("ClientMock.ConvertAudioDirect got unexpected parameter prompt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation.expectationOrigins.originPrompt, *mm_want_ptrs.prompt, mm_got.prompt, minimock.Diff(*mm_want_ptrs.prompt, mm_got.prompt))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmConvertAudioDirect.t.Errorf("ClientMock.ConvertAudioDirect got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmConvertAudioDirect.ConvertAudioDirectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmConvertAudioDirect.t.Fatal("No results are set for the ClientMock.ConvertAudioDirect")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmConvertAudioDirect.funcConvertAudioDirect != nil {
+		return mmConvertAudioDirect.funcConvertAudioDirect(ctx, gsURI, mimeType, prompt)
+	}
+	mmConvertAudioDirect.t.Fatalf("Unexpected call to ClientMock.ConvertAudioDirect. %v %v %v %v", ctx, gsURI, mimeType, prompt)
+	return
+}
+
+// ConvertAudioDirectAfterCounter returns a count of finished ClientMock.ConvertAudioDirect invocations
+func (mmConvertAudioDirect *ClientMock) ConvertAudioDirectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmConvertAudioDirect.afterConvertAudioDirectCounter)
+}
+
+// ConvertAudioDirectBeforeCounter returns a count of ClientMock.ConvertAudioDirect invocations
+func (mmConvertAudioDirect *ClientMock) ConvertAudioDirectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmConvertAudioDirect.beforeConvertAudioDirectCounter)
+}
+
+// Calls returns a list of arguments used in each call to ClientMock.ConvertAudioDirect.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmConvertAudioDirect *mClientMockConvertAudioDirect) Calls() []*ClientMockConvertAudioDirectParams {
+	mmConvertAudioDirect.mutex.RLock()
+
+	argCopy := make([]*ClientMockConvertAudioDirectParams, len(mmConvertAudioDirect.callArgs))
+	copy(argCopy, mmConvertAudioDirect.callArgs)
+
+	mmConvertAudioDirect.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockConvertAudioDirectDone returns true if the count of the ConvertAudioDirect invocations corresponds
+// the number of defined expectations
+func (m *ClientMock) MinimockConvertAudioDirectDone() bool {
+	if m.ConvertAudioDirectMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ConvertAudioDirectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ConvertAudioDirectMock.invocationsDone()
+}
+
+// MinimockConvertAudioDirectInspect logs each unmet expectation
+func (m *ClientMock) MinimockConvertAudioDirectInspect() {
+	for _, e := range m.ConvertAudioDirectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ClientMock.ConvertAudioDirect at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterConvertAudioDirectCounter := mm_atomic.LoadUint64(&m.afterConvertAudioDirectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ConvertAudioDirectMock.defaultExpectation != nil && afterConvertAudioDirectCounter < 1 {
+		if m.ConvertAudioDirectMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ClientMock.ConvertAudioDirect at\n%s", m.ConvertAudioDirectMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ClientMock.ConvertAudioDirect at\n%s with params: %#v", m.ConvertAudioDirectMock.defaultExpectation.expectationOrigins.origin, *m.ConvertAudioDirectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcConvertAudioDirect != nil && afterConvertAudioDirectCounter < 1 {
+		m.t.Errorf("Expected call to ClientMock.ConvertAudioDirect at\n%s", m.funcConvertAudioDirectOrigin)
+	}
+
+	if !m.ConvertAudioDirectMock.invocationsDone() && afterConvertAudioDirectCounter > 0 {
+		m.t.Errorf("Expected %d calls to ClientMock.ConvertAudioDirect at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ConvertAudioDirectMock.expectedInvocations), m.ConvertAudioDirectMock.expectedInvocationsOrigin, afterConvertAudioDirectCounter)
 	}
 }
 
@@ -2275,6 +2710,348 @@ func (m *ClientMock) MinimockDeleteCacheInspect() {
 	if !m.DeleteCacheMock.invocationsDone() && afterDeleteCacheCounter > 0 {
 		m.t.Errorf("Expected %d calls to ClientMock.DeleteCache at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.DeleteCacheMock.expectedInvocations), m.DeleteCacheMock.expectedInvocationsOrigin, afterDeleteCacheCounter)
+	}
+}
+
+type mClientMockDeleteFromGCS struct {
+	optional           bool
+	mock               *ClientMock
+	defaultExpectation *ClientMockDeleteFromGCSExpectation
+	expectations       []*ClientMockDeleteFromGCSExpectation
+
+	callArgs []*ClientMockDeleteFromGCSParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ClientMockDeleteFromGCSExpectation specifies expectation struct of the Client.DeleteFromGCS
+type ClientMockDeleteFromGCSExpectation struct {
+	mock               *ClientMock
+	params             *ClientMockDeleteFromGCSParams
+	paramPtrs          *ClientMockDeleteFromGCSParamPtrs
+	expectationOrigins ClientMockDeleteFromGCSExpectationOrigins
+	results            *ClientMockDeleteFromGCSResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ClientMockDeleteFromGCSParams contains parameters of the Client.DeleteFromGCS
+type ClientMockDeleteFromGCSParams struct {
+	ctx        context.Context
+	objectPath string
+}
+
+// ClientMockDeleteFromGCSParamPtrs contains pointers to parameters of the Client.DeleteFromGCS
+type ClientMockDeleteFromGCSParamPtrs struct {
+	ctx        *context.Context
+	objectPath *string
+}
+
+// ClientMockDeleteFromGCSResults contains results of the Client.DeleteFromGCS
+type ClientMockDeleteFromGCSResults struct {
+	err error
+}
+
+// ClientMockDeleteFromGCSOrigins contains origins of expectations of the Client.DeleteFromGCS
+type ClientMockDeleteFromGCSExpectationOrigins struct {
+	origin           string
+	originCtx        string
+	originObjectPath string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) Optional() *mClientMockDeleteFromGCS {
+	mmDeleteFromGCS.optional = true
+	return mmDeleteFromGCS
+}
+
+// Expect sets up expected params for Client.DeleteFromGCS
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) Expect(ctx context.Context, objectPath string) *mClientMockDeleteFromGCS {
+	if mmDeleteFromGCS.mock.funcDeleteFromGCS != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("ClientMock.DeleteFromGCS mock is already set by Set")
+	}
+
+	if mmDeleteFromGCS.defaultExpectation == nil {
+		mmDeleteFromGCS.defaultExpectation = &ClientMockDeleteFromGCSExpectation{}
+	}
+
+	if mmDeleteFromGCS.defaultExpectation.paramPtrs != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("ClientMock.DeleteFromGCS mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteFromGCS.defaultExpectation.params = &ClientMockDeleteFromGCSParams{ctx, objectPath}
+	mmDeleteFromGCS.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteFromGCS.expectations {
+		if minimock.Equal(e.params, mmDeleteFromGCS.defaultExpectation.params) {
+			mmDeleteFromGCS.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteFromGCS.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteFromGCS
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Client.DeleteFromGCS
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) ExpectCtxParam1(ctx context.Context) *mClientMockDeleteFromGCS {
+	if mmDeleteFromGCS.mock.funcDeleteFromGCS != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("ClientMock.DeleteFromGCS mock is already set by Set")
+	}
+
+	if mmDeleteFromGCS.defaultExpectation == nil {
+		mmDeleteFromGCS.defaultExpectation = &ClientMockDeleteFromGCSExpectation{}
+	}
+
+	if mmDeleteFromGCS.defaultExpectation.params != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("ClientMock.DeleteFromGCS mock is already set by Expect")
+	}
+
+	if mmDeleteFromGCS.defaultExpectation.paramPtrs == nil {
+		mmDeleteFromGCS.defaultExpectation.paramPtrs = &ClientMockDeleteFromGCSParamPtrs{}
+	}
+	mmDeleteFromGCS.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteFromGCS.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDeleteFromGCS
+}
+
+// ExpectObjectPathParam2 sets up expected param objectPath for Client.DeleteFromGCS
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) ExpectObjectPathParam2(objectPath string) *mClientMockDeleteFromGCS {
+	if mmDeleteFromGCS.mock.funcDeleteFromGCS != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("ClientMock.DeleteFromGCS mock is already set by Set")
+	}
+
+	if mmDeleteFromGCS.defaultExpectation == nil {
+		mmDeleteFromGCS.defaultExpectation = &ClientMockDeleteFromGCSExpectation{}
+	}
+
+	if mmDeleteFromGCS.defaultExpectation.params != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("ClientMock.DeleteFromGCS mock is already set by Expect")
+	}
+
+	if mmDeleteFromGCS.defaultExpectation.paramPtrs == nil {
+		mmDeleteFromGCS.defaultExpectation.paramPtrs = &ClientMockDeleteFromGCSParamPtrs{}
+	}
+	mmDeleteFromGCS.defaultExpectation.paramPtrs.objectPath = &objectPath
+	mmDeleteFromGCS.defaultExpectation.expectationOrigins.originObjectPath = minimock.CallerInfo(1)
+
+	return mmDeleteFromGCS
+}
+
+// Inspect accepts an inspector function that has same arguments as the Client.DeleteFromGCS
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) Inspect(f func(ctx context.Context, objectPath string)) *mClientMockDeleteFromGCS {
+	if mmDeleteFromGCS.mock.inspectFuncDeleteFromGCS != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("Inspect function is already set for ClientMock.DeleteFromGCS")
+	}
+
+	mmDeleteFromGCS.mock.inspectFuncDeleteFromGCS = f
+
+	return mmDeleteFromGCS
+}
+
+// Return sets up results that will be returned by Client.DeleteFromGCS
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) Return(err error) *ClientMock {
+	if mmDeleteFromGCS.mock.funcDeleteFromGCS != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("ClientMock.DeleteFromGCS mock is already set by Set")
+	}
+
+	if mmDeleteFromGCS.defaultExpectation == nil {
+		mmDeleteFromGCS.defaultExpectation = &ClientMockDeleteFromGCSExpectation{mock: mmDeleteFromGCS.mock}
+	}
+	mmDeleteFromGCS.defaultExpectation.results = &ClientMockDeleteFromGCSResults{err}
+	mmDeleteFromGCS.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteFromGCS.mock
+}
+
+// Set uses given function f to mock the Client.DeleteFromGCS method
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) Set(f func(ctx context.Context, objectPath string) (err error)) *ClientMock {
+	if mmDeleteFromGCS.defaultExpectation != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("Default expectation is already set for the Client.DeleteFromGCS method")
+	}
+
+	if len(mmDeleteFromGCS.expectations) > 0 {
+		mmDeleteFromGCS.mock.t.Fatalf("Some expectations are already set for the Client.DeleteFromGCS method")
+	}
+
+	mmDeleteFromGCS.mock.funcDeleteFromGCS = f
+	mmDeleteFromGCS.mock.funcDeleteFromGCSOrigin = minimock.CallerInfo(1)
+	return mmDeleteFromGCS.mock
+}
+
+// When sets expectation for the Client.DeleteFromGCS which will trigger the result defined by the following
+// Then helper
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) When(ctx context.Context, objectPath string) *ClientMockDeleteFromGCSExpectation {
+	if mmDeleteFromGCS.mock.funcDeleteFromGCS != nil {
+		mmDeleteFromGCS.mock.t.Fatalf("ClientMock.DeleteFromGCS mock is already set by Set")
+	}
+
+	expectation := &ClientMockDeleteFromGCSExpectation{
+		mock:               mmDeleteFromGCS.mock,
+		params:             &ClientMockDeleteFromGCSParams{ctx, objectPath},
+		expectationOrigins: ClientMockDeleteFromGCSExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDeleteFromGCS.expectations = append(mmDeleteFromGCS.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Client.DeleteFromGCS return parameters for the expectation previously defined by the When method
+func (e *ClientMockDeleteFromGCSExpectation) Then(err error) *ClientMock {
+	e.results = &ClientMockDeleteFromGCSResults{err}
+	return e.mock
+}
+
+// Times sets number of times Client.DeleteFromGCS should be invoked
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) Times(n uint64) *mClientMockDeleteFromGCS {
+	if n == 0 {
+		mmDeleteFromGCS.mock.t.Fatalf("Times of ClientMock.DeleteFromGCS mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteFromGCS.expectedInvocations, n)
+	mmDeleteFromGCS.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteFromGCS
+}
+
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) invocationsDone() bool {
+	if len(mmDeleteFromGCS.expectations) == 0 && mmDeleteFromGCS.defaultExpectation == nil && mmDeleteFromGCS.mock.funcDeleteFromGCS == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteFromGCS.mock.afterDeleteFromGCSCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteFromGCS.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteFromGCS implements mm_ai.Client
+func (mmDeleteFromGCS *ClientMock) DeleteFromGCS(ctx context.Context, objectPath string) (err error) {
+	mm_atomic.AddUint64(&mmDeleteFromGCS.beforeDeleteFromGCSCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteFromGCS.afterDeleteFromGCSCounter, 1)
+
+	mmDeleteFromGCS.t.Helper()
+
+	if mmDeleteFromGCS.inspectFuncDeleteFromGCS != nil {
+		mmDeleteFromGCS.inspectFuncDeleteFromGCS(ctx, objectPath)
+	}
+
+	mm_params := ClientMockDeleteFromGCSParams{ctx, objectPath}
+
+	// Record call args
+	mmDeleteFromGCS.DeleteFromGCSMock.mutex.Lock()
+	mmDeleteFromGCS.DeleteFromGCSMock.callArgs = append(mmDeleteFromGCS.DeleteFromGCSMock.callArgs, &mm_params)
+	mmDeleteFromGCS.DeleteFromGCSMock.mutex.Unlock()
+
+	for _, e := range mmDeleteFromGCS.DeleteFromGCSMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteFromGCS.DeleteFromGCSMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteFromGCS.DeleteFromGCSMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteFromGCS.DeleteFromGCSMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteFromGCS.DeleteFromGCSMock.defaultExpectation.paramPtrs
+
+		mm_got := ClientMockDeleteFromGCSParams{ctx, objectPath}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteFromGCS.t.Errorf("ClientMock.DeleteFromGCS got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteFromGCS.DeleteFromGCSMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.objectPath != nil && !minimock.Equal(*mm_want_ptrs.objectPath, mm_got.objectPath) {
+				mmDeleteFromGCS.t.Errorf("ClientMock.DeleteFromGCS got unexpected parameter objectPath, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteFromGCS.DeleteFromGCSMock.defaultExpectation.expectationOrigins.originObjectPath, *mm_want_ptrs.objectPath, mm_got.objectPath, minimock.Diff(*mm_want_ptrs.objectPath, mm_got.objectPath))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteFromGCS.t.Errorf("ClientMock.DeleteFromGCS got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteFromGCS.DeleteFromGCSMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteFromGCS.DeleteFromGCSMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteFromGCS.t.Fatal("No results are set for the ClientMock.DeleteFromGCS")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteFromGCS.funcDeleteFromGCS != nil {
+		return mmDeleteFromGCS.funcDeleteFromGCS(ctx, objectPath)
+	}
+	mmDeleteFromGCS.t.Fatalf("Unexpected call to ClientMock.DeleteFromGCS. %v %v", ctx, objectPath)
+	return
+}
+
+// DeleteFromGCSAfterCounter returns a count of finished ClientMock.DeleteFromGCS invocations
+func (mmDeleteFromGCS *ClientMock) DeleteFromGCSAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteFromGCS.afterDeleteFromGCSCounter)
+}
+
+// DeleteFromGCSBeforeCounter returns a count of ClientMock.DeleteFromGCS invocations
+func (mmDeleteFromGCS *ClientMock) DeleteFromGCSBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteFromGCS.beforeDeleteFromGCSCounter)
+}
+
+// Calls returns a list of arguments used in each call to ClientMock.DeleteFromGCS.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteFromGCS *mClientMockDeleteFromGCS) Calls() []*ClientMockDeleteFromGCSParams {
+	mmDeleteFromGCS.mutex.RLock()
+
+	argCopy := make([]*ClientMockDeleteFromGCSParams, len(mmDeleteFromGCS.callArgs))
+	copy(argCopy, mmDeleteFromGCS.callArgs)
+
+	mmDeleteFromGCS.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteFromGCSDone returns true if the count of the DeleteFromGCS invocations corresponds
+// the number of defined expectations
+func (m *ClientMock) MinimockDeleteFromGCSDone() bool {
+	if m.DeleteFromGCSMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteFromGCSMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteFromGCSMock.invocationsDone()
+}
+
+// MinimockDeleteFromGCSInspect logs each unmet expectation
+func (m *ClientMock) MinimockDeleteFromGCSInspect() {
+	for _, e := range m.DeleteFromGCSMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ClientMock.DeleteFromGCS at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteFromGCSCounter := mm_atomic.LoadUint64(&m.afterDeleteFromGCSCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteFromGCSMock.defaultExpectation != nil && afterDeleteFromGCSCounter < 1 {
+		if m.DeleteFromGCSMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ClientMock.DeleteFromGCS at\n%s", m.DeleteFromGCSMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ClientMock.DeleteFromGCS at\n%s with params: %#v", m.DeleteFromGCSMock.defaultExpectation.expectationOrigins.origin, *m.DeleteFromGCSMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteFromGCS != nil && afterDeleteFromGCSCounter < 1 {
+		m.t.Errorf("Expected call to ClientMock.DeleteFromGCS at\n%s", m.funcDeleteFromGCSOrigin)
+	}
+
+	if !m.DeleteFromGCSMock.invocationsDone() && afterDeleteFromGCSCounter > 0 {
+		m.t.Errorf("Expected %d calls to ClientMock.DeleteFromGCS at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteFromGCSMock.expectedInvocations), m.DeleteFromGCSMock.expectedInvocationsOrigin, afterDeleteFromGCSCounter)
 	}
 }
 
@@ -4427,11 +5204,418 @@ func (m *ClientMock) MinimockUpdateCacheInspect() {
 	}
 }
 
+type mClientMockUploadToGCS struct {
+	optional           bool
+	mock               *ClientMock
+	defaultExpectation *ClientMockUploadToGCSExpectation
+	expectations       []*ClientMockUploadToGCSExpectation
+
+	callArgs []*ClientMockUploadToGCSParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ClientMockUploadToGCSExpectation specifies expectation struct of the Client.UploadToGCS
+type ClientMockUploadToGCSExpectation struct {
+	mock               *ClientMock
+	params             *ClientMockUploadToGCSParams
+	paramPtrs          *ClientMockUploadToGCSParamPtrs
+	expectationOrigins ClientMockUploadToGCSExpectationOrigins
+	results            *ClientMockUploadToGCSResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ClientMockUploadToGCSParams contains parameters of the Client.UploadToGCS
+type ClientMockUploadToGCSParams struct {
+	ctx        context.Context
+	content    []byte
+	objectPath string
+	mimeType   string
+}
+
+// ClientMockUploadToGCSParamPtrs contains pointers to parameters of the Client.UploadToGCS
+type ClientMockUploadToGCSParamPtrs struct {
+	ctx        *context.Context
+	content    *[]byte
+	objectPath *string
+	mimeType   *string
+}
+
+// ClientMockUploadToGCSResults contains results of the Client.UploadToGCS
+type ClientMockUploadToGCSResults struct {
+	gsURI string
+	err   error
+}
+
+// ClientMockUploadToGCSOrigins contains origins of expectations of the Client.UploadToGCS
+type ClientMockUploadToGCSExpectationOrigins struct {
+	origin           string
+	originCtx        string
+	originContent    string
+	originObjectPath string
+	originMimeType   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUploadToGCS *mClientMockUploadToGCS) Optional() *mClientMockUploadToGCS {
+	mmUploadToGCS.optional = true
+	return mmUploadToGCS
+}
+
+// Expect sets up expected params for Client.UploadToGCS
+func (mmUploadToGCS *mClientMockUploadToGCS) Expect(ctx context.Context, content []byte, objectPath string, mimeType string) *mClientMockUploadToGCS {
+	if mmUploadToGCS.mock.funcUploadToGCS != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Set")
+	}
+
+	if mmUploadToGCS.defaultExpectation == nil {
+		mmUploadToGCS.defaultExpectation = &ClientMockUploadToGCSExpectation{}
+	}
+
+	if mmUploadToGCS.defaultExpectation.paramPtrs != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by ExpectParams functions")
+	}
+
+	mmUploadToGCS.defaultExpectation.params = &ClientMockUploadToGCSParams{ctx, content, objectPath, mimeType}
+	mmUploadToGCS.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUploadToGCS.expectations {
+		if minimock.Equal(e.params, mmUploadToGCS.defaultExpectation.params) {
+			mmUploadToGCS.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUploadToGCS.defaultExpectation.params)
+		}
+	}
+
+	return mmUploadToGCS
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Client.UploadToGCS
+func (mmUploadToGCS *mClientMockUploadToGCS) ExpectCtxParam1(ctx context.Context) *mClientMockUploadToGCS {
+	if mmUploadToGCS.mock.funcUploadToGCS != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Set")
+	}
+
+	if mmUploadToGCS.defaultExpectation == nil {
+		mmUploadToGCS.defaultExpectation = &ClientMockUploadToGCSExpectation{}
+	}
+
+	if mmUploadToGCS.defaultExpectation.params != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Expect")
+	}
+
+	if mmUploadToGCS.defaultExpectation.paramPtrs == nil {
+		mmUploadToGCS.defaultExpectation.paramPtrs = &ClientMockUploadToGCSParamPtrs{}
+	}
+	mmUploadToGCS.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUploadToGCS.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUploadToGCS
+}
+
+// ExpectContentParam2 sets up expected param content for Client.UploadToGCS
+func (mmUploadToGCS *mClientMockUploadToGCS) ExpectContentParam2(content []byte) *mClientMockUploadToGCS {
+	if mmUploadToGCS.mock.funcUploadToGCS != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Set")
+	}
+
+	if mmUploadToGCS.defaultExpectation == nil {
+		mmUploadToGCS.defaultExpectation = &ClientMockUploadToGCSExpectation{}
+	}
+
+	if mmUploadToGCS.defaultExpectation.params != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Expect")
+	}
+
+	if mmUploadToGCS.defaultExpectation.paramPtrs == nil {
+		mmUploadToGCS.defaultExpectation.paramPtrs = &ClientMockUploadToGCSParamPtrs{}
+	}
+	mmUploadToGCS.defaultExpectation.paramPtrs.content = &content
+	mmUploadToGCS.defaultExpectation.expectationOrigins.originContent = minimock.CallerInfo(1)
+
+	return mmUploadToGCS
+}
+
+// ExpectObjectPathParam3 sets up expected param objectPath for Client.UploadToGCS
+func (mmUploadToGCS *mClientMockUploadToGCS) ExpectObjectPathParam3(objectPath string) *mClientMockUploadToGCS {
+	if mmUploadToGCS.mock.funcUploadToGCS != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Set")
+	}
+
+	if mmUploadToGCS.defaultExpectation == nil {
+		mmUploadToGCS.defaultExpectation = &ClientMockUploadToGCSExpectation{}
+	}
+
+	if mmUploadToGCS.defaultExpectation.params != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Expect")
+	}
+
+	if mmUploadToGCS.defaultExpectation.paramPtrs == nil {
+		mmUploadToGCS.defaultExpectation.paramPtrs = &ClientMockUploadToGCSParamPtrs{}
+	}
+	mmUploadToGCS.defaultExpectation.paramPtrs.objectPath = &objectPath
+	mmUploadToGCS.defaultExpectation.expectationOrigins.originObjectPath = minimock.CallerInfo(1)
+
+	return mmUploadToGCS
+}
+
+// ExpectMimeTypeParam4 sets up expected param mimeType for Client.UploadToGCS
+func (mmUploadToGCS *mClientMockUploadToGCS) ExpectMimeTypeParam4(mimeType string) *mClientMockUploadToGCS {
+	if mmUploadToGCS.mock.funcUploadToGCS != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Set")
+	}
+
+	if mmUploadToGCS.defaultExpectation == nil {
+		mmUploadToGCS.defaultExpectation = &ClientMockUploadToGCSExpectation{}
+	}
+
+	if mmUploadToGCS.defaultExpectation.params != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Expect")
+	}
+
+	if mmUploadToGCS.defaultExpectation.paramPtrs == nil {
+		mmUploadToGCS.defaultExpectation.paramPtrs = &ClientMockUploadToGCSParamPtrs{}
+	}
+	mmUploadToGCS.defaultExpectation.paramPtrs.mimeType = &mimeType
+	mmUploadToGCS.defaultExpectation.expectationOrigins.originMimeType = minimock.CallerInfo(1)
+
+	return mmUploadToGCS
+}
+
+// Inspect accepts an inspector function that has same arguments as the Client.UploadToGCS
+func (mmUploadToGCS *mClientMockUploadToGCS) Inspect(f func(ctx context.Context, content []byte, objectPath string, mimeType string)) *mClientMockUploadToGCS {
+	if mmUploadToGCS.mock.inspectFuncUploadToGCS != nil {
+		mmUploadToGCS.mock.t.Fatalf("Inspect function is already set for ClientMock.UploadToGCS")
+	}
+
+	mmUploadToGCS.mock.inspectFuncUploadToGCS = f
+
+	return mmUploadToGCS
+}
+
+// Return sets up results that will be returned by Client.UploadToGCS
+func (mmUploadToGCS *mClientMockUploadToGCS) Return(gsURI string, err error) *ClientMock {
+	if mmUploadToGCS.mock.funcUploadToGCS != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Set")
+	}
+
+	if mmUploadToGCS.defaultExpectation == nil {
+		mmUploadToGCS.defaultExpectation = &ClientMockUploadToGCSExpectation{mock: mmUploadToGCS.mock}
+	}
+	mmUploadToGCS.defaultExpectation.results = &ClientMockUploadToGCSResults{gsURI, err}
+	mmUploadToGCS.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUploadToGCS.mock
+}
+
+// Set uses given function f to mock the Client.UploadToGCS method
+func (mmUploadToGCS *mClientMockUploadToGCS) Set(f func(ctx context.Context, content []byte, objectPath string, mimeType string) (gsURI string, err error)) *ClientMock {
+	if mmUploadToGCS.defaultExpectation != nil {
+		mmUploadToGCS.mock.t.Fatalf("Default expectation is already set for the Client.UploadToGCS method")
+	}
+
+	if len(mmUploadToGCS.expectations) > 0 {
+		mmUploadToGCS.mock.t.Fatalf("Some expectations are already set for the Client.UploadToGCS method")
+	}
+
+	mmUploadToGCS.mock.funcUploadToGCS = f
+	mmUploadToGCS.mock.funcUploadToGCSOrigin = minimock.CallerInfo(1)
+	return mmUploadToGCS.mock
+}
+
+// When sets expectation for the Client.UploadToGCS which will trigger the result defined by the following
+// Then helper
+func (mmUploadToGCS *mClientMockUploadToGCS) When(ctx context.Context, content []byte, objectPath string, mimeType string) *ClientMockUploadToGCSExpectation {
+	if mmUploadToGCS.mock.funcUploadToGCS != nil {
+		mmUploadToGCS.mock.t.Fatalf("ClientMock.UploadToGCS mock is already set by Set")
+	}
+
+	expectation := &ClientMockUploadToGCSExpectation{
+		mock:               mmUploadToGCS.mock,
+		params:             &ClientMockUploadToGCSParams{ctx, content, objectPath, mimeType},
+		expectationOrigins: ClientMockUploadToGCSExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUploadToGCS.expectations = append(mmUploadToGCS.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Client.UploadToGCS return parameters for the expectation previously defined by the When method
+func (e *ClientMockUploadToGCSExpectation) Then(gsURI string, err error) *ClientMock {
+	e.results = &ClientMockUploadToGCSResults{gsURI, err}
+	return e.mock
+}
+
+// Times sets number of times Client.UploadToGCS should be invoked
+func (mmUploadToGCS *mClientMockUploadToGCS) Times(n uint64) *mClientMockUploadToGCS {
+	if n == 0 {
+		mmUploadToGCS.mock.t.Fatalf("Times of ClientMock.UploadToGCS mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUploadToGCS.expectedInvocations, n)
+	mmUploadToGCS.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUploadToGCS
+}
+
+func (mmUploadToGCS *mClientMockUploadToGCS) invocationsDone() bool {
+	if len(mmUploadToGCS.expectations) == 0 && mmUploadToGCS.defaultExpectation == nil && mmUploadToGCS.mock.funcUploadToGCS == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUploadToGCS.mock.afterUploadToGCSCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUploadToGCS.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UploadToGCS implements mm_ai.Client
+func (mmUploadToGCS *ClientMock) UploadToGCS(ctx context.Context, content []byte, objectPath string, mimeType string) (gsURI string, err error) {
+	mm_atomic.AddUint64(&mmUploadToGCS.beforeUploadToGCSCounter, 1)
+	defer mm_atomic.AddUint64(&mmUploadToGCS.afterUploadToGCSCounter, 1)
+
+	mmUploadToGCS.t.Helper()
+
+	if mmUploadToGCS.inspectFuncUploadToGCS != nil {
+		mmUploadToGCS.inspectFuncUploadToGCS(ctx, content, objectPath, mimeType)
+	}
+
+	mm_params := ClientMockUploadToGCSParams{ctx, content, objectPath, mimeType}
+
+	// Record call args
+	mmUploadToGCS.UploadToGCSMock.mutex.Lock()
+	mmUploadToGCS.UploadToGCSMock.callArgs = append(mmUploadToGCS.UploadToGCSMock.callArgs, &mm_params)
+	mmUploadToGCS.UploadToGCSMock.mutex.Unlock()
+
+	for _, e := range mmUploadToGCS.UploadToGCSMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.gsURI, e.results.err
+		}
+	}
+
+	if mmUploadToGCS.UploadToGCSMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUploadToGCS.UploadToGCSMock.defaultExpectation.Counter, 1)
+		mm_want := mmUploadToGCS.UploadToGCSMock.defaultExpectation.params
+		mm_want_ptrs := mmUploadToGCS.UploadToGCSMock.defaultExpectation.paramPtrs
+
+		mm_got := ClientMockUploadToGCSParams{ctx, content, objectPath, mimeType}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUploadToGCS.t.Errorf("ClientMock.UploadToGCS got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUploadToGCS.UploadToGCSMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.content != nil && !minimock.Equal(*mm_want_ptrs.content, mm_got.content) {
+				mmUploadToGCS.t.Errorf("ClientMock.UploadToGCS got unexpected parameter content, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUploadToGCS.UploadToGCSMock.defaultExpectation.expectationOrigins.originContent, *mm_want_ptrs.content, mm_got.content, minimock.Diff(*mm_want_ptrs.content, mm_got.content))
+			}
+
+			if mm_want_ptrs.objectPath != nil && !minimock.Equal(*mm_want_ptrs.objectPath, mm_got.objectPath) {
+				mmUploadToGCS.t.Errorf("ClientMock.UploadToGCS got unexpected parameter objectPath, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUploadToGCS.UploadToGCSMock.defaultExpectation.expectationOrigins.originObjectPath, *mm_want_ptrs.objectPath, mm_got.objectPath, minimock.Diff(*mm_want_ptrs.objectPath, mm_got.objectPath))
+			}
+
+			if mm_want_ptrs.mimeType != nil && !minimock.Equal(*mm_want_ptrs.mimeType, mm_got.mimeType) {
+				mmUploadToGCS.t.Errorf("ClientMock.UploadToGCS got unexpected parameter mimeType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUploadToGCS.UploadToGCSMock.defaultExpectation.expectationOrigins.originMimeType, *mm_want_ptrs.mimeType, mm_got.mimeType, minimock.Diff(*mm_want_ptrs.mimeType, mm_got.mimeType))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUploadToGCS.t.Errorf("ClientMock.UploadToGCS got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUploadToGCS.UploadToGCSMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUploadToGCS.UploadToGCSMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUploadToGCS.t.Fatal("No results are set for the ClientMock.UploadToGCS")
+		}
+		return (*mm_results).gsURI, (*mm_results).err
+	}
+	if mmUploadToGCS.funcUploadToGCS != nil {
+		return mmUploadToGCS.funcUploadToGCS(ctx, content, objectPath, mimeType)
+	}
+	mmUploadToGCS.t.Fatalf("Unexpected call to ClientMock.UploadToGCS. %v %v %v %v", ctx, content, objectPath, mimeType)
+	return
+}
+
+// UploadToGCSAfterCounter returns a count of finished ClientMock.UploadToGCS invocations
+func (mmUploadToGCS *ClientMock) UploadToGCSAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUploadToGCS.afterUploadToGCSCounter)
+}
+
+// UploadToGCSBeforeCounter returns a count of ClientMock.UploadToGCS invocations
+func (mmUploadToGCS *ClientMock) UploadToGCSBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUploadToGCS.beforeUploadToGCSCounter)
+}
+
+// Calls returns a list of arguments used in each call to ClientMock.UploadToGCS.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUploadToGCS *mClientMockUploadToGCS) Calls() []*ClientMockUploadToGCSParams {
+	mmUploadToGCS.mutex.RLock()
+
+	argCopy := make([]*ClientMockUploadToGCSParams, len(mmUploadToGCS.callArgs))
+	copy(argCopy, mmUploadToGCS.callArgs)
+
+	mmUploadToGCS.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUploadToGCSDone returns true if the count of the UploadToGCS invocations corresponds
+// the number of defined expectations
+func (m *ClientMock) MinimockUploadToGCSDone() bool {
+	if m.UploadToGCSMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UploadToGCSMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UploadToGCSMock.invocationsDone()
+}
+
+// MinimockUploadToGCSInspect logs each unmet expectation
+func (m *ClientMock) MinimockUploadToGCSInspect() {
+	for _, e := range m.UploadToGCSMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ClientMock.UploadToGCS at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUploadToGCSCounter := mm_atomic.LoadUint64(&m.afterUploadToGCSCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UploadToGCSMock.defaultExpectation != nil && afterUploadToGCSCounter < 1 {
+		if m.UploadToGCSMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ClientMock.UploadToGCS at\n%s", m.UploadToGCSMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ClientMock.UploadToGCS at\n%s with params: %#v", m.UploadToGCSMock.defaultExpectation.expectationOrigins.origin, *m.UploadToGCSMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUploadToGCS != nil && afterUploadToGCSCounter < 1 {
+		m.t.Errorf("Expected call to ClientMock.UploadToGCS at\n%s", m.funcUploadToGCSOrigin)
+	}
+
+	if !m.UploadToGCSMock.invocationsDone() && afterUploadToGCSCounter > 0 {
+		m.t.Errorf("Expected %d calls to ClientMock.UploadToGCS at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UploadToGCSMock.expectedInvocations), m.UploadToGCSMock.expectedInvocationsOrigin, afterUploadToGCSCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *ClientMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
 			m.MinimockCloseInspect()
+
+			m.MinimockConvertAudioDirectInspect()
 
 			m.MinimockConvertToMarkdownWithCacheInspect()
 
@@ -4442,6 +5626,8 @@ func (m *ClientMock) MinimockFinish() {
 			m.MinimockCreateCacheInspect()
 
 			m.MinimockDeleteCacheInspect()
+
+			m.MinimockDeleteFromGCSInspect()
 
 			m.MinimockEmbedTextsInspect()
 
@@ -4456,6 +5642,8 @@ func (m *ClientMock) MinimockFinish() {
 			m.MinimockNameInspect()
 
 			m.MinimockUpdateCacheInspect()
+
+			m.MinimockUploadToGCSInspect()
 		}
 	})
 }
@@ -4480,16 +5668,19 @@ func (m *ClientMock) minimockDone() bool {
 	done := true
 	return done &&
 		m.MinimockCloseDone() &&
+		m.MinimockConvertAudioDirectDone() &&
 		m.MinimockConvertToMarkdownWithCacheDone() &&
 		m.MinimockConvertToMarkdownWithoutCacheDone() &&
 		m.MinimockCountTokensDone() &&
 		m.MinimockCreateCacheDone() &&
 		m.MinimockDeleteCacheDone() &&
+		m.MinimockDeleteFromGCSDone() &&
 		m.MinimockEmbedTextsDone() &&
 		m.MinimockGetCacheDone() &&
 		m.MinimockGetEmbeddingDimensionalityDone() &&
 		m.MinimockGetModelFamilyDone() &&
 		m.MinimockListCachesDone() &&
 		m.MinimockNameDone() &&
-		m.MinimockUpdateCacheDone()
+		m.MinimockUpdateCacheDone() &&
+		m.MinimockUploadToGCSDone()
 }

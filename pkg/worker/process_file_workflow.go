@@ -544,17 +544,18 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				"fileUID", cr.fileUID.String(),
 				"durationSeconds", durResult.DurationSeconds)
 
-			maxChunkDur := MaxVideoChunkDuration
+			// All media files use the hybrid two-pass pipeline for highest
+			// transcript accuracy: audio is extracted and transcribed separately,
+			// video is processed visual-only, and results are merged.
+			longMediaFiles[cr.fileUID.String()] = true
 			if isAudioFileType(cr.effectiveFileType) {
-				maxChunkDur = MaxAudioChunkDuration
-			}
-			mediaDuration := time.Duration(durResult.DurationSeconds * float64(time.Second))
-			if mediaDuration > maxChunkDur {
-				longMediaFiles[cr.fileUID.String()] = true
-				logger.Info("Long media file detected, will use physical chunking path",
+				logger.Info("Audio file detected, routing to direct GCS transcription",
 					"fileUID", cr.fileUID.String(),
-					"duration", mediaDuration.String(),
-					"threshold", maxChunkDur.String())
+					"duration", time.Duration(durResult.DurationSeconds*float64(time.Second)).String())
+			} else {
+				logger.Info("Video file detected, routing to hybrid two-pass processing",
+					"fileUID", cr.fileUID.String(),
+					"duration", time.Duration(durResult.DurationSeconds*float64(time.Second)).String())
 			}
 		}
 
@@ -1842,14 +1843,28 @@ func (w *Worker) processLongMedia(
 
 	durationSec := float64(fileDurationSec[fileUID.String()])
 	chunkDur := MaxVideoChunkDuration
-	if isAudioFileType(cr.effectiveFileType) {
+	isAudio := isAudioFileType(cr.effectiveFileType)
+	if isAudio {
 		chunkDur = MaxAudioChunkDuration
+	}
+
+	// Video files are processed monolithically: Gemini receives the video
+	// directly and produces both [Audio:] and [Video:] tags in a single
+	// pass.  This keeps audio timestamps aligned with video frames,
+	// avoiding the A/V sync drift that occurs when extracting and
+	// separately transcribing the audio track.
+	useHybridTwoPass := false
+
+	// For audio-only files, use single-call direct transcription (no chunking).
+	if isAudio {
+		return w.processAudioOnlyLongMedia(ctx, logger, wf, kbUID, contentResult, summaryResult, workflowRunID, int(durationSec))
 	}
 
 	logger.Info("processLongMedia: Starting physical chunk processing",
 		"fileUID", fileUID.String(),
 		"durationSec", durationSec,
-		"chunkDuration", chunkDur.String())
+		"chunkDuration", chunkDur.String(),
+		"hybridTwoPass", useHybridTwoPass)
 
 	// Step 1: Split into physical chunks
 	splitCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -2052,6 +2067,7 @@ func (w *Worker) processLongMedia(
 			SegmentIndex:   s.SegmentIndex,
 			FileType:       cr.effectiveFileType,
 			SpeakerContext: speakerContext,
+			VisualOnly:     useHybridTwoPass,
 		})
 		batchSel.AddFuture(future, func(f workflow.Future) {
 			var result ConvertBatchActivityResult
@@ -2198,6 +2214,164 @@ func (w *Worker) processLongMedia(
 	_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteFilesBatchActivity, &DeleteFilesBatchActivityParam{
 		Bucket:    cr.effectiveBucket,
 		FilePaths: chunkPaths,
+	}).Get(cleanupCtx, nil)
+
+	return nil
+}
+
+// processAudioOnlyLongMedia handles audio-only files by uploading them to GCS
+// and using a single ConvertAudioDirect call instead of the chunked pipeline.
+func (w *Worker) processAudioOnlyLongMedia(
+	ctx workflow.Context,
+	logger interface{ Info(string, ...interface{}); Warn(string, ...interface{}); Error(string, ...interface{}) },
+	wf *fileWorkflowFutures,
+	kbUID types.KBUIDType,
+	contentResult *ProcessContentActivityResult,
+	summaryResult *ProcessSummaryActivityResult,
+	workflowRunID string,
+	mediaDurationSec int,
+) error {
+	cr := wf.conversionData
+	fileUID := cr.fileUID
+	bucket := cr.effectiveBucket
+	mimeType := audioMIMETypeForFileType(cr.effectiveFileType)
+
+	logger.Info("processAudioOnlyLongMedia: Starting direct audio transcription",
+		"fileUID", fileUID.String(),
+		"mimeType", mimeType)
+
+	actOpts := workflow.ActivityOptions{
+		StartToCloseTimeout: ActivityTimeoutLong,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumAttempts:    RetryMaximumAttempts,
+		},
+	}
+	actCtx := workflow.WithActivityOptions(ctx, actOpts)
+
+	// Step 1: Upload audio to GCS.
+	var uploadResult UploadToGCSActivityResult
+	if err := workflow.ExecuteActivity(actCtx, w.UploadToGCSActivity, &UploadToGCSActivityParam{
+		Bucket:     bucket,
+		SourcePath: cr.effectiveDestination,
+		MIMEType:   mimeType,
+		FileUID:    fileUID.String(),
+	}).Get(ctx, &uploadResult); err != nil {
+		return fmt.Errorf("processAudioOnlyLongMedia: upload to GCS: %w", err)
+	}
+
+	// Step 2: Transcribe audio directly via Gemini.
+	var transcribeResult TranscribeAudioActivityResult
+	if err := workflow.ExecuteActivity(actCtx, w.TranscribeAudioActivity, &TranscribeAudioActivityParam{
+		GSURI:         uploadResult.GSURI,
+		MIMEType:      mimeType,
+		FileUID:       fileUID.String(),
+		WorkflowRunID: workflowRunID,
+	}).Get(ctx, &transcribeResult); err != nil {
+		// Clean up GCS before returning error.
+		cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
+		cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute,
+			RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2.0, MaximumInterval: 30 * time.Second, MaximumAttempts: 3},
+		})
+		_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteFromGCSActivity, &DeleteFromGCSActivityParam{
+			GCSObjectPath: uploadResult.GCSObjectPath,
+		}).Get(cleanupCtx, nil)
+		return fmt.Errorf("processAudioOnlyLongMedia: transcribe audio: %w", err)
+	}
+
+	// Step 3: Save the transcript via SaveAssembledContentActivity (reuse for single-path content).
+	saveCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: StdMaxTimeout,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumAttempts:    RetryMaximumAttempts,
+		},
+	})
+
+	var saveResult SaveAssembledContentActivityResult
+	if err := workflow.ExecuteActivity(saveCtx, w.SaveAssembledContentActivity, &SaveAssembledContentActivityParam{
+		FileUID:        fileUID,
+		KBUID:          kbUID,
+		FileType:       cr.effectiveFileType,
+		TempMinIOPaths: []string{transcribeResult.TempMinIOPath},
+		IsMedia:        true,
+	}).Get(ctx, &saveResult); err != nil {
+		return fmt.Errorf("processAudioOnlyLongMedia: save assembled content: %w", err)
+	}
+
+	clampedContent := clampTimestampsToMediaDuration(saveResult.Content, mediaDurationSec)
+	if clampedContent != saveResult.Content {
+		writeCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute,
+			RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2.0, MaximumInterval: 30 * time.Second, MaximumAttempts: 3},
+		})
+		if writeErr := workflow.ExecuteActivity(writeCtx, w.WriteMinIOFileActivity, &WriteMinIOFileActivityParam{
+			Bucket:  saveResult.ContentBucket,
+			Path:    saveResult.ContentPath,
+			Content: clampedContent,
+		}).Get(ctx, nil); writeErr != nil {
+			logger.Warn("processAudioOnlyLongMedia: Failed to write clamped content",
+				"fileUID", fileUID.String(), "error", writeErr)
+		}
+	}
+
+	contentResult.Content = clampedContent
+	contentResult.ConvertedFileUID = saveResult.ConvertedFileUID
+	contentResult.ContentBucket = saveResult.ContentBucket
+	contentResult.ContentPath = saveResult.ContentPath
+	contentResult.Length = saveResult.Length
+	contentResult.PageCount = saveResult.PageCount
+	contentResult.PositionData = saveResult.PositionData
+	contentResult.ConvertedType = cr.effectiveFileType
+	contentResult.Model = transcribeResult.Model
+	contentResult.UsageMetadata = transcribeResult.UsageMetadata
+
+	logger.Info("processAudioOnlyLongMedia: Content saved",
+		"fileUID", fileUID.String(),
+		"contentLen", len(clampedContent))
+
+	// Step 4: Generate summary.
+	summaryCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: CalculateAIProcessingTimeout(len(clampedContent)),
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalLong,
+			MaximumAttempts:    RetryMaximumAttempts,
+		},
+	})
+
+	if err := workflow.ExecuteActivity(summaryCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
+		FileUID:         fileUID,
+		KBUID:           kbUID,
+		Bucket:          cr.effectiveBucket,
+		Destination:     cr.effectiveDestination,
+		FileDisplayName: cr.fileMetadata.metadata.File.DisplayName,
+		FileType:        cr.effectiveFileType,
+		Metadata:        cr.fileMetadata.metadata.ExternalMetadata,
+		ContentMarkdown: clampedContent,
+	}).Get(ctx, summaryResult); err != nil {
+		logger.Warn("processAudioOnlyLongMedia: Summary generation failed (non-fatal)",
+			"fileUID", fileUID.String(), "error", err)
+	}
+
+	// Step 5: Clean up GCS and temp MinIO files.
+	cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
+	cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2.0, MaximumInterval: 30 * time.Second, MaximumAttempts: 3},
+	})
+	_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteFromGCSActivity, &DeleteFromGCSActivityParam{
+		GCSObjectPath: uploadResult.GCSObjectPath,
+	}).Get(cleanupCtx, nil)
+	_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteFilesBatchActivity, &DeleteFilesBatchActivityParam{
+		Bucket:    bucket,
+		FilePaths: []string{transcribeResult.TempMinIOPath},
 	}).Get(cleanupCtx, nil)
 
 	return nil

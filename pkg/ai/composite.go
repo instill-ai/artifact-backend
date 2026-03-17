@@ -108,6 +108,21 @@ func (c *compositeClient) ConvertToMarkdownWithCache(ctx context.Context, cacheN
 	return c.defaultClient.ConvertToMarkdownWithCache(ctx, cacheName, prompt)
 }
 
+// ConvertAudioDirect delegates to the default client
+func (c *compositeClient) ConvertAudioDirect(ctx context.Context, gsURI string, mimeType string, prompt string) (*ConversionResult, error) {
+	return c.defaultClient.ConvertAudioDirect(ctx, gsURI, mimeType, prompt)
+}
+
+// UploadToGCS delegates to the default client
+func (c *compositeClient) UploadToGCS(ctx context.Context, content []byte, objectPath string, mimeType string) (string, error) {
+	return c.defaultClient.UploadToGCS(ctx, content, objectPath, mimeType)
+}
+
+// DeleteFromGCS delegates to the default client
+func (c *compositeClient) DeleteFromGCS(ctx context.Context, objectPath string) error {
+	return c.defaultClient.DeleteFromGCS(ctx, objectPath)
+}
+
 // CreateCache delegates to the default client
 func (c *compositeClient) CreateCache(ctx context.Context, files []FileContent, ttl time.Duration) (*CacheResult, error) {
 	return c.defaultClient.CreateCache(ctx, files, ttl)

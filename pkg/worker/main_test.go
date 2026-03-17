@@ -410,3 +410,65 @@ func TestDeleteFiles_Success(t *testing.T) {
 
 	c.Assert(err, qt.IsNil)
 }
+
+// ===== isAudioFileType Tests =====
+
+func TestIsAudioFileType(t *testing.T) {
+	c := qt.New(t)
+
+	audioTypes := []artifactpb.File_Type{
+		artifactpb.File_TYPE_MP3,
+		artifactpb.File_TYPE_WAV,
+		artifactpb.File_TYPE_AAC,
+		artifactpb.File_TYPE_OGG,
+		artifactpb.File_TYPE_FLAC,
+		artifactpb.File_TYPE_M4A,
+		artifactpb.File_TYPE_WMA,
+		artifactpb.File_TYPE_AIFF,
+		artifactpb.File_TYPE_WEBM_AUDIO,
+	}
+	for _, ft := range audioTypes {
+		c.Assert(isAudioFileType(ft), qt.IsTrue, qt.Commentf("expected %v to be audio", ft))
+	}
+
+	nonAudioTypes := []artifactpb.File_Type{
+		artifactpb.File_TYPE_MP4,
+		artifactpb.File_TYPE_PDF,
+		artifactpb.File_TYPE_PNG,
+		artifactpb.File_TYPE_JPEG,
+		artifactpb.File_TYPE_MOV,
+	}
+	for _, ft := range nonAudioTypes {
+		c.Assert(isAudioFileType(ft), qt.IsFalse, qt.Commentf("expected %v to NOT be audio", ft))
+	}
+}
+
+// ===== audioMIMETypeForFileType Tests =====
+
+func TestAudioMIMETypeForFileType(t *testing.T) {
+	c := qt.New(t)
+
+	tests := []struct {
+		ft       artifactpb.File_Type
+		expected string
+	}{
+		{artifactpb.File_TYPE_MP3, "audio/mpeg"},
+		{artifactpb.File_TYPE_WAV, "audio/wav"},
+		{artifactpb.File_TYPE_AAC, "audio/aac"},
+		{artifactpb.File_TYPE_OGG, "audio/ogg"},
+		{artifactpb.File_TYPE_FLAC, "audio/flac"},
+		{artifactpb.File_TYPE_M4A, "audio/mp4"},
+		{artifactpb.File_TYPE_WMA, "audio/x-ms-wma"},
+		{artifactpb.File_TYPE_AIFF, "audio/aiff"},
+		{artifactpb.File_TYPE_WEBM_AUDIO, "audio/webm"},
+	}
+
+	for _, tt := range tests {
+		c.Run(tt.ft.String(), func(c *qt.C) {
+			c.Assert(audioMIMETypeForFileType(tt.ft), qt.Equals, tt.expected)
+		})
+	}
+
+	c.Assert(audioMIMETypeForFileType(artifactpb.File_TYPE_PDF), qt.Equals, "audio/mpeg",
+		qt.Commentf("unknown type should default to audio/mpeg"))
+}

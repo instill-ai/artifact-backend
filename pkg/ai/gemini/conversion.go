@@ -40,6 +40,25 @@ func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []by
 	return buildConversionResult(output, err)
 }
 
+// ConvertAudioDirect implements ai.Client.
+// Not supported by the direct Gemini API client (requires GCS URI from VertexAI).
+func (c *Client) ConvertAudioDirect(_ context.Context, _ string, _ string, _ string) (*ai.ConversionResult, error) {
+	return nil, errorsx.AddMessage(
+		fmt.Errorf("ConvertAudioDirect not supported"),
+		"Direct audio transcription via GCS URI requires VertexAI. Please configure VertexAI for this feature.",
+	)
+}
+
+// UploadToGCS implements ai.Client. Not supported (no GCS storage).
+func (c *Client) UploadToGCS(_ context.Context, _ []byte, _ string, _ string) (string, error) {
+	return "", fmt.Errorf("UploadToGCS not supported by direct Gemini API client")
+}
+
+// DeleteFromGCS implements ai.Client. Not supported (no GCS storage).
+func (c *Client) DeleteFromGCS(_ context.Context, _ string) error {
+	return fmt.Errorf("DeleteFromGCS not supported by direct Gemini API client")
+}
+
 // ConvertToMarkdownWithCache implements ai.Client
 // Uses a pre-existing cached context for efficient conversion
 func (c *Client) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prompt string) (*ai.ConversionResult, error) {

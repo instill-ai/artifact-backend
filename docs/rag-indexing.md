@@ -11,15 +11,17 @@ flowchart TD
     Std --> Probe{"Media file?"}
     Probe -->|Yes| Duration["Probe Duration (ffprobe)"]
     Probe -->|No| Cache["Cache File Context"]
-    Duration --> Long{"Exceeds limit?"}
-    Long -->|No| Cache
-    Long -->|Yes| Split["Split into Physical Chunks"]
+    Duration --> AudioOnly{"Audio-only file?"}
+    AudioOnly -->|Yes| GCSAudio["Upload to GCS → ConvertAudioDirect"]
+    AudioOnly -->|No| HybridSplit["Extract Audio + Split Video"]
+    HybridSplit --> AudioBranch["Audio: GCS → ConvertAudioDirect"]
+    HybridSplit --> VisualBranch["Visual: Cache Chunks → Visual-Only Batches"]
+    AudioBranch --> Merge["Merge Audio + Visual by Timestamp"]
+    VisualBranch --> Merge
     Cache --> Convert["AI Content Conversion"]
-    Split --> CacheAll["Cache All Chunks (concurrent)"]
-    CacheAll --> Speakers["Identify Speakers (chunk 0)"]
-    Speakers --> BatchAll["Convert All Batches (concurrent)"]
-    Convert --> Assemble["Assemble Content"]
-    BatchAll --> Assemble
+    GCSAudio --> Assemble["Assemble Content"]
+    Convert --> Assemble
+    Merge --> Assemble
     Assemble --> Summary["Generate Summary"]
     Summary --> Chunk["Text Chunking"]
     Chunk --> Embed["Embed & Save to Milvus"]
@@ -35,7 +37,8 @@ flowchart TD
 | **Gemini** | AI model (`gemini-3.1-pro-preview`) for multimodal content extraction, speaker identification, and summary generation |
 | **Vertex AI Cache** | Caches uploaded files in Gemini context for efficient multi-batch access |
 | **Milvus** | Vector database storing embeddings for semantic search |
-| **ffmpeg / ffprobe** | Media duration probing and physical splitting of long media files |
+| **ffmpeg / ffprobe** | Media duration probing, physical splitting, and lossless audio extraction |
+| **GCS** | Temporary storage for audio files passed to Gemini via `FileData` (gs:// URI) for direct audio transcription |
 
 ## Pipeline Phases
 
@@ -68,22 +71,22 @@ Converts files to a canonical format via the `indexing-convert-file-type` pipeli
 
 The standardized file is always re-generated to ensure it reflects the latest conversion logic.
 
-### Phase 3: Duration Probing (Media Only)
+### Phase 3: Duration Probing & Routing (Media Only)
 
 **Activity:** `GetMediaDurationActivity`
 
-For media files, `ffprobe` extracts the exact duration before any AI processing. This determines whether the file takes the short (single-shot / batched) path or the long media (physical chunking) path.
+For media files, `ffprobe` extracts the exact duration before any AI processing. All media files are routed to the dedicated media processing path for maximum transcript accuracy:
 
-| Media Type | Short Path Limit | Chunk Size |
-|---|---|---|
-| Video (with audio) | ≤ 30 min | 30 min per chunk |
-| Audio-only | ≤ 8 hours | 8 hours per chunk |
+| Media Type | Routing |
+|---|---|
+| **Audio-only** (MP3, WAV, AAC, etc.) | Routed to `processAudioOnlyLongMedia` — uploads to GCS and uses `ConvertAudioDirect` with `AudioTimestamp: true` for maximum accuracy |
+| **Video** (any duration) | Routed to hybrid two-pass processing — audio is extracted and transcribed separately, video is processed visual-only, results merged by timestamp |
 
 ### Phase 4: AI Content Conversion
 
 All file types (documents, images, audio, video) use `gemini-3.1-pro-preview` for content extraction and summary generation.
 
-#### Short Path (Documents, Images & Short Media)
+#### Short Path (Documents & Images)
 
 ```mermaid
 flowchart TD
@@ -97,50 +100,74 @@ flowchart TD
 
 1. **Cache creation** — Uploads the standardized file to Gemini's context cache.
 2. **Single-shot attempt** — `ProcessContentActivity` tries to convert the entire file in one call.
-3. **Batch fallback** — If the file is too large (many pages or long duration), it falls back to `ConvertBatchActivity` which processes segments in parallel, controlled by `BatchProfile`:
+3. **Batch fallback** — If the file is too large (many pages), it falls back to `ConvertBatchActivity` which processes page ranges in parallel, controlled by `BatchProfile`:
 
 | File Type | Segment Size | Max Concurrent Batches |
 |---|---|---|
 | Documents | 10 pages | 16 |
-| Video / Audio | 5 minutes | 32 |
 
 4. **Assembly** — `SaveAssembledContentActivity` concatenates batch results, merges cross-boundary HTML tables, and uploads the final markdown.
 
-#### Long Media Path (Concurrent Physical Chunking)
+#### Audio-Only Path (Direct GCS Transcription)
 
-For files exceeding the duration limit, the workflow uses a fully concurrent multi-phase architecture. All chunk caches are created in parallel, then all batches across all chunks are dispatched concurrently (bounded by `MaxConcurrentBatches`).
+**Function:** `processAudioOnlyLongMedia`
+
+All audio-only files (MP3, WAV, AAC, OGG, FLAC, M4A, WMA, AIFF, WEBM_AUDIO) are routed through this path regardless of duration. It leverages Gemini's native `AudioTimestamp: true` capability for high-accuracy timestamped transcription in a single API call.
+
+```mermaid
+flowchart TD
+    Upload["1. UploadToGCSActivity<br/>(MinIO → GCS)"]
+    Upload --> Transcribe["2. TranscribeAudioActivity<br/>(ConvertAudioDirect with speech-only prompt)"]
+    Transcribe --> Save["3. SaveAssembledContentActivity"]
+    Save --> Summary["4. ProcessSummaryActivity"]
+    Summary --> Cleanup["5. Cleanup GCS + MinIO temp files"]
+```
+
+The speech-only prompt instructs the model to produce only `[Audio: HH:MM:SS]` and `[Sound: HH:MM:SS]` tags with speaker labeling. No visual content is generated.
+
+#### Video Path (Hybrid Two-Pass)
+
+All video files use a **hybrid two-pass architecture** that separates audio and visual processing for maximum transcript accuracy. Audio is extracted and transcribed independently via Gemini's `AudioTimestamp: true`, while video is processed visual-only. This avoids the timing drift and content corruption that occurs when audio and video are transcribed together in a multimodal call.
 
 ```mermaid
 flowchart TD
     Split["1. SplitMediaChunksActivity<br/>(ffmpeg -c copy, 30s overlap)"]
+    Extract["1b. ExtractAudioActivity<br/>(ffmpeg lossless audio extraction)"]
     Split --> CacheAll["2a. CacheFileContextActivity × N chunks<br/>(all concurrent)"]
-    CacheAll --> Speakers["2b. IdentifySpeakersActivity<br/>(from chunk 0 cache)"]
-    Speakers --> Batches["2c–d. ConvertBatchActivity × all segments<br/>(fully concurrent, speaker context injected)"]
-    Batches --> Assemble["3. SaveAssembledContentActivity<br/>(offset timestamps + trim overlap)"]
-    Assemble --> Summary["4. ProcessSummaryActivity<br/>(from assembled transcript text)"]
-    Summary --> Cleanup["5. Temp chunk cleanup"]
+    Extract --> UploadGCS["2b. UploadToGCSActivity<br/>(audio → GCS)"]
+    CacheAll --> Speakers["2c. IdentifySpeakersActivity<br/>(from chunk 0 cache)"]
+    UploadGCS --> AudioTranscribe["2d. TranscribeAudioActivity<br/>(ConvertAudioDirect, concurrent with visual)"]
+    Speakers --> VisualBatches["2e. ConvertBatchActivity × all segments<br/>(visual-only mode, concurrent)"]
+    AudioTranscribe --> Merge["3. mergeAudioAndVisual<br/>(interleave by timestamp)"]
+    VisualBatches --> Assemble["3a. SaveAssembledContentActivity<br/>(offset timestamps + trim overlap)"]
+    Assemble --> Merge
+    Merge --> Summary["4. ProcessSummaryActivity<br/>(from merged transcript text)"]
+    Summary --> Cleanup["5. Cleanup GCS + MinIO temp files"]
 ```
 
-**Phase 2a — Concurrent cache creation:** All physical chunks are uploaded to Gemini's context cache in parallel using a `workflow.Selector`. Each chunk gets its own cache entry.
+**Audio branch (concurrent):**
+1. `ExtractAudioActivity` uses FFmpeg to losslessly extract the audio track. If no audio stream exists, the workflow falls back to single-pass video processing with the original prompt.
+2. `UploadToGCSActivity` moves the audio from MinIO to GCS.
+3. `TranscribeAudioActivity` calls `ConvertAudioDirect` with a speech-only prompt, producing `[Audio:]` and `[Sound:]` entries with `HH:MM:SS` timestamps.
 
-**Phase 2b — Speaker identification:** `IdentifySpeakersActivity` queries chunk 0's cache with a dedicated prompt to extract speaker names (e.g., "Alice Smith, Bob Jones"). The result is formatted as a `[SPEAKER CONTEXT]` string. This ensures consistent speaker attribution across independently processed chunks — without this, later chunks would fall back to generic "Speaker 1" labels.
+**Visual branch (concurrent):**
+1. Physical chunks are cached and batched as before, but with `VisualOnly: true` on each `ConvertBatchActivity`. This uses a visual-only prompt that produces only `[Video:]` entries with rich visual descriptions (`[Location:]`, `[Image:]`, `[Chart:]`, `[Diagram:]`, `[Icon:]`, `[Logo:]` sub-tags). No `[Audio:]` or `[Sound:]` tags are generated.
+2. `SaveAssembledContentActivity` handles timestamp offsetting and overlap trimming as before.
 
-**Phase 2c — Batch slot building:** For each chunk, the chunk-local duration is divided into fixed-length time-range segments (e.g., 5 minutes each). All segments from all chunks are collected into a single flat batch queue.
+**Merge:**
+`mergeAudioAndVisual` interleaves the disjoint audio and visual entries by `HH:MM:SS` timestamp. A stable sort preserves ordering for entries at the same timestamp. As defense-in-depth, any accidental `[Audio:]` or `[Sound:]` tags in the visual output are stripped before merging.
 
-**Phase 2d — Concurrent batch dispatch:** All batches are dispatched concurrently via a single `workflow.Selector`, bounded by `MaxConcurrentBatches`. Each `ConvertBatchActivity` call receives:
-- The chunk's cache name
-- Time-range boundaries (chunk-relative)
-- The `SpeakerContext` string from Phase 2b
+**Speaker identification:** `IdentifySpeakersActivity` queries chunk 0's cache with a dedicated prompt to extract speaker names (e.g., "Alice Smith, Bob Jones"). The result is formatted as a `[SPEAKER CONTEXT]` string injected into both the audio transcription prompt and the visual batch prompts.
 
-**Phase 3 — Assembly with timestamp offsetting and overlap trimming:**
+**Assembly with timestamp offsetting and overlap trimming:**
 
 `SaveAssembledContentActivity` receives a flat list of temp MinIO paths along with a `ChunkOffsets` array describing each chunk's batch count, absolute start offset, and overlap duration. During assembly:
 
-1. **Timestamp offsetting** — `offsetTimestamps` shifts all inline timestamp tags (`[Audio: HH:MM:SS]`, `[Video: HH:MM:SS - HH:MM:SS]`) from chunk-relative to absolute time using each chunk's `Offset`.
-2. **Overlap trimming** — For non-first chunks, `clipToTimeRange` removes transcript lines whose absolute timestamps fall within the overlap region already covered by the previous chunk. This eliminates duplicate content at chunk seams.
-3. **Concatenation** — The trimmed, offset-adjusted batch results are concatenated into the final transcript.
+1. **Timestamp offsetting** — `offsetTimestamps` shifts all inline timestamp tags (`[Video: HH:MM:SS]`, `[Video: HH:MM:SS - HH:MM:SS]`) from chunk-relative to absolute time using each chunk's `Offset`.
+2. **Overlap trimming** — For non-first chunks, `clipToTimeRange` removes transcript lines whose absolute timestamps fall within the overlap region already covered by the previous chunk.
+3. **Concatenation** — The trimmed, offset-adjusted batch results are concatenated into the final visual transcript.
 
-**Phase 4 — Summary from transcript text:** The summary is generated from the assembled markdown text via `ContentMarkdown`, bypassing the original media file entirely. The `fileType` is overridden to `TYPE_MARKDOWN` so the AI model treats it as text input.
+**Summary from transcript text:** The summary is generated from the merged markdown text via `ContentMarkdown`, bypassing the original media file entirely. The `fileType` is overridden to `TYPE_MARKDOWN` so the AI model treats it as text input.
 
 ### Phase 5: Summary Generation
 
@@ -169,6 +196,9 @@ Each text chunk is embedded using the KB's configured embedding model (`gemini-e
 - **Adaptive chunking** — Document batch conversion uses adaptive splitting: if page tags are missing from the AI response, it recursively bisects the range and retries.
 - **Graceful speaker identification** — If `IdentifySpeakersActivity` fails or returns "UNKNOWN", the workflow proceeds without speaker context. This is non-fatal; the model will use its own labeling.
 - **Long media summary isolation** — Long media files handle summary generation inside `processLongMedia`, skipping the standard summary future path in the main workflow to avoid nil-future panics.
+- **Hybrid fallback** — If audio extraction finds no audio stream, or if GCS upload fails, the workflow falls back to single-pass video processing with the original (non-visual-only) prompt.
+- **Audio transcript failure tolerance** — If the audio transcription branch fails but visual batches succeed, the workflow uses the visual-only content without merging. This ensures partial results are still usable.
+- **GCS cleanup** — Extracted audio files uploaded to GCS are cleaned up via `DeleteFromGCSActivity` in a disconnected context, ensuring cleanup runs even on workflow cancellation.
 
 ## Key Constants
 
@@ -176,8 +206,7 @@ Each text chunk is embedded using the KB's configured embedding model (`gemini-e
 |---|---|---|
 | `DefaultModel` | `gemini-3.1-pro-preview` | AI model for all content extraction and summary generation |
 | `DefaultEmbeddingModel` | `gemini-embedding-001` | Embedding model (3072 dimensions) |
-| `MaxVideoChunkDuration` | 30 min | Physical split threshold for video |
-| `MaxAudioChunkDuration` | 8 hours | Physical split threshold for audio |
+| `MaxVideoChunkDuration` | 30 min | Physical split duration for video chunks (all video files use hybrid two-pass) |
 | `ChunkOverlap` | 30 sec | Overlap between adjacent physical chunks for boundary continuity |
 | `DefaultCacheTTL` | 2 hours | Gemini context cache time-to-live |
 | `RateLimitCooldown` | 60 sec | Pause before batch rounds to let API quota recover |

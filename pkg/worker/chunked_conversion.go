@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -49,7 +50,7 @@ var inlineTimestampPattern = regexp.MustCompile(
 // before the first in-range timestamp are also stripped when startTime > 0.
 // Returns the clipped content and the total number of lines removed.
 func clipToTimeRange(markdown string, startTime, endTime time.Duration) (string, int) {
-	const tolerance = 30 * time.Second
+	const tolerance = 15 * time.Second
 	lines := strings.Split(markdown, "\n")
 
 	startIdx := 0
@@ -442,14 +443,26 @@ func (w *Worker) convertChunkRobust(ctx context.Context, cacheName string, start
 // ([Audio: HH:MM:SS], [Sound: HH:MM:SS], etc.) are the ground truth for
 // position mapping. After the AI call, output is truncated to the requested
 // time range to guard against models that ignore the boundary instruction.
-func (w *Worker) convertTimeRange(ctx context.Context, cacheName string, startTime, endTime time.Duration, segmentIndex int, prompt string, acc *usageAccumulator, chunkTimeout time.Duration, fileType artifactpb.File_Type) (string, error) {
-	timeRangePrompt := fmt.Sprintf(
-		"[CRITICAL INSTRUCTION] Convert the video/audio content between timestamps %s and %s.\n"+
-			"- Transcribe ALL speech, describe visual content, and note on-screen text.\n"+
-			"- Use absolute timestamps from the original media (do NOT reset to 00:00:00).\n"+
-			"- Do NOT include content from outside this time range.\n\n%s",
-		formatTimestamp(startTime), formatTimestamp(endTime), prompt,
-	)
+func (w *Worker) convertTimeRange(ctx context.Context, cacheName string, startTime, endTime time.Duration, segmentIndex int, prompt string, acc *usageAccumulator, chunkTimeout time.Duration, fileType artifactpb.File_Type, visualOnly bool) (string, error) {
+	var timeRangePrompt string
+	if visualOnly {
+		timeRangePrompt = fmt.Sprintf(
+			"[CRITICAL INSTRUCTION] Describe the VISUAL content between timestamps %s and %s.\n"+
+				"- Describe on-screen text, slides, charts, diagrams, images, logos, and scene transitions.\n"+
+				"- Do NOT transcribe speech, dialogue, or sound events.\n"+
+				"- Use absolute timestamps from the original media (do NOT reset to 00:00:00).\n"+
+				"- Do NOT include content from outside this time range.\n\n%s",
+			formatTimestamp(startTime), formatTimestamp(endTime), prompt,
+		)
+	} else {
+		timeRangePrompt = fmt.Sprintf(
+			"[CRITICAL INSTRUCTION] Convert the video/audio content between timestamps %s and %s.\n"+
+				"- Transcribe ALL speech, describe visual content, and note on-screen text.\n"+
+				"- Use absolute timestamps from the original media (do NOT reset to 00:00:00).\n"+
+				"- Do NOT include content from outside this time range.\n\n%s",
+			formatTimestamp(startTime), formatTimestamp(endTime), prompt,
+		)
+	}
 
 	w.log.Info("Converting time range",
 		zap.String("start", formatTimestamp(startTime)),
@@ -494,12 +507,12 @@ func (w *Worker) convertTimeRange(ctx context.Context, cacheName string, startTi
 // backoff for transient errors (rate-limit, API glitches, etc.).
 // Cache-expired errors propagate immediately (require workflow-level cache recreation).
 // Non-transient errors also propagate immediately.
-func (w *Worker) convertTimeRangeRobust(ctx context.Context, cacheName string, startTime, endTime time.Duration, segmentIndex int, prompt string, acc *usageAccumulator, chunkTimeout time.Duration, fileType artifactpb.File_Type) (string, error) {
+func (w *Worker) convertTimeRangeRobust(ctx context.Context, cacheName string, startTime, endTime time.Duration, segmentIndex int, prompt string, acc *usageAccumulator, chunkTimeout time.Duration, fileType artifactpb.File_Type, visualOnly bool) (string, error) {
 	var lastErr error
 	delay := chunkRetryInitialDelay
 
 	for attempt := 1; attempt <= chunkRetryMaxAttempts; attempt++ {
-		markdown, err := w.convertTimeRange(ctx, cacheName, startTime, endTime, segmentIndex, prompt, acc, chunkTimeout, fileType)
+		markdown, err := w.convertTimeRange(ctx, cacheName, startTime, endTime, segmentIndex, prompt, acc, chunkTimeout, fileType, visualOnly)
 		if err == nil {
 			return markdown, nil
 		}
@@ -832,6 +845,11 @@ type ConvertBatchActivityParam struct {
 	// When non-empty, it is prepended to the prompt so the model can
 	// attribute speech to the correct person across independent chunks.
 	SpeakerContext string
+
+	// VisualOnly, when true, switches the prompt to a visual-descriptions-only
+	// variant (no speech/sound transcription). Used when a separate audio pass
+	// handles speech transcription.
+	VisualOnly bool
 }
 
 // ConvertBatchActivityResult defines output from ConvertBatchActivity.
@@ -858,7 +876,12 @@ func (w *Worker) ConvertBatchActivity(ctx context.Context, param *ConvertBatchAc
 		chunkTimeout = ChunkConversionTimeout
 	}
 
-	prompt := w.getContentPromptForFileType(param.FileType)
+	var prompt string
+	if param.VisualOnly {
+		prompt = w.getVisualOnlyPromptForFileType(param.FileType)
+	} else {
+		prompt = w.getContentPromptForFileType(param.FileType)
+	}
 	if param.SpeakerContext != "" {
 		prompt = param.SpeakerContext + "\n\n" + prompt
 	}
@@ -875,7 +898,7 @@ func (w *Worker) ConvertBatchActivity(ctx context.Context, param *ConvertBatchAc
 
 		markdown, err := w.convertTimeRangeRobust(ctx, param.CacheName,
 			param.StartTimestamp, param.EndTimestamp, param.SegmentIndex,
-			prompt, acc, chunkTimeout, param.FileType)
+			prompt, acc, chunkTimeout, param.FileType, param.VisualOnly)
 		if err != nil {
 			if isCacheExpired(err) {
 				return nil, temporal.NewNonRetryableApplicationError(
@@ -1302,6 +1325,155 @@ func (w *Worker) SplitMediaChunksActivity(ctx context.Context, param *SplitMedia
 		zap.Int("totalChunks", len(chunks)))
 
 	return &SplitMediaChunksActivityResult{Chunks: chunks}, nil
+}
+
+// hhmmssTimestampPattern matches the zero-padded HH:MM:SS timestamp inside
+// [Audio:], [Sound:], and [Video:] tags for the merge function.
+var hhmmssTimestampPattern = regexp.MustCompile(`\d{2}:\d{2}:\d{2}`)
+
+// timestampedEntry is a block of text associated with a single timestamp
+// for chronological interleaving.
+type timestampedEntry struct {
+	seconds int
+	text    string
+}
+
+// parseHHMMSS converts "HH:MM:SS" → total seconds.
+func parseHHMMSS(ts string) int {
+	parts := strings.SplitN(ts, ":", 3)
+	if len(parts) != 3 {
+		return 0
+	}
+	h, _ := strconv.Atoi(parts[0])
+	m, _ := strconv.Atoi(parts[1])
+	s, _ := strconv.Atoi(parts[2])
+	return h*3600 + m*60 + s
+}
+
+// clampTimestampsToMediaDuration rewrites any [Audio:] or [Sound:]
+// timestamps that exceed maxDurationSec to maxDurationSec, and drops
+// lines whose timestamp is more than 5 seconds past the end. This
+// compensates for the extracted audio track being slightly longer than
+// the source video (due to AAC frame alignment / MP4 edit list handling),
+// which causes Gemini's AudioTimestamp output to exceed the true duration.
+func clampTimestampsToMediaDuration(markdown string, maxDurationSec int) string {
+	if maxDurationSec <= 0 {
+		return markdown
+	}
+	maxTS := fmt.Sprintf("%02d:%02d:%02d", maxDurationSec/3600, (maxDurationSec%3600)/60, maxDurationSec%60)
+	dropThreshold := maxDurationSec + 5
+
+	lines := strings.Split(markdown, "\n")
+	var out []string
+	for _, line := range lines {
+		m := inlineTimestampPattern.FindStringSubmatchIndex(line)
+		if m == nil {
+			out = append(out, line)
+			continue
+		}
+		tag := line[m[2]:m[3]]
+		if tag != "Audio" && tag != "Sound" {
+			out = append(out, line)
+			continue
+		}
+		ts := hhmmssTimestampPattern.FindString(line[m[4]:m[5]])
+		sec := parseHHMMSS(ts)
+		if sec > dropThreshold {
+			continue
+		}
+		if sec > maxDurationSec {
+			line = strings.Replace(line, ts, maxTS, 1)
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
+// mergeAudioAndVisual interleaves disjoint audio and visual transcripts
+// by timestamp. The audio markdown contains only [Audio:] and [Sound:]
+// entries; the visual markdown contains only [Video:] entries (with nested
+// [Location:], [Image:], etc. blocks). The merge is a simple sort by
+// timestamp — no deduplication needed because each pass produces a
+// disjoint set of tags.
+//
+// Defense in depth: any accidental [Audio:] or [Sound:] tags in the visual
+// output are stripped before merging.
+func mergeAudioAndVisual(audioMarkdown, visualMarkdown string) string {
+	// Strip any accidental speech tags from visual output.
+	accidentalAudioRe := regexp.MustCompile(`(?m)^\[(?:Audio|Sound):\s*\d{2}:\d{2}:\d{2}\].*$\n?`)
+	visualMarkdown = accidentalAudioRe.ReplaceAllString(visualMarkdown, "")
+
+	audioEntries := splitIntoTimestampedEntries(audioMarkdown)
+	visualEntries := splitIntoTimestampedEntries(visualMarkdown)
+
+	merged := make([]timestampedEntry, 0, len(audioEntries)+len(visualEntries))
+	merged = append(merged, audioEntries...)
+	merged = append(merged, visualEntries...)
+
+	// Stable sort preserves original ordering for entries with equal timestamps.
+	sort.SliceStable(merged, func(i, j int) bool {
+		return merged[i].seconds < merged[j].seconds
+	})
+
+	var b strings.Builder
+	for i, e := range merged {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(strings.TrimRight(e.text, "\n"))
+	}
+	return b.String()
+}
+
+// splitIntoTimestampedEntries splits markdown into blocks, each starting
+// with a timestamped tag ([Audio:], [Sound:], [Video:]). Lines before the
+// first timestamped tag are prepended to the first entry.
+func splitIntoTimestampedEntries(md string) []timestampedEntry {
+	lines := strings.Split(md, "\n")
+	var entries []timestampedEntry
+	var current strings.Builder
+	currentTS := -1
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if currentTS >= 0 {
+				current.WriteString("\n")
+			}
+			continue
+		}
+
+		loc := inlineTimestampPattern.FindStringIndex(trimmed)
+		if loc != nil {
+			// Flush previous entry.
+			if currentTS >= 0 {
+				entries = append(entries, timestampedEntry{
+					seconds: currentTS,
+					text:    current.String(),
+				})
+				current.Reset()
+			}
+
+			ts := hhmmssTimestampPattern.FindString(trimmed)
+			currentTS = parseHHMMSS(ts)
+		}
+
+		if currentTS >= 0 {
+			if current.Len() > 0 {
+				current.WriteString("\n")
+			}
+			current.WriteString(line)
+		}
+	}
+
+	if currentTS >= 0 && current.Len() > 0 {
+		entries = append(entries, timestampedEntry{
+			seconds: currentTS,
+			text:    current.String(),
+		})
+	}
+
+	return entries
 }
 
 // mergeHTMLTables joins batch outputs and merges HTML tables that were split

@@ -154,6 +154,64 @@ func (c *Client) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prom
 	}, nil
 }
 
+// ConvertAudioDirect implements ai.Client.
+// Transcribes audio already uploaded to GCS using FileData + AudioTimestamp.
+// No caching, no time-range segmentation — processes the full file in one call.
+func (c *Client) ConvertAudioDirect(ctx context.Context, gsURI string, mimeType string, prompt string) (*ai.ConversionResult, error) {
+	if gsURI == "" {
+		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "GCS URI is required")
+	}
+
+	promptContent := []*genai.Content{
+		{
+			Role: genai.RoleUser,
+			Parts: []*genai.Part{
+				{FileData: &genai.FileData{FileURI: gsURI, MIMEType: mimeType}},
+				{Text: prompt},
+			},
+		},
+	}
+
+	resp, err := c.client.Models.GenerateContent(ctx, c.model, promptContent, &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: getSystemInstruction()},
+			},
+		},
+		AudioTimestamp: true,
+	})
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("ConvertAudioDirect failed: %w", err),
+			"Unable to transcribe audio content. Please try again.",
+		)
+	}
+
+	markdown := extractMarkdownFromResponse(resp)
+
+	return &ai.ConversionResult{
+		Markdown:      markdown,
+		Client:        "vertexai",
+		Model:         c.model,
+		UsageMetadata: resp.UsageMetadata,
+	}, nil
+}
+
+// UploadToGCS implements ai.Client.
+func (c *Client) UploadToGCS(ctx context.Context, content []byte, objectPath string, mimeType string) (string, error) {
+	base64Content := base64.StdEncoding.EncodeToString(content)
+	if err := c.storage.UploadBase64File(ctx, "", objectPath, base64Content, mimeType); err != nil {
+		return "", fmt.Errorf("upload to GCS: %w", err)
+	}
+	bucketName := c.storage.GetBucket()
+	return fmt.Sprintf("gs://%s/%s", bucketName, objectPath), nil
+}
+
+// DeleteFromGCS implements ai.Client.
+func (c *Client) DeleteFromGCS(ctx context.Context, objectPath string) error {
+	return c.storage.DeleteFile(ctx, "", objectPath)
+}
+
 // extractMarkdownFromResponse extracts markdown text from VertexAI response
 func extractMarkdownFromResponse(resp *genai.GenerateContentResponse) string {
 	if resp == nil || len(resp.Candidates) == 0 {

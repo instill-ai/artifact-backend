@@ -75,6 +75,24 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// ConvertAudioDirect is not supported by OpenAI client
+func (c *Client) ConvertAudioDirect(_ context.Context, _ string, _ string, _ string) (*ai.ConversionResult, error) {
+	return nil, errorsx.AddMessage(
+		fmt.Errorf("audio transcription not supported"),
+		"Audio transcription is not supported by OpenAI client. Please configure VertexAI for audio processing.",
+	)
+}
+
+// UploadToGCS is not supported by OpenAI client
+func (c *Client) UploadToGCS(_ context.Context, _ []byte, _ string, _ string) (string, error) {
+	return "", fmt.Errorf("UploadToGCS not supported by OpenAI client")
+}
+
+// DeleteFromGCS is not supported by OpenAI client
+func (c *Client) DeleteFromGCS(_ context.Context, _ string) error {
+	return fmt.Errorf("DeleteFromGCS not supported by OpenAI client")
+}
+
 // ConvertToMarkdownWithoutCache is not supported by OpenAI client
 func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string, prompt string) (*ai.ConversionResult, error) {
 	return nil, errorsx.AddMessage(

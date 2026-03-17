@@ -134,9 +134,18 @@ func (g *gcsStorage) uploadFile(ctx context.Context, bucketName string, objectPa
 	// Create bucket handle
 	bucket := g.client.Bucket(bucketName)
 
-	// Create object writer with context timeout
-	uploadCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	// Scale timeout with content size: 5 min base + 1 sec per 2 MB.
+	// Assumes a conservative minimum upload speed of ~2 MB/s.
+	contentSizeMB := len(content) / (1024 * 1024)
+	timeout := 5*time.Minute + time.Duration(contentSizeMB/2)*time.Second
+	uploadCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+
+	g.logger.Info("Starting GCS upload",
+		zap.String("bucket", bucketName),
+		zap.String("path", objectPath),
+		zap.Int("sizeMB", contentSizeMB),
+		zap.Duration("timeout", timeout))
 
 	obj := bucket.Object(objectPath)
 	writer := obj.NewWriter(uploadCtx)
