@@ -2,7 +2,6 @@ package vertexai
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"path"
 	"strings"
@@ -173,7 +172,7 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 
 	// Prepare all file parts - either inline text or GCS FileData
 	parts := make([]*genai.Part, 0, len(files))
-	gcsURIs := make([]string, 0, len(files))
+	uploadedPaths := make([]string, 0, len(files)) // only tracks paths WE uploaded (for cleanup)
 
 	for _, file := range files {
 		// For text-based file types, pass content inline instead of uploading to GCS.
@@ -191,21 +190,14 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 			continue
 		}
 
-		// Binary files: upload to GCS and use FileData
 		mimeType := filetype.FileTypeToMimeType(file.FileType)
 
-		// Upload to object storage (GCS)
-		// Generate unique path for file
 		fileUID := uuid.Must(uuid.NewV4())
 		objectPath := path.Join("vertexai-cache", fileUID.String(), file.FileDisplayName)
 
-		// Convert to base64 for object.Storage interface
-		base64Content := base64.StdEncoding.EncodeToString(file.Content)
-		err := c.storage.UploadBase64File(ctx, "", objectPath, base64Content, mimeType)
-		if err != nil {
-			// Clean up already uploaded files on error
-			for _, uri := range gcsURIs {
-				_ = c.storage.DeleteFile(ctx, "", uri)
+		if err := c.storage.UploadFile(ctx, "", objectPath, file.Content, mimeType); err != nil {
+			for _, p := range uploadedPaths {
+				_ = c.storage.DeleteFile(ctx, "", p)
 			}
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("failed to upload file %s to object storage: %w", file.FileDisplayName, err),
@@ -213,20 +205,16 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 			)
 		}
 
-		// Get the bucket name from the storage configuration
 		bucketName := c.storage.GetBucket()
 		gsURI := fmt.Sprintf("gs://%s/%s", bucketName, objectPath)
+		uploadedPaths = append(uploadedPaths, objectPath)
 
-		gcsURIs = append(gcsURIs, objectPath)
-
-		// Create FileData part with GCS URI
-		part := &genai.Part{
+		parts = append(parts, &genai.Part{
 			FileData: &genai.FileData{
 				FileURI:  gsURI,
 				MIMEType: mimeType,
 			},
-		}
-		parts = append(parts, part)
+		})
 	}
 
 	// Create cache config with GCS file references
@@ -254,8 +242,7 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 	// Create the cache
 	cached, err := c.client.Caches.Create(ctx, model, config)
 	if err != nil {
-		// Clean up uploaded files on error
-		for _, objPath := range gcsURIs {
+		for _, objPath := range uploadedPaths {
 			_ = c.storage.DeleteFile(ctx, "", objPath)
 		}
 		return nil, errorsx.AddMessage(
@@ -270,7 +257,7 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 		CreateTime:    cached.CreateTime,
 		ExpireTime:    cached.ExpireTime,
 		UsageMetadata: cached.UsageMetadata,
-		GCSFileURIs:   gcsURIs,
+		GCSFileURIs:   uploadedPaths,
 	}, nil
 }
 

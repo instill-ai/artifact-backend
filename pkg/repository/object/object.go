@@ -54,4 +54,7 @@ type Storage interface {
 	// GetBucket returns the default bucket name for this storage backend
 	// This is used by VertexAI to construct gs:// URIs for file caching
 	GetBucket() string
+
+	// UploadFile uploads raw bytes directly without base64 encoding overhead.
+	UploadFile(ctx context.Context, bucket string, filePath string, content []byte, fileMimeType string) error
 }

@@ -107,14 +107,16 @@ func NewGCSStorage(ctx context.Context, config GCSConfig) (Storage, error) {
 
 // UploadBase64File implements object.Storage.UploadBase64File
 func (g *gcsStorage) UploadBase64File(ctx context.Context, bucket string, filePath string, base64Content string, fileMimeType string) error {
-	// Decode the base64 content
 	decodedContent, err := base64.StdEncoding.DecodeString(base64Content)
 	if err != nil {
 		return fmt.Errorf("failed to decode base64 content: %w", err)
 	}
-
-	// Upload using raw bytes
 	return g.uploadFile(ctx, bucket, filePath, decodedContent, fileMimeType)
+}
+
+// UploadFile implements object.Storage.UploadFile
+func (g *gcsStorage) UploadFile(ctx context.Context, bucket string, filePath string, content []byte, fileMimeType string) error {
+	return g.uploadFile(ctx, bucket, filePath, content, fileMimeType)
 }
 
 // uploadFile is an internal helper to upload raw bytes to GCS
@@ -134,10 +136,11 @@ func (g *gcsStorage) uploadFile(ctx context.Context, bucketName string, objectPa
 	// Create bucket handle
 	bucket := g.client.Bucket(bucketName)
 
-	// Scale timeout with content size: 5 min base + 1 sec per 2 MB.
-	// Assumes a conservative minimum upload speed of ~2 MB/s.
+	// Scale timeout with content size: 15 min base + 2 sec per MB.
+	// A 307MB chunk needs ~10 resumable round-trips (32MB each); under GKE
+	// egress pressure each can take 30-60s, so budget for ~0.5 MB/s worst case.
 	contentSizeMB := len(content) / (1024 * 1024)
-	timeout := 5*time.Minute + time.Duration(contentSizeMB/2)*time.Second
+	timeout := 15*time.Minute + time.Duration(contentSizeMB)*2*time.Second
 	uploadCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -150,6 +153,7 @@ func (g *gcsStorage) uploadFile(ctx context.Context, bucketName string, objectPa
 	obj := bucket.Object(objectPath)
 	writer := obj.NewWriter(uploadCtx)
 	writer.ContentType = mimeType
+	writer.ChunkSize = 32 * 1024 * 1024 // 32 MB chunks reduce round-trips for large files
 	writer.Metadata = map[string]string{
 		"upload_time": time.Now().Format(time.RFC3339),
 		"source":      "artifact-backend",
@@ -449,11 +453,7 @@ func (g *gcsStorage) generateSignedURLWithParams(ctx context.Context, bucketName
 	return signedURL, nil
 }
 
-// GetGCSURI returns the gs://bucket/path URI for a given object path
-// This is useful for VertexAI which requires gs:// URIs
-func (g *gcsStorage) GetGCSURI(objectPath string) string {
-	return fmt.Sprintf("gs://%s/%s", g.bucket, objectPath)
-}
+
 
 // CopyObject copies an object from one location to another in GCS.
 func (g *gcsStorage) CopyObject(ctx context.Context, srcBucket, srcPath, dstBucket, dstPath string) error {

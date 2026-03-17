@@ -46,7 +46,7 @@ const EmbeddingBatchSize = 50
 // Too short = premature failures. Too long = blocked worker slots.
 const (
 	ActivityTimeoutStandard  = 1 * time.Minute  // File I/O, DB, MinIO
-	ActivityTimeoutLong      = 15 * time.Minute // File conversion, caching (incl. GCS upload of large chunks), reconciliation
+	ActivityTimeoutLong      = 30 * time.Minute // File conversion, caching (incl. MinIO download + GCS upload of large chunks), reconciliation
 	ActivityTimeoutEmbedding = 10 * time.Minute // Embeddings: 100+ chunks @ ~3s/chunk = 5-10 min for large files
 )
 

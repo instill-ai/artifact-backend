@@ -64,7 +64,7 @@ type CacheUpdateOptions struct {
 	ExpireTime *time.Time
 }
 
-// FileContent represents a single file's content for batch caching
+// FileContent represents a single file's content for batch caching.
 type FileContent struct {
 	Content         []byte
 	FileType        artifactpb.File_Type

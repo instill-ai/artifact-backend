@@ -1396,52 +1396,29 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 		}
 	}
 
-	// Fetch file content from MinIO (either original or converted file)
-	content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
-	if err != nil {
-		// If file doesn't exist (e.g., original blob deleted or never uploaded),
-		// gracefully skip caching instead of failing the workflow
-		// Caching is a performance optimization, not a requirement
-		w.log.Warn("CacheFileContextActivity: File not found in storage, skipping cache creation",
-			zap.String("bucket", param.Bucket),
-			zap.String("destination", param.Destination),
-			zap.Error(err))
-		return &CacheFileContextActivityResult{
-			CachedContextEnabled: false,
-		}, nil
-	}
+	storage := w.repository.GetMinIOStorage()
+	cacheTTL := gemini.GetCacheTTL()
 
-	w.log.Info("CacheFileContextActivity: File content retrieved from MinIO",
+	content, err := storage.GetFile(authCtx, param.Bucket, param.Destination)
+	if err != nil {
+		return nil, fmt.Errorf("CacheFileContextActivity: failed to fetch file from storage bucket=%s dest=%s: %w",
+			param.Bucket, param.Destination, err)
+	}
+	w.log.Info("CacheFileContextActivity: File content downloaded from storage",
 		zap.String("bucket", param.Bucket),
 		zap.String("destination", param.Destination),
 		zap.Int("contentSize", len(content)))
 
-	cacheTTL := gemini.GetCacheTTL()
+	fc := ai.FileContent{
+		Content:         content,
+		FileType:        param.FileType,
+		FileDisplayName: param.FileDisplayName,
+	}
 
-	// Create the cache using AI client
-	// Note: Cache creation is optional - if it fails, we continue without cache
-	cacheOutput, err := aiClient.CreateCache(authCtx, []ai.FileContent{
-		{
-			Content:         content,
-			FileType:        param.FileType,
-			FileDisplayName: param.FileDisplayName,
-		},
-	}, cacheTTL)
+	cacheOutput, err := aiClient.CreateCache(authCtx, []ai.FileContent{fc}, cacheTTL)
 	if err != nil {
-		// Log the error but don't fail the activity
-		// Common reasons for cache failure:
-		// - Content too small (< 1024 tokens minimum)
-		// - Content too large (> maximum cache size)
-		// - API quota exceeded
-		// - Network issues
-		w.log.Warn("CacheFileContextActivity: Cache creation failed, continuing without cache",
-			zap.Error(err),
-			zap.String("fileUID", param.FileUID.String()),
-			zap.String("fileType", param.FileType.String()))
-
-		return &CacheFileContextActivityResult{
-			CachedContextEnabled: false,
-		}, nil
+		return nil, fmt.Errorf("CacheFileContextActivity: Gemini cache creation failed for file %s (type=%s, dest=%s): %w",
+			param.FileUID.String(), param.FileType.String(), param.Destination, err)
 	}
 
 	result := &CacheFileContextActivityResult{

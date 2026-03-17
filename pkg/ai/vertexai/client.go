@@ -2,7 +2,6 @@ package vertexai
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -141,20 +140,13 @@ func (c *Client) GetEmbeddingDimensionality() int32 {
 // CountTokens counts the total tokens for the given content without processing it
 // Uses the VertexAI CountTokens API: https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/get-token-count
 func (c *Client) CountTokens(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (int, any, error) {
-	// For VertexAI, we need to upload the file to GCS first and create a gs:// URI
-	// This is similar to how we handle caching
-	namespaceUID := "system" // Use system namespace for token counting
+	namespaceUID := "system"
 	objectUID := fmt.Sprintf("token-count-%d", time.Now().UnixNano())
 	objectPath := fmt.Sprintf("ns-%s/obj-%s", namespaceUID, objectUID)
 
-	// Determine MIME type
 	mimeType := filetype.FileTypeToMimeType(fileType)
 
-	// Convert to base64 for object.Storage interface
-	base64Content := base64.StdEncoding.EncodeToString(content)
-
-	// Upload file to GCS (empty bucket means use default)
-	if err := c.storage.UploadBase64File(ctx, "", objectPath, base64Content, mimeType); err != nil {
+	if err := c.storage.UploadFile(ctx, "", objectPath, content, mimeType); err != nil {
 		return 0, nil, errorsx.AddMessage(
 			fmt.Errorf("failed to upload file to GCS for token counting: %w", err),
 			"Unable to prepare content for token counting.",

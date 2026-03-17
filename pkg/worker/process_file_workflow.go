@@ -1932,7 +1932,7 @@ func (w *Worker) processLongMedia(
 			if err := f.Get(ctx, &result); err != nil {
 				cacheErrs[i] = err
 			} else if !result.CachedContextEnabled {
-				cacheErrs[i] = fmt.Errorf("caching not enabled for chunk %d", i)
+				cacheErrs[i] = fmt.Errorf("caching not available for chunk %d: AI client not configured or file type %s not supported for caching", i, cr.effectiveFileType.String())
 			} else {
 				chunkCacheNames[i] = result.CacheName
 			}

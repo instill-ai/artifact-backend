@@ -2,7 +2,6 @@ package vertexai
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"path"
 	"strings"
@@ -44,15 +43,10 @@ func (c *Client) ConvertToMarkdownWithoutCache(ctx context.Context, content []by
 		// Binary files: upload to GCS and use FileData with gs:// URI
 		mimeType := filetype.FileTypeToMimeType(fileType)
 
-		// Upload file to object storage (GCS)
-		// Generate unique path for file
 		fileUID := uuid.Must(uuid.NewV4())
 		objectPath := path.Join("vertexai-conversion", fileUID.String(), filename)
 
-		// Convert to base64 for object.Storage interface
-		base64Content := base64.StdEncoding.EncodeToString(content)
-		err := c.storage.UploadBase64File(ctx, "", objectPath, base64Content, mimeType)
-		if err != nil {
+		if err := c.storage.UploadFile(ctx, "", objectPath, content, mimeType); err != nil {
 			return nil, errorsx.AddMessage(
 				fmt.Errorf("failed to upload file to object storage for conversion: %w", err),
 				"Unable to upload file for processing. Please try again.",
@@ -199,8 +193,7 @@ func (c *Client) ConvertAudioDirect(ctx context.Context, gsURI string, mimeType 
 
 // UploadToGCS implements ai.Client.
 func (c *Client) UploadToGCS(ctx context.Context, content []byte, objectPath string, mimeType string) (string, error) {
-	base64Content := base64.StdEncoding.EncodeToString(content)
-	if err := c.storage.UploadBase64File(ctx, "", objectPath, base64Content, mimeType); err != nil {
+	if err := c.storage.UploadFile(ctx, "", objectPath, content, mimeType); err != nil {
 		return "", fmt.Errorf("upload to GCS: %w", err)
 	}
 	bucketName := c.storage.GetBucket()

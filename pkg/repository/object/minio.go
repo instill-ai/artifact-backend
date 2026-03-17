@@ -113,6 +113,31 @@ func (m *minioStorage) UploadBase64File(ctx context.Context, bucket string, file
 	return nil
 }
 
+// UploadFile implements object.Storage.UploadFile
+func (m *minioStorage) UploadFile(ctx context.Context, bucket string, filePathName string, content []byte, fileMimeType string) error {
+	size := int64(len(content))
+	for i := 0; i < 3; i++ {
+		contentReader := bytes.NewReader(content)
+		_, err := m.client.PutObject(
+			ctx,
+			bucket,
+			filePathName,
+			contentReader,
+			size,
+			minio.PutObjectOptions{
+				ContentType:  fileMimeType,
+				UserMetadata: map[string]string{miniox.MinIOHeaderUserUID: m.authenticatedUser(ctx)},
+			},
+		)
+		if err == nil {
+			return nil
+		}
+		m.logger.Error("Failed to upload file to MinIO, retrying...", zap.String("attempt", fmt.Sprintf("%d", i+1)), zap.Error(err))
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("failed to upload file to MinIO after retries")
+}
+
 // DeleteFile implements object.Storage.DeleteFile
 func (m *minioStorage) DeleteFile(ctx context.Context, bucket string, filePathName string) error {
 	// Delete the file from MinIO
