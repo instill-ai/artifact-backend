@@ -558,36 +558,19 @@ func (w *Worker) CleanupKnowledgeBaseWorkflow(ctx workflow.Context, param Cleanu
 	return nil
 }
 
-// GCSCleanupContinuousWorkflowParam defines parameters for the GCS cleanup workflow
-type GCSCleanupContinuousWorkflowParam struct {
-	// IterationCount tracks how many cleanup cycles have been completed
-	// Used to determine when to ContinueAsNew to avoid history size limits
-	IterationCount int
-}
+const (
+	// 1-day grace period beyond the object_expire_days TTL to ensure MinIO ILM
+	// has already deleted the blob before we remove the DB row.
+	expiredObjectGracePeriod = 24 * time.Hour
+	expiredObjectBatchSize   = 500
+)
 
-// MaxIterationsBeforeContinueAsNew is the maximum number of iterations before
-// using ContinueAsNew to reset workflow history. This prevents the workflow
-// from accumulating too many events (Temporal warns at ~10K events).
-// With 2-minute intervals, 100 iterations = ~3.3 hours before reset.
-const MaxIterationsBeforeContinueAsNew = 100
-
-// GCSCleanupContinuousWorkflow runs the GCS cleanup in a continuous loop with timer
-// This is an alternative to using Temporal's cron schedules
-// It runs every 2 minutes indefinitely until cancelled
-//
-// IMPORTANT: This workflow uses ContinueAsNew after MaxIterationsBeforeContinueAsNew
-// cycles to prevent workflow history from growing unbounded. This is a Temporal
-// best practice for long-running workflows.
-//
-// Workflow name: GCSCleanupContinuousWorkflow
-// Singleton: Yes - Only one instance runs at a time using WorkflowID "artifact-backend-gcs-cleanup-continuous-singleton"
-// Usage: Start once and it will run forever on a 2-minute interval
-func (w *Worker) GCSCleanupContinuousWorkflow(ctx workflow.Context, param GCSCleanupContinuousWorkflowParam) error {
+// GCSCleanupWorkflow is a one-shot workflow triggered by a Temporal Schedule.
+// It executes CleanupExpiredGCSFilesActivity once and returns.
+func (w *Worker) GCSCleanupWorkflow(ctx workflow.Context) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("GCSCleanupContinuousWorkflow: Starting continuous GCS cleanup workflow",
-		"iterationCount", param.IterationCount)
+	logger.Info("GCSCleanupWorkflow: starting")
 
-	// Activity options
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
@@ -600,48 +583,51 @@ func (w *Worker) GCSCleanupContinuousWorkflow(ctx workflow.Context, param GCSCle
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Run cleanup every 2 minutes
-	cleanupInterval := 2 * time.Minute
-	iterationCount := param.IterationCount
-
-	for {
-		logger.Info("GCSCleanupContinuousWorkflow: Starting cleanup cycle",
-			"iteration", iterationCount)
-
-		// Execute cleanup activity
-		activityParam := &CleanupExpiredGCSFilesActivityParam{
-			MaxFilesToClean: 1000,
-		}
-
-		err := workflow.ExecuteActivity(ctx, w.CleanupExpiredGCSFilesActivity, activityParam).Get(ctx, nil)
-		if err != nil {
-			logger.Warn("GCSCleanupContinuousWorkflow: Cleanup cycle failed, will retry in next cycle",
-				"error", err.Error())
-			// Don't fail - just log and continue to next cycle
-		} else {
-			logger.Info("GCSCleanupContinuousWorkflow: Cleanup cycle completed successfully")
-		}
-
-		iterationCount++
-
-		// ContinueAsNew to reset workflow history and avoid hitting event count limits
-		// This is a Temporal best practice for long-running workflows
-		if iterationCount >= MaxIterationsBeforeContinueAsNew {
-			logger.Info("GCSCleanupContinuousWorkflow: Reached max iterations, using ContinueAsNew to reset history",
-				"iterations", iterationCount)
-			return workflow.NewContinueAsNewError(ctx, w.GCSCleanupContinuousWorkflow, GCSCleanupContinuousWorkflowParam{
-				IterationCount: 0, // Reset counter
-			})
-		}
-
-		// Wait for next cycle
-		logger.Debug("GCSCleanupContinuousWorkflow: Sleeping until next cycle",
-			"interval", cleanupInterval)
-
-		if err := workflow.Sleep(ctx, cleanupInterval); err != nil {
-			logger.Error("GCSCleanupContinuousWorkflow: Workflow sleep interrupted",
-				"error", err.Error())
-			return err
-		}
+	param := &CleanupExpiredGCSFilesActivityParam{
+		MaxFilesToClean: 1000,
 	}
+
+	if err := workflow.ExecuteActivity(ctx, w.CleanupExpiredGCSFilesActivity, param).Get(ctx, nil); err != nil {
+		logger.Warn("GCSCleanupWorkflow: cleanup failed", "error", err.Error())
+		return err
+	}
+
+	logger.Info("GCSCleanupWorkflow: completed")
+	return nil
+}
+
+// ExpiredObjectCleanupWorkflow is a one-shot workflow triggered by a Temporal Schedule.
+// It hard-deletes object DB rows whose MinIO blob has been removed by ILM
+// (create_time + object_expire_days + grace period < now).
+func (w *Worker) ExpiredObjectCleanupWorkflow(ctx workflow.Context) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("ExpiredObjectCleanupWorkflow: starting")
+
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    10 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    2 * time.Minute,
+			MaximumAttempts:    3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	param := &CleanupExpiredObjectRecordsActivityParam{
+		GracePeriodSeconds: int(expiredObjectGracePeriod.Seconds()),
+		BatchSize:          expiredObjectBatchSize,
+	}
+
+	var deleted int64
+	if err := workflow.ExecuteActivity(ctx, w.CleanupExpiredObjectRecordsActivity, param).Get(ctx, &deleted); err != nil {
+		logger.Warn("ExpiredObjectCleanupWorkflow: failed", "error", err.Error())
+		return err
+	}
+
+	if deleted > 0 {
+		logger.Info("ExpiredObjectCleanupWorkflow: purged records", "deleted", deleted)
+	}
+
+	return nil
 }

@@ -1417,6 +1417,18 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 
 	cacheOutput, err := aiClient.CreateCache(authCtx, []ai.FileContent{fc}, cacheTTL)
 	if err != nil {
+		// Vertex AI requires at least 1024 tokens to create a cache. Files smaller
+		// than this threshold cannot be cached; skip gracefully so the workflow can
+		// continue without optimization rather than failing entirely.
+		if strings.Contains(err.Error(), "minimum token count") {
+			w.log.Info("CacheFileContextActivity: File too small for caching, skipping (< 1024 tokens)",
+				zap.String("fileUID", param.FileUID.String()),
+				zap.String("fileType", param.FileType.String()),
+				zap.Error(err))
+			return &CacheFileContextActivityResult{
+				CachedContextEnabled: false,
+			}, nil
+		}
 		return nil, fmt.Errorf("CacheFileContextActivity: Gemini cache creation failed for file %s (type=%s, dest=%s): %w",
 			param.FileUID.String(), param.FileType.String(), param.Destination, err)
 	}

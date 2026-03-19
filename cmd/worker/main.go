@@ -184,8 +184,9 @@ func main() {
 	// RAG update workflows
 	w.RegisterWorkflow(cw.UpdateKnowledgeBaseWorkflow) // Single KB update workflow (6-phase)
 
-	// GCS cleanup workflow
-	w.RegisterWorkflow(cw.GCSCleanupContinuousWorkflow) // Continuous GCS cleanup (runs every 2 minutes)
+	// Scheduled cleanup workflows (one-shot, triggered by Temporal Schedules)
+	w.RegisterWorkflow(cw.GCSCleanupWorkflow)           // GCS file cleanup (scheduled every 2 min)
+	w.RegisterWorkflow(cw.ExpiredObjectCleanupWorkflow) // Expired-object DB record cleanup (scheduled hourly)
 
 	// ===== Shared Activities (Used by Multiple Workflows) =====
 
@@ -289,9 +290,9 @@ func main() {
 	w.RegisterActivity(cw.EmbedAndSaveChunksActivity)      // Combined: query chunks, generate embeddings, save to DB/Milvus
 	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity) // Update file status and embedding metadata
 
-	// ===== GCS Cleanup Activities =====
-	// Activities for cleaning up expired GCS files
-	w.RegisterActivity(cw.CleanupExpiredGCSFilesActivity) // Scan and delete expired GCS files from bucket and Redis
+	// ===== Cleanup Activities =====
+	w.RegisterActivity(cw.CleanupExpiredGCSFilesActivity)      // Scan and delete expired GCS files from bucket and Redis
+	w.RegisterActivity(cw.CleanupExpiredObjectRecordsActivity)  // Hard-delete expired object DB records (blobs already removed by MinIO ILM)
 
 	if err := w.Start(); err != nil {
 		logger.Fatal(fmt.Sprintf("Unable to start worker: %s", err))
@@ -299,23 +300,56 @@ func main() {
 
 	logger.Info("Temporal worker started successfully and is polling for tasks")
 
-	// Start the GCS cleanup continuous workflow as a singleton
-	// This workflow runs indefinitely, cleaning up expired GCS files every 2 minutes
-	// Using a fixed WorkflowID ensures only one instance runs at a time
+	// Create Temporal Schedules for periodic cleanup workflows.
+	// Schedules are idempotent — if they already exist (e.g., on worker restart),
+	// the create call is silently skipped.
 	go func() {
-		workflowOptions := temporalclient.StartWorkflowOptions{
-			ID:                       "artifact-backend-gcs-cleanup-continuous-singleton",
-			TaskQueue:                artifactworker.TaskQueue,
-			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-			WorkflowExecutionTimeout: 0, // No timeout - runs indefinitely
+		scheduleClient := temporalClient.ScheduleClient()
+
+		// GCS cleanup: every 2 minutes
+		_, err := scheduleClient.Create(context.Background(), temporalclient.ScheduleOptions{
+			ID: "artifact-backend-gcs-cleanup-schedule",
+			Spec: temporalclient.ScheduleSpec{
+				Intervals: []temporalclient.ScheduleIntervalSpec{
+					{Every: 2 * time.Minute},
+				},
+			},
+			Action: &temporalclient.ScheduleWorkflowAction{
+				ID:        "artifact-backend-gcs-cleanup",
+				Workflow:  cw.GCSCleanupWorkflow,
+				TaskQueue: artifactworker.TaskQueue,
+			},
+			Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		})
+		if err != nil {
+			if !strings.Contains(err.Error(), "already exists") {
+				logger.Error("Failed to create GCS cleanup schedule", zap.Error(err))
+			}
+		} else {
+			logger.Info("GCS cleanup schedule created (every 2 min)")
 		}
 
-		logger.Info("Starting GCS cleanup continuous workflow (singleton)")
-		_, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, cw.GCSCleanupContinuousWorkflow)
+		// Expired-object cleanup: every 1 hour
+		_, err = scheduleClient.Create(context.Background(), temporalclient.ScheduleOptions{
+			ID: "artifact-backend-expired-object-cleanup-schedule",
+			Spec: temporalclient.ScheduleSpec{
+				Intervals: []temporalclient.ScheduleIntervalSpec{
+					{Every: 1 * time.Hour},
+				},
+			},
+			Action: &temporalclient.ScheduleWorkflowAction{
+				ID:        "artifact-backend-expired-object-cleanup",
+				Workflow:  cw.ExpiredObjectCleanupWorkflow,
+				TaskQueue: artifactworker.TaskQueue,
+			},
+			Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		})
 		if err != nil {
-			logger.Error("Failed to start GCS cleanup continuous workflow", zap.Error(err))
+			if !strings.Contains(err.Error(), "already exists") {
+				logger.Error("Failed to create expired-object cleanup schedule", zap.Error(err))
+			}
 		} else {
-			logger.Info("GCS cleanup continuous workflow started successfully")
+			logger.Info("Expired-object cleanup schedule created (every 1 hour)")
 		}
 	}()
 

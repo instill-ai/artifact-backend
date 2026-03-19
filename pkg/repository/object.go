@@ -25,6 +25,7 @@ type Object interface {
 	GetObjectByUID(ctx context.Context, uid types.ObjectUIDType) (*ObjectModel, error)
 	GetObjectByID(ctx context.Context, namespaceUID types.NamespaceUIDType, id types.ObjectIDType) (*ObjectModel, error)
 	UpdateObjectByUpdateMap(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) (*ObjectModel, error)
+	HardDeleteExpiredObjects(ctx context.Context, gracePeriod time.Duration, batchSize int) (int64, error)
 }
 
 // ObjectModel represents an object in the database
@@ -195,6 +196,23 @@ func (r *repository) GetObjectByID(ctx context.Context, namespaceUID types.Names
 		return nil, err
 	}
 	return &obj, nil
+}
+
+// HardDeleteExpiredObjects permanently removes object records whose
+// create_time + object_expire_days has passed. A grace period is added to
+// ensure MinIO ILM has had time to delete the blob before we remove the DB row.
+func (r *repository) HardDeleteExpiredObjects(ctx context.Context, gracePeriod time.Duration, batchSize int) (int64, error) {
+	graceSeconds := int(gracePeriod.Seconds())
+	result := r.db.WithContext(ctx).Exec(`
+		DELETE FROM object
+		WHERE uid IN (
+			SELECT uid FROM object
+			WHERE object_expire_days IS NOT NULL
+			  AND object_expire_days > 0
+			  AND create_time + (object_expire_days * INTERVAL '1 day') + ($1 * INTERVAL '1 second') < NOW()
+			LIMIT $2
+		)`, graceSeconds, batchSize)
+	return result.RowsAffected, result.Error
 }
 
 // TurnObjectInDBToObjectInProto turns the object in db to the object in proto.

@@ -52,8 +52,9 @@ const (
 	softDeleteKBRecordActivityError            = "SoftDeleteKBRecordActivity"
 	getInProgressFileCountActivityError        = "GetInProgressFileCountActivity"
 	getKBCollectionUIDActivityError            = "GetKBCollectionUIDActivity"
-	cleanupExpiredGCSFilesActivityError        = "CleanupExpiredGCSFilesActivity"
-	checkRollbackRetentionExpiredActivityError = "CheckRollbackRetentionExpiredActivity"
+	cleanupExpiredGCSFilesActivityError           = "CleanupExpiredGCSFilesActivity"
+	checkRollbackRetentionExpiredActivityError    = "CheckRollbackRetentionExpiredActivity"
+	cleanupExpiredObjectRecordsActivityError      = "CleanupExpiredObjectRecordsActivity"
 )
 
 // DeleteOriginalFileActivityParam defines parameters for deleting original file
@@ -931,4 +932,31 @@ func (w *Worker) CleanupExpiredGCSFilesActivity(ctx context.Context, param *Clea
 	// Don't fail the activity if some files couldn't be deleted
 	// These files will be retried in the next cleanup cycle
 	return nil
+}
+
+// CleanupExpiredObjectRecordsActivityParam defines parameters for cleaning up expired object DB records
+type CleanupExpiredObjectRecordsActivityParam struct {
+	GracePeriodSeconds int
+	BatchSize          int
+}
+
+// CleanupExpiredObjectRecordsActivity hard-deletes object rows whose
+// create_time + object_expire_days (+ grace period) has passed.
+// MinIO ILM is responsible for deleting the blob; this activity only
+// removes the now-orphaned PostgreSQL metadata.
+func (w *Worker) CleanupExpiredObjectRecordsActivity(ctx context.Context, param *CleanupExpiredObjectRecordsActivityParam) (int64, error) {
+	gracePeriod := time.Duration(param.GracePeriodSeconds) * time.Second
+	deleted, err := w.repository.HardDeleteExpiredObjects(ctx, gracePeriod, param.BatchSize)
+	if err != nil {
+		w.log.Error("CleanupExpiredObjectRecordsActivity: failed",
+			zap.Error(err))
+		return 0, activityErrorWithMessage("Failed to delete expired object records", cleanupExpiredObjectRecordsActivityError, err)
+	}
+
+	if deleted > 0 {
+		w.log.Info("CleanupExpiredObjectRecordsActivity: purged expired objects",
+			zap.Int64("deleted", deleted))
+	}
+
+	return deleted, nil
 }
