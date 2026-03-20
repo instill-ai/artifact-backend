@@ -23,6 +23,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/ai/gemini"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
@@ -1885,6 +1886,9 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 		} // End of Gemini route
 	}
 
+	// Merge patch if x-instill-patch flag is set
+	contentInMarkdown = w.mergeContentPatchIfNeeded(ctx, contentInMarkdown, param.FileUID, param.KBUID, logger).content
+
 	result.Content = contentInMarkdown
 	result.Length = length
 	result.PageCount = pageCount
@@ -2210,6 +2214,9 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		}
 	} // End of Gemini route
 
+	// Merge patch into summary if x-instill-patch flag is set
+	summary = w.mergeSummaryPatchIfNeeded(ctx, summary, param.FileUID, param.KBUID, logger)
+
 	// Set result fields (symmetric with ProcessContentActivityResult)
 	summaryLength := uint32(len([]rune(summary))) // Use rune count for consistency with content
 	result.Summary = summary
@@ -2442,4 +2449,214 @@ func probeMediaDuration(content []byte) (float64, error) {
 		return 0, fmt.Errorf("parse ffprobe output %q: %w", strings.TrimSpace(string(out)), err)
 	}
 	return dur, nil
+}
+
+// PatchFilename is the well-known name for patch files stored alongside converted content.
+const PatchFilename = "patch.md"
+
+// patchPath returns the MinIO path for the patch file associated with a file.
+func patchPath(kbUID types.KBUIDType, fileUID types.FileUIDType) string {
+	return fmt.Sprintf("kb-%s/file-%s/%s/%s", kbUID.String(), fileUID.String(), object.ConvertedFileDir, PatchFilename)
+}
+
+// readPatchIfPresent attempts to read patch.md from MinIO for the given file.
+// If the file exists and is non-empty, it returns the patch text.
+// Returns empty string if no patch file exists.
+func (w *Worker) readPatchIfPresent(ctx context.Context, fileUID types.FileUIDType, kbUID types.KBUIDType, logger *zap.Logger) string {
+	path := patchPath(kbUID, fileUID)
+	data, err := w.repository.GetMinIOStorage().GetFile(ctx, config.Config.Minio.BucketName, path)
+	if err != nil || len(data) == 0 {
+		return ""
+	}
+
+	logger.Info("readPatchIfPresent: loaded patch",
+		zap.String("fileUID", fileUID.String()),
+		zap.Int("patchBytes", len(data)))
+	return string(data)
+}
+
+// patchMergeResult carries the merged content together with AI usage metadata
+// so callers can track credit consumption from the LLM merge call.
+type patchMergeResult struct {
+	content       string
+	usageMetadata any
+	model         string
+}
+
+// mergeWithLLM calls the AI client to merge patch instructions into generated content.
+func (w *Worker) mergeWithLLM(ctx context.Context, original, patch, promptTemplate string, logger *zap.Logger) patchMergeResult {
+	noChange := patchMergeResult{content: original}
+	if w.aiClient == nil {
+		logger.Warn("mergeWithLLM: AI client not configured, skipping merge")
+		return noChange
+	}
+
+	prompt := strings.ReplaceAll(promptTemplate, "{{ORIGINAL}}", original)
+	prompt = strings.ReplaceAll(prompt, "{{PATCH}}", patch)
+
+	conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
+		ctx,
+		[]byte(prompt),
+		artifactpb.File_TYPE_TEXT,
+		"patch-merge",
+		"Apply the patches to the content exactly as instructed. Output only the patched content.",
+	)
+	if err != nil {
+		logger.Error("mergeWithLLM: LLM merge failed, using original content", zap.Error(err))
+		return noChange
+	}
+
+	if strings.TrimSpace(conversion.Markdown) == "" {
+		logger.Warn("mergeWithLLM: LLM returned empty result, using original content")
+		return noChange
+	}
+
+	logger.Info("mergeWithLLM: patch merged successfully",
+		zap.Int("originalLen", len(original)),
+		zap.Int("mergedLen", len(conversion.Markdown)))
+	return patchMergeResult{
+		content:       conversion.Markdown,
+		usageMetadata: conversion.UsageMetadata,
+		model:         conversion.Model,
+	}
+}
+
+// patchWindowMerge applies a patch to content using a token-efficient
+// windowed strategy for large documents.
+//
+// For documents with more than smallDocSegmentThreshold segments it:
+//  1. Parses the content into page segments via [Page: N] markers.
+//  2. Locates the affected segment(s) from the patch text.
+//  3. Builds a narrow edit window (target ± windowBuffer pages).
+//  4. Sends only the window to the LLM for editing.
+//  5. Splices the merged window back into the full document.
+//
+// Falls back to full-document merge when the document is small, when no page
+// markers are present, or when no target segments can be located.
+func (w *Worker) patchWindowMerge(ctx context.Context, content, patch, promptTemplate string, logger *zap.Logger) patchMergeResult {
+	segments := parseContentSegments(content)
+
+	if len(segments) <= smallDocSegmentThreshold {
+		return w.mergeWithLLM(ctx, content, patch, promptTemplate, logger)
+	}
+
+	targets := locateTargetSegments(patch, segments)
+	if len(targets) == 0 {
+		logger.Warn("patchWindowMerge: no target segments located, falling back to full-document merge",
+			zap.Int("totalSegments", len(segments)))
+		return w.mergeWithLLM(ctx, content, patch, promptTemplate, logger)
+	}
+
+	window, lo, hi := buildEditWindow(segments, targets, windowBuffer)
+	logger.Info("patchWindowMerge: applying windowed merge",
+		zap.Ints("targetSegments", targets),
+		zap.Int("windowLo", lo),
+		zap.Int("windowHi", hi),
+		zap.Int("totalSegments", len(segments)))
+
+	result := w.mergeWithLLM(ctx, window, patch, promptTemplate, logger)
+	result.content = spliceContentWindow(segments, lo, hi, result.content)
+	return result
+}
+
+func (w *Worker) mergeContentPatchIfNeeded(ctx context.Context, content string, fileUID types.FileUIDType, kbUID types.KBUIDType, logger *zap.Logger) patchMergeResult {
+	patch := w.readPatchIfPresent(ctx, fileUID, kbUID, logger)
+	if patch == "" {
+		return patchMergeResult{content: content}
+	}
+	logger.Info("Merging content patch via LLM", zap.String("fileUID", fileUID.String()))
+	return w.patchWindowMerge(ctx, content, patch, gemini.GetPatchMergeContentPrompt(), logger)
+}
+
+// ApplyPatchToContentActivityParam defines input for ApplyPatchToContentActivity.
+type ApplyPatchToContentActivityParam struct {
+	Content string
+	FileUID types.FileUIDType
+	KBUID   types.KBUIDType
+}
+
+// ApplyPatchToContentActivityResult is the merged content returned by
+// ApplyPatchToContentActivity. Patched is true when the LLM merge ran.
+type ApplyPatchToContentActivityResult struct {
+	Content       string
+	Patched       bool
+	UsageMetadata any
+	Model         string
+}
+
+// ApplyPatchToContentActivity merges a stored patch.md into the
+// supplied content using the windowed LLM merge strategy. It is designed to be
+// called from workflow code so that the potentially long-running AI call is
+// properly managed by Temporal and can be retried independently.
+func (w *Worker) ApplyPatchToContentActivity(ctx context.Context, param *ApplyPatchToContentActivityParam) (*ApplyPatchToContentActivityResult, error) {
+	logger := w.log.With(zap.String("fileUID", param.FileUID.String()))
+	mr := w.mergeContentPatchIfNeeded(ctx, param.Content, param.FileUID, param.KBUID, logger)
+	return &ApplyPatchToContentActivityResult{
+		Content:       mr.content,
+		Patched:       mr.content != param.Content,
+		UsageMetadata: mr.usageMetadata,
+		Model:         mr.model,
+	}, nil
+}
+
+func (w *Worker) mergeSummaryPatchIfNeeded(ctx context.Context, summary string, fileUID types.FileUIDType, kbUID types.KBUIDType, logger *zap.Logger) string {
+	patch := w.readPatchIfPresent(ctx, fileUID, kbUID, logger)
+	if patch == "" {
+		return summary
+	}
+	logger.Info("Merging summary patch via LLM", zap.String("fileUID", fileUID.String()))
+	return w.mergeWithLLM(ctx, summary, patch, gemini.GetPatchMergeSummaryPrompt(), logger).content
+}
+
+// ReadExistingContentActivityParam defines input for ReadExistingContentActivity.
+type ReadExistingContentActivityParam struct {
+	FileUID types.FileUIDType
+}
+
+// ReadExistingContentActivityResult returns the previously generated content
+// read from the converted_file record and MinIO.
+type ReadExistingContentActivityResult struct {
+	Content string
+}
+
+// ReadExistingContentActivity loads the existing content.md for a file from
+// the converted_file DB record and MinIO. It is used by the patch-only fast
+// path to avoid re-running transcription/OCR when only a patch needs merging.
+func (w *Worker) ReadExistingContentActivity(ctx context.Context, param *ReadExistingContentActivityParam) (*ReadExistingContentActivityResult, error) {
+	logger := w.log.With(zap.String("fileUID", param.FileUID.String()))
+	logger.Info("ReadExistingContentActivity: loading existing content from MinIO")
+
+	cf, err := w.repository.GetConvertedFileByFileUIDAndType(ctx, param.FileUID, artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, activityErrorNonRetryableFlat(
+				"No existing content record found for patch-only reprocessing",
+				"ReadExistingContentActivity",
+				fmt.Errorf("converted_file CONTENT record not found for file %s", param.FileUID),
+			)
+		}
+		return nil, activityErrorWithCauseFlat(
+			fmt.Sprintf("Failed to look up existing content record: %s", errorsx.MessageOrErr(err)),
+			"ReadExistingContentActivity",
+			err,
+		)
+	}
+
+	bucket := config.Config.Minio.BucketName
+	data, err := w.repository.GetMinIOStorage().GetFile(ctx, bucket, cf.StoragePath)
+	if err != nil {
+		return nil, activityErrorWithCauseFlat(
+			fmt.Sprintf("Failed to read existing content from MinIO: %s", errorsx.MessageOrErr(err)),
+			"ReadExistingContentActivity",
+			err,
+		)
+	}
+
+	logger.Info("ReadExistingContentActivity: loaded existing content",
+		zap.Int("contentBytes", len(data)),
+		zap.String("storagePath", cf.StoragePath))
+
+	return &ReadExistingContentActivityResult{
+		Content: string(data),
+	}, nil
 }

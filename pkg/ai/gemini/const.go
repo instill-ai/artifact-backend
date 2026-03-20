@@ -65,11 +65,13 @@ func loadPrompts() {
 		promptCache = make(map[string]string)
 
 		prompts := map[string]string{
-			"rag_system_instruction":                  "prompt/rag_system_instruction.md",
-			"rag_generate_content":                    "prompt/rag_generate_content.md",
-			"rag_generate_summary":                    "prompt/rag_generate_summary.md",
-			"rag_generate_content_video_visual":       "prompt/rag_generate_content_video_visual.md",
+			"rag_system_instruction":                   "prompt/rag_system_instruction.md",
+			"rag_generate_content":                     "prompt/rag_generate_content.md",
+			"rag_generate_summary":                     "prompt/rag_generate_summary.md",
+			"rag_generate_content_video_visual":        "prompt/rag_generate_content_video_visual.md",
 			"rag_generate_content_audio_transcription": "prompt/rag_generate_content_audio_transcription.md",
+		"patch_merge_content":                      "prompt/patch_merge_content.md",
+		"patch_merge_summary":                      "prompt/patch_merge_summary.md",
 		}
 
 		for key, path := range prompts {
@@ -121,6 +123,18 @@ func GetGenerateContentVideoVisualPrompt() string {
 func GetGenerateContentAudioTranscriptionPrompt() string {
 	loadPrompts()
 	return getPrompt("rag_generate_content_audio_transcription")
+}
+
+// GetPatchMergeContentPrompt returns the LLM merge prompt for patching indexed content.
+func GetPatchMergeContentPrompt() string {
+	loadPrompts()
+	return getPrompt("patch_merge_content")
+}
+
+// GetPatchMergeSummaryPrompt returns the LLM merge prompt for patching file summaries.
+func GetPatchMergeSummaryPrompt() string {
+	loadPrompts()
+	return getPrompt("patch_merge_summary")
 }
 
 // GetModel returns the default Gemini model

@@ -13,7 +13,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	github.com/iancoleman/strcase v0.3.0
-	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260316164341-cfe7b8e1925a
+	github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260320182620-3c73570c8c45
 	github.com/instill-ai/x v0.10.1-alpha.0.20260316103754-d72af039ae90
 	github.com/knadh/koanf v1.5.0
 	github.com/mennanov/fieldmask-utils v1.1.2

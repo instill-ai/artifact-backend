@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -1024,7 +1025,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 }
 
 // GetFile retrieves a file with support for different views (AIP-compliant).
-// Supports VIEW_BASIC, VIEW_FULL (metadata), VIEW_SUMMARY, VIEW_CONTENT, VIEW_STANDARD_FILE_TYPE (standardized files), VIEW_ORIGINAL_FILE_TYPE (original files), and VIEW_CACHE (Gemini cache).
+// Supports VIEW_BASIC, VIEW_FULL (metadata), VIEW_SUMMARY, VIEW_CONTENT, VIEW_STANDARD_FILE_TYPE (standardized files), VIEW_ORIGINAL_FILE_TYPE (original files), VIEW_PATCH (user patches), and VIEW_CACHE (Gemini cache).
 func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileRequest) (*artifactpb.GetFileResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
@@ -1477,6 +1478,24 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 				return nil, err
 			}
 			logger.Warn("failed to generate file URL for original file", zap.Error(err))
+		} else {
+			derivedResourceURI = &fileURL
+		}
+
+	case artifactpb.File_VIEW_PATCH:
+		bucket := config.Config.Minio.BucketName
+		patchObjectPath := fmt.Sprintf("kb-%s/file-%s/%s/%s",
+			kbUIDs[0].String(), kbFile.UID.String(),
+			object.ConvertedFileDir, "patch.md")
+
+		if _, err := ph.service.Repository().GetMinIOStorage().GetFileMetadata(ctx, bucket, patchObjectPath); err != nil {
+			break
+		}
+
+		filename := fmt.Sprintf("%s-patch.md", kbFile.DisplayName)
+		fileURL, err := getFileURL(bucket, patchObjectPath, filename, "text/markdown")
+		if err != nil {
+			logger.Warn("failed to generate file URL for patch", zap.Error(err))
 		} else {
 			derivedResourceURI = &fileURL
 		}
@@ -2010,10 +2029,80 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 						}
 					}
 				}
-			case "external_metadata":
-				// Update external metadata
-				updates[repository.FileColumn.ExternalMetadata] = req.File.ExternalMetadata
-			case "tags":
+		case "content":
+			patchContent := strings.TrimSpace(req.GetFile().GetContent())
+			patchPath := fmt.Sprintf("kb-%s/file-%s/%s/patch.md", kbUIDs[0].String(), kbFile.UID.String(), object.ConvertedFileDir)
+			bucket := config.Config.Minio.BucketName
+			storage := ph.service.Repository().GetMinIOStorage()
+
+			if patchContent != "" {
+				requesterUserID := "unknown"
+				if md, ok := metadata.FromIncomingContext(ctx); ok {
+					if vals := md.Get("instill-requester-user-id"); len(vals) > 0 {
+						requesterUserID = vals[0]
+					}
+				}
+
+				var existing string
+				if existingBytes, err := storage.GetFile(ctx, bucket, patchPath); err == nil {
+					existing = string(existingBytes)
+				}
+
+				newEntry := fmt.Sprintf("---\n[%s] by %s\n%s\n", time.Now().UTC().Format(time.RFC3339), requesterUserID, patchContent)
+				combined := existing + newEntry
+
+				b64 := base64.StdEncoding.EncodeToString([]byte(combined))
+				if err := storage.UploadBase64File(ctx, bucket, patchPath, b64, "text/markdown"); err != nil {
+					return nil, errorsx.AddMessage(
+						fmt.Errorf("writing patch.md: %w", err),
+						"Failed to store patch content.",
+					)
+				}
+				// Set patch flag in ExternalMetadata
+				em := kbFile.ExternalMetadataUnmarshal
+				if em == nil {
+					em = &structpb.Struct{Fields: map[string]*structpb.Value{}}
+				}
+				if em.Fields == nil {
+					em.Fields = map[string]*structpb.Value{}
+				}
+				em.Fields["x-instill-patch"] = structpb.NewStringValue("true")
+				emJSON, err := protojson.Marshal(em)
+				if err != nil {
+					return nil, errorsx.AddMessage(
+						fmt.Errorf("serializing external metadata: %w", err),
+						"Failed to process patch metadata.",
+					)
+				}
+				updates[repository.FileColumn.ExternalMetadata] = string(emJSON)
+				logger.Info("Appended to patch.md and set ExternalMetadata flag",
+					zap.String("fileUID", kbFile.UID.String()),
+					zap.String("patchPath", patchPath))
+			} else {
+				// Clear: delete patch.md and remove patch flag
+				_ = storage.DeleteFile(ctx, bucket, patchPath)
+				em := kbFile.ExternalMetadataUnmarshal
+				if em != nil && em.Fields != nil {
+					delete(em.Fields, "x-instill-patch")
+				}
+				if em == nil {
+					em = &structpb.Struct{Fields: map[string]*structpb.Value{}}
+				}
+				emJSON, err := protojson.Marshal(em)
+				if err != nil {
+					return nil, errorsx.AddMessage(
+						fmt.Errorf("serializing external metadata: %w", err),
+						"Failed to process patch metadata.",
+					)
+				}
+				updates[repository.FileColumn.ExternalMetadata] = string(emJSON)
+				logger.Info("Cleared patch.md and removed patch ExternalMetadata flag",
+					zap.String("fileUID", kbFile.UID.String()))
+			}
+		case "external_metadata":
+			// Update external metadata
+			updates[repository.FileColumn.ExternalMetadata] = req.File.ExternalMetadata
+		case "tags":
 				// Validate user-provided tags don't use reserved prefixes
 				if err := validateUserTags(req.File.Tags); err != nil {
 					return nil, err

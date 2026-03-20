@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/gofrs/uuid"
 	"github.com/instill-ai/artifact-backend/pkg/pipeline"
@@ -34,6 +35,16 @@ type fileMetadata struct {
 	shouldProcessFull  bool // Full processing (NOTSTARTED/PROCESSING)
 	shouldProcessChunk bool // Resume from chunking
 	shouldProcessEmbed bool // Resume from embedding
+	isPatchOnly        bool // Patch-only fast path (COMPLETED + x-instill-patch)
+}
+
+// hasPatchFlag checks whether ExternalMetadata contains the x-instill-patch flag.
+func hasPatchFlag(em *structpb.Struct) bool {
+	if em == nil {
+		return false
+	}
+	v, ok := em.Fields["x-instill-patch"]
+	return ok && v.GetStringValue() == "true"
 }
 
 // stdFileResult holds per-file results from standardization used throughout the workflow.
@@ -311,6 +322,23 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			return handleFileError(fileUID, "get file status", err)
 		}
 
+		// Get file metadata (needed before status decisions for patch detection)
+		var metadata GetFileMetadataActivityResult
+		if err := workflow.ExecuteActivity(ctx, w.GetFileMetadataActivity, &GetFileMetadataActivityParam{
+			FileUID: fileUID,
+			KBUID:   kbUID,
+		}).Get(ctx, &metadata); err != nil {
+			return handleFileError(fileUID, "get file metadata", err)
+		}
+
+		// Detect patch-only mode: previously completed file with x-instill-patch flag.
+		patchOnly := startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED &&
+			hasPatchFlag(metadata.ExternalMetadata)
+		if patchOnly {
+			logger.Info("Patch-only reprocessing detected — will skip transcription/standardization",
+				"fileUID", fileUID.String())
+		}
+
 		// Handle different starting statuses
 		if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED ||
 			startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED {
@@ -318,18 +346,6 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				"fileUID", fileUID.String(),
 				"previousStatus", startStatus.String())
 			startStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING
-		}
-
-		// Get file metadata
-		var metadata GetFileMetadataActivityResult
-		if err := workflow.ExecuteActivity(ctx, w.GetFileMetadataActivity, &GetFileMetadataActivityParam{
-			FileUID: fileUID,
-			KBUID:   kbUID,
-		}).Get(ctx, &metadata); err != nil {
-			// GetFileMetadataActivity failed - fail the workflow immediately
-			// This includes "file not found" errors where file record doesn't exist in DB
-			// (which is different from missing MinIO objects, caught later in processing)
-			return handleFileError(fileUID, "get file metadata", err)
 		}
 
 		bucket := object.BucketFromDestination(metadata.File.StoragePath)
@@ -356,7 +372,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			startStatus:        startStatus,
 			bucket:             bucket,
 			fileType:           fileType,
-			shouldProcessFull:  startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED || startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING,
+			isPatchOnly:        patchOnly,
+			shouldProcessFull:  !patchOnly && (startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED || startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING),
 			shouldProcessChunk: startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING,
 			shouldProcessEmbed: startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING,
 		})
@@ -375,6 +392,294 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 	logger.Info("Determined caching strategy",
 		"modelFamily", kbModelFamily,
 		"useCaching", useCaching)
+
+	// Step 1b: Patch-only fast path — files with x-instill-patch that were
+	// previously COMPLETED. We read existing content from MinIO, apply the
+	// patch, re-save, re-summarize, then rejoin the normal chunk/embed path.
+	filesToPatchOnly := make([]fileMetadata, 0)
+	for _, fm := range filesMetadata {
+		if fm.isPatchOnly {
+			filesToPatchOnly = append(filesToPatchOnly, fm)
+		}
+	}
+
+	if len(filesToPatchOnly) > 0 {
+		logger.Info("Starting patch-only fast path for files", "count", len(filesToPatchOnly))
+
+		for _, fm := range filesToPatchOnly {
+			fuid := fm.fileUID
+			logger.Info("Patch-only: updating status to PROCESSING", "fileUID", fuid.String())
+
+			if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
+				FileUID: fuid,
+				Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING,
+			}).Get(ctx, nil); err != nil {
+				logger.Warn("Patch-only: failed to update status to PROCESSING", "fileUID", fuid.String(), "error", err)
+			}
+
+			// 1. Read existing content.md from MinIO
+			var existingContent ReadExistingContentActivityResult
+			readCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: 2 * time.Minute,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalStandard,
+					MaximumAttempts:    3,
+				},
+			})
+			if err := workflow.ExecuteActivity(readCtx, w.ReadExistingContentActivity, &ReadExistingContentActivityParam{
+				FileUID: fuid,
+			}).Get(ctx, &existingContent); err != nil {
+				logger.Warn("Patch-only: failed to read existing content, falling back to full pipeline",
+					"fileUID", fuid.String(), "error", err)
+				// Mark as needing full processing (clear patch-only, set shouldProcessFull)
+				for i := range filesMetadata {
+					if filesMetadata[i].fileUID == fuid {
+						filesMetadata[i].isPatchOnly = false
+						filesMetadata[i].shouldProcessFull = true
+						break
+					}
+				}
+				continue
+			}
+
+			// 2. Apply patch.md to the existing content
+			patchCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: ActivityTimeoutLong,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalLong,
+					MaximumAttempts:    RetryMaximumAttempts,
+				},
+			})
+			var patchResult ApplyPatchToContentActivityResult
+			if err := workflow.ExecuteActivity(patchCtx, w.ApplyPatchToContentActivity, &ApplyPatchToContentActivityParam{
+				Content: existingContent.Content,
+				FileUID: fuid,
+				KBUID:   kbUID,
+			}).Get(ctx, &patchResult); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "apply patch to content", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			// 3. Delete old converted files, then save patched content via the standard saga
+			if err := workflow.ExecuteActivity(ctx, w.DeleteOldConvertedFilesActivity, &DeleteOldConvertedFilesActivityParam{
+				FileUID: fuid,
+			}).Get(ctx, nil); err != nil {
+				logger.Warn("Patch-only: failed to cleanup old converted files", "fileUID", fuid.String(), "error", err)
+			}
+
+			contentConvertedFileUID, _ := uuid.NewV4()
+			if err := workflow.ExecuteActivity(ctx, w.CreateConvertedFileRecordActivity, &CreateConvertedFileRecordActivityParam{
+				KBUID:            kbUID,
+				FileUID:          fuid,
+				ConvertedFileUID: contentConvertedFileUID,
+				ConvertedType:    artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT,
+				Destination:      fmt.Sprintf("placeholder-pending-upload-%s", contentConvertedFileUID.String()),
+			}).Get(ctx, nil); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "create patched content record", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			var uploadResult UploadConvertedFileToMinIOActivityResult
+			if err := workflow.ExecuteActivity(ctx, w.UploadConvertedFileToMinIOActivity, &UploadConvertedFileToMinIOActivityParam{
+				KBUID:            kbUID,
+				FileUID:          fuid,
+				ConvertedFileUID: contentConvertedFileUID,
+				Content:          patchResult.Content,
+			}).Get(ctx, &uploadResult); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "upload patched content", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			if err := workflow.ExecuteActivity(ctx, w.UpdateConvertedFileDestinationActivity, &UpdateConvertedFileDestinationActivityParam{
+				ConvertedFileUID: contentConvertedFileUID,
+				Destination:      uploadResult.Destination,
+			}).Get(ctx, nil); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "update patched content destination", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			// 4. Re-summarize from patched content (always uses ContentMarkdown path)
+			summaryCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: ActivityTimeoutLong,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalLong,
+					MaximumAttempts:    RetryMaximumAttempts,
+				},
+			})
+			var summaryResult ProcessSummaryActivityResult
+			if err := workflow.ExecuteActivity(summaryCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
+				FileUID:         fuid,
+				KBUID:           kbUID,
+				Bucket:          fm.bucket,
+				Destination:     fm.metadata.File.StoragePath,
+				FileDisplayName: fm.metadata.File.DisplayName,
+				FileType:        fm.fileType,
+				Metadata:        fm.metadata.ExternalMetadata,
+				ContentMarkdown: patchResult.Content,
+			}).Get(ctx, &summaryResult); err != nil {
+				logger.Warn("Patch-only: summary generation failed (non-fatal)", "fileUID", fuid.String(), "error", err)
+			}
+
+			// 5. Update conversion metadata
+			if err := workflow.ExecuteActivity(ctx, w.UpdateConversionMetadataActivity, &UpdateConversionMetadataActivityParam{
+				FileUID: fuid,
+			}).Get(ctx, nil); err != nil {
+				logger.Warn("Patch-only: failed to update conversion metadata", "fileUID", fuid.String(), "error", err)
+			}
+
+			// 6. Chunk and embed (reuses the standard chunk/embed path)
+			logger.Info("Patch-only: starting CHUNKING phase", "fileUID", fuid.String())
+
+			if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
+				FileUID: fuid,
+				Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_CHUNKING,
+			}).Get(ctx, nil); err != nil {
+				logger.Warn("Patch-only: failed to update status to CHUNKING", "fileUID", fuid.String(), "error", err)
+			}
+
+			if err := workflow.ExecuteActivity(ctx, w.DeleteOldTextChunksActivity, &DeleteOldTextChunksActivityParam{
+				FileUID: fuid,
+			}).Get(ctx, nil); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "delete old text chunks (patch-only)", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			var contentChunks ChunkContentActivityResult
+			if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
+				FileUID:  fuid,
+				KBUID:    kbUID,
+				Content:  patchResult.Content,
+				Metadata: fm.metadata.ExternalMetadata,
+				Type:     artifactpb.Chunk_TYPE_CONTENT,
+			}).Get(ctx, &contentChunks); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "chunk content (patch-only)", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			if err := workflow.ExecuteActivity(ctx, w.SaveChunksActivity, &SaveChunksActivityParam{
+				KBUID:            kbUID,
+				FileUID:          fuid,
+				Chunks:           contentChunks.Chunks,
+				ConvertedFileUID: contentConvertedFileUID,
+			}).Get(ctx, nil); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "save content chunks (patch-only)", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			totalChunkCount := len(contentChunks.Chunks)
+
+			if len(summaryResult.Summary) > 0 && summaryResult.ConvertedFileUID != uuid.Nil {
+				var summaryChunks ChunkContentActivityResult
+				if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
+					FileUID:  fuid,
+					KBUID:    kbUID,
+					Content:  summaryResult.Summary,
+					Metadata: fm.metadata.ExternalMetadata,
+					Type:     artifactpb.Chunk_TYPE_SUMMARY,
+				}).Get(ctx, &summaryChunks); err != nil {
+					logger.Warn("Patch-only: summary chunking failed (non-fatal)", "fileUID", fuid.String(), "error", err)
+				} else {
+					if err := workflow.ExecuteActivity(ctx, w.SaveChunksActivity, &SaveChunksActivityParam{
+						KBUID:            kbUID,
+						FileUID:          fuid,
+						Chunks:           summaryChunks.Chunks,
+						ConvertedFileUID: summaryResult.ConvertedFileUID,
+					}).Get(ctx, nil); err != nil {
+						logger.Warn("Patch-only: save summary chunks failed (non-fatal)", "fileUID", fuid.String(), "error", err)
+					} else {
+						totalChunkCount += len(summaryChunks.Chunks)
+					}
+				}
+			}
+
+			// 7. Embed
+			logger.Info("Patch-only: starting EMBEDDING phase", "fileUID", fuid.String(), "totalChunks", totalChunkCount)
+
+			if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
+				FileUID: fuid,
+				Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING,
+			}).Get(ctx, nil); err != nil {
+				logger.Warn("Patch-only: failed to update status to EMBEDDING", "fileUID", fuid.String(), "error", err)
+			}
+
+			embedCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: ActivityTimeoutLong,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalLong,
+					MaximumAttempts:    RetryMaximumAttempts,
+				},
+			})
+			var embedResult EmbedAndSaveChunksActivityResult
+			if err := workflow.ExecuteActivity(embedCtx, w.EmbedAndSaveChunksActivity, &EmbedAndSaveChunksActivityParam{
+				FileUID:  fuid,
+				KBUID:    kbUID,
+				Metadata: fm.metadata.ExternalMetadata,
+			}).Get(ctx, &embedResult); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "embed chunks (patch-only)", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			// 8. Track usage metadata (credit consumption)
+			usageData := &FileProcessingUsageData{
+				ContentUsageMetadata:   patchResult.UsageMetadata,
+				ContentModel:           patchResult.Model,
+				SummaryUsageMetadata:   summaryResult.UsageMetadata,
+				SummaryModel:           summaryResult.Model,
+				EmbeddingUsageMetadata: embedResult.UsageMetadata,
+				EmbeddingModel:         embedResult.Model,
+			}
+
+			if err := workflow.ExecuteActivity(ctx, w.UpdateUsageMetadataActivity, &UpdateUsageMetadataActivityParam{
+				FileUID:           fuid,
+				ContentMetadata:   patchResult.UsageMetadata,
+				SummaryMetadata:   summaryResult.UsageMetadata,
+				EmbeddingMetadata: embedResult.UsageMetadata,
+			}).Get(ctx, nil); err != nil {
+				logger.Warn("Patch-only: failed to update usage metadata (continuing anyway)",
+					"fileUID", fuid.String(), "error", err)
+			}
+
+			if w.postFileCompletion != nil {
+				file := fm.metadata.File
+				effectiveFileType := fm.fileType
+				if err := w.postFileCompletion(ctx, file, effectiveFileType, usageData); err != nil {
+					filesFailed[fuid.String()] = handleFileError(fuid, "post-completion hook (patch-only)", err)
+					filesCompleted[fuid.String()] = true
+					continue
+				}
+			}
+
+			// 9. Mark completed
+			if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
+				FileUID: fuid,
+				Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
+			}).Get(ctx, nil); err != nil {
+				logger.Warn("Patch-only: failed to update status to COMPLETED", "fileUID", fuid.String(), "error", err)
+			}
+
+			logger.Info("Patch-only: file processing completed successfully",
+				"fileUID", fuid.String(),
+				"patchApplied", patchResult.Patched,
+				"totalChunks", totalChunkCount)
+			filesCompleted[fuid.String()] = true
+		}
+	}
 
 	// Step 2: Process files that need full processing (NOTSTARTED/PROCESSING)
 	filesToProcessFull := make([]fileMetadata, 0)
@@ -2317,6 +2622,45 @@ func (w *Worker) processAudioOnlyLongMedia(
 		}).Get(ctx, nil); writeErr != nil {
 			logger.Warn("processAudioOnlyLongMedia: Failed to write clamped content",
 				"fileUID", fileUID.String(), "error", writeErr)
+		}
+	}
+
+	// Step 3b: Apply patch merge if x-instill-patch is set.
+	// Uses a dedicated activity so the potentially long LLM call is managed by
+	// Temporal (retries, heartbeats) and does not run inside workflow code.
+	patchCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: CalculateAIProcessingTimeout(len(clampedContent)),
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    RetryInitialInterval,
+			BackoffCoefficient: RetryBackoffCoefficient,
+			MaximumInterval:    RetryMaximumIntervalStandard,
+			MaximumAttempts:    RetryMaximumAttempts,
+		},
+	})
+	var patchResult ApplyPatchToContentActivityResult
+	if err := workflow.ExecuteActivity(patchCtx, w.ApplyPatchToContentActivity, &ApplyPatchToContentActivityParam{
+		Content: clampedContent,
+		FileUID: fileUID,
+		KBUID:   kbUID,
+	}).Get(ctx, &patchResult); err != nil {
+		logger.Warn("processAudioOnlyLongMedia: Content patch merge failed (non-fatal)",
+			"fileUID", fileUID.String(), "error", err)
+	} else if patchResult.Patched {
+		clampedContent = patchResult.Content
+		writeCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute,
+			RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2.0, MaximumInterval: 30 * time.Second, MaximumAttempts: 3},
+		})
+		if writeErr := workflow.ExecuteActivity(writeCtx, w.WriteMinIOFileActivity, &WriteMinIOFileActivityParam{
+			Bucket:  saveResult.ContentBucket,
+			Path:    saveResult.ContentPath,
+			Content: clampedContent,
+		}).Get(ctx, nil); writeErr != nil {
+			logger.Warn("processAudioOnlyLongMedia: Failed to persist patched content",
+				"fileUID", fileUID.String(), "error", writeErr)
+		} else {
+			logger.Info("processAudioOnlyLongMedia: Patch applied and persisted",
+				"fileUID", fileUID.String(), "patchedLen", len(clampedContent))
 		}
 	}
 

@@ -54,7 +54,7 @@ flowchart LR
     C -->|COMPLETED / FAILED| D
 ```
 
-The workflow fetches each file's current status and metadata (file type, storage path, KB model family). Files that previously completed or failed are reprocessed from scratch. Files interrupted at chunking or embedding resume from their last checkpoint.
+The workflow fetches each file's current status and metadata (file type, storage path, KB model family). Files that previously completed or failed are reprocessed from scratch, unless the `x-instill-patch` flag is set on a completed file — in that case, the patch-only fast path is used (see [Patch-Only Reprocessing Optimization](#patch-only-reprocessing-optimization)). Files interrupted at chunking or embedding resume from their last checkpoint.
 
 ### Phase 2: File Type Standardization
 
@@ -106,7 +106,7 @@ flowchart TD
 |---|---|---|
 | Documents | 10 pages | 16 |
 
-4. **Assembly** — `SaveAssembledContentActivity` concatenates batch results, merges cross-boundary HTML tables, and uploads the final markdown.
+1. **Assembly** — `SaveAssembledContentActivity` concatenates batch results, merges cross-boundary HTML tables, and uploads the final markdown.
 
 #### Audio-Only Path (Direct GCS Transcription)
 
@@ -146,11 +146,13 @@ flowchart TD
 ```
 
 **Audio branch (concurrent):**
+
 1. `ExtractAudioActivity` uses FFmpeg to losslessly extract the audio track. If no audio stream exists, the workflow falls back to single-pass video processing with the original prompt.
 2. `UploadToGCSActivity` moves the audio from MinIO to GCS.
 3. `TranscribeAudioActivity` calls `ConvertAudioDirect` with a speech-only prompt, producing `[Audio:]` and `[Sound:]` entries with `HH:MM:SS` timestamps.
 
 **Visual branch (concurrent):**
+
 1. Physical chunks are cached and batched as before, but with `VisualOnly: true` on each `ConvertBatchActivity`. This uses a visual-only prompt that produces only `[Video:]` entries with rich visual descriptions (`[Location:]`, `[Image:]`, `[Chart:]`, `[Diagram:]`, `[Icon:]`, `[Logo:]` sub-tags). No `[Audio:]` or `[Sound:]` tags are generated.
 2. `SaveAssembledContentActivity` handles timestamp offsetting and overlap trimming as before.
 
@@ -174,6 +176,81 @@ flowchart TD
 **Activity:** `ProcessSummaryActivity`
 
 Generates a concise summary of the content. For short files with cached context, the summary reads from the Gemini cache. For long media files, the summary is generated from the assembled markdown transcript (passed as `ContentMarkdown`), with `fileType` overridden to `TYPE_MARKDOWN`.
+
+#### Phase 4b / 5b: Patch Merge (Optional)
+
+After `ProcessContentActivity` produces the initial converted content, and after `ProcessSummaryActivity` produces the initial summary, a **patch merge** step is applied if a patch file exists for the file.
+
+**How patches are stored:**
+
+When a user submits patches via the `update-file-content` MCP tool (or the `UpdateFile` gRPC API with `update_mask=content`), the patch instructions are:
+
+1. Written to `kb-{kbUID}/file-{fileUID}/converted-file/patch.md` in MinIO.
+2. Flagged in the file's `ExternalMetadata` as `x-instill-patch: "true"`.
+
+**How patches are applied during processing:**
+
+```mermaid
+flowchart TD
+    ContentGen["ProcessContentActivity generates contentInMarkdown"] --> WindowMerge["patchWindowMerge"]
+    WindowMerge --> ParseSegs["parseContentSegments: split by [Page: N] markers"]
+    ParseSegs --> SmallDoc{"≤ 15 segments?"}
+    SmallDoc -->|yes| FullMerge["mergeWithLLM: send full content"]
+    SmallDoc -->|no| LocateTarget["locateTargetSegments"]
+    LocateTarget --> ExplicitPage{"explicit 'page N'\nin patch?"}
+    ExplicitPage -->|yes| PageWindow["build window: target pages ± 3 buffer"]
+    ExplicitPage -->|no| KeywordScore["keyword-score all segments → top match"]
+    KeywordScore --> NoMatch{"no match?"}
+    NoMatch -->|yes| FullMerge
+    NoMatch -->|no| PageWindow
+    PageWindow --> WindowLLM["mergeWithLLM: send window only (~5–7 pages)"]
+    FullMerge --> Splice["splice merged window back into full document"]
+    WindowLLM --> Splice
+    Splice --> SaveContent["Save patched content to MinIO"]
+
+    SummaryGen["ProcessSummaryActivity generates summary"] --> CheckPatch2["readPatchIfPresent: read patch.md from MinIO"]
+    CheckPatch2 -->|patch.md exists| MergeSummary["mergeWithLLM: LLM applies patch to summary\n(summaries are short — no windowing needed)"]
+    CheckPatch2 -->|not found| SkipSummary["Use raw summary as-is"]
+    MergeSummary --> SaveSummary["Proceed with patched summary"]
+    SkipSummary --> SaveSummary
+```
+
+**Windowed merge — token efficiency:**
+
+For documents with more than 5 `[Page: N]` segments the merge does not send the entire document to the LLM. Instead, `patchWindowMerge` (`pkg/worker/content_window.go`) uses a two-stage strategy to narrow the edit scope:
+
+| Strategy | Trigger | How it works |
+|---|---|---|
+| **Explicit page reference** | Patch text contains "page N" / "pages N-M" | Extract the referenced page indices; build a window of those pages ± 2 buffer pages |
+| **Keyword scoring** | No explicit page reference | Tokenize significant words from the patch; score every segment by keyword hit count; use the highest-scoring segment ± 2 buffer pages |
+| **Full-document fallback** | No target located (keyword score = 0) | Log a warning and send the full content (same as the original behaviour) |
+
+For a 160-page document (≈180,000 tokens), a patch such as "In page 79, 'Jonhn' should be 'John'" sends only pages 77–81 (≈3,000 tokens) to the LLM — a **~60× reduction** in input and output tokens.
+
+Summary patch merge always uses full-document merge because summaries are already short.
+
+**Merge prompt templates:**
+
+The merge prompts are embedded at compile time from:
+
+- `pkg/ai/gemini/prompt/patch_merge_content.md` — content merge instructions
+- `pkg/ai/gemini/prompt/patch_merge_summary.md` — summary merge instructions
+
+Both are loaded once at startup via the same `//go:embed prompt/*.md` pattern used by all other AI prompts. They can be updated without changing Go code by editing the `.md` files and rebuilding.
+
+If the LLM returns an empty response, the original AI-generated content is used as a fallback with no data loss.
+
+**Key lifecycle properties:**
+
+- `patch.md` is **not** tracked in the `converted_file` DB table; `DeleteOldConvertedFilesActivity` only deletes DB-tracked records, so patch files are **naturally preserved** across every reprocess.
+- The patch is applied on **every reprocess** — it survives model upgrades, system prompt changes, and manual retriggers.
+- To remove a patch permanently, call `UpdateFile` with `update_mask=content` and `content=""`. This deletes `patch.md` from MinIO and removes the `x-instill-patch` flag.
+
+**MinIO path for patches:**
+
+```
+{bucket}/kb-{kbUID}/file-{fileUID}/converted-file/patch.md
+```
 
 ### Phase 6: Text Chunking
 
@@ -199,6 +276,33 @@ Each text chunk is embedded using the KB's configured embedding model (`gemini-e
 - **Hybrid fallback** — If audio extraction finds no audio stream, or if GCS upload fails, the workflow falls back to single-pass video processing with the original (non-visual-only) prompt.
 - **Audio transcript failure tolerance** — If the audio transcription branch fails but visual batches succeed, the workflow uses the visual-only content without merging. This ensures partial results are still usable.
 - **GCS cleanup** — Extracted audio files uploaded to GCS are cleaned up via `DeleteFromGCSActivity` in a disconnected context, ensuring cleanup runs even on workflow cancellation.
+
+## Patch-Only Reprocessing Optimization
+
+When a file is reprocessed solely because a user submitted a patch (via `update-file-content`), the workflow detects this and takes a **fast path** that skips all content generation activities. This avoids re-running expensive operations like audio transcription or file type standardization when only a small textual correction needs to be merged.
+
+### Detection
+
+A file qualifies for patch-only mode when all of these are true:
+
+1. The file's `ExternalMetadata` contains `x-instill-patch: "true"` (set by `UpdateFile` when a patch is stored)
+2. The file's previous `ProcessStatus` was `COMPLETED` (it was fully processed before)
+
+If either condition fails, the workflow falls back to the full pipeline.
+
+### Fast-Path Sequence
+
+```
+ReadExistingContentActivity → ApplyPatchToContentActivity → DeleteOldConvertedFiles
+→ SavePatchedContent (Create/Upload/UpdateDest) → ProcessSummaryActivity
+→ ChunkContent → EmbedAndSaveChunks → COMPLETED
+```
+
+**Skipped activities:** `StandardizeFileTypeActivity`, media probing, Gemini cache creation, `ProcessContentActivity` (transcription/OCR).
+
+### Graceful Fallback
+
+If `ReadExistingContentActivity` fails (e.g., the content record was deleted or MinIO is unavailable), the file is automatically reclassified as needing full processing and joins the standard pipeline.
 
 ## Key Constants
 

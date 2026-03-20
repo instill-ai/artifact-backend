@@ -272,8 +272,10 @@ func main() {
 	w.RegisterActivity(cw.DeleteCacheActivity)      // Clean up AI cache after processing
 
 	// Content and Summary Processing Phase - Composite activities (flattened from child workflows)
-	w.RegisterActivity(cw.ProcessContentActivity) // Complete content processing: markdown conversion → save to DB
-	w.RegisterActivity(cw.ProcessSummaryActivity) // Complete summary processing: generate → save to DB
+	w.RegisterActivity(cw.ProcessContentActivity)        // Complete content processing: markdown conversion → save to DB
+	w.RegisterActivity(cw.ProcessSummaryActivity)        // Complete summary processing: generate → save to DB
+	w.RegisterActivity(cw.ApplyPatchToContentActivity)   // Apply user-submitted patch.md to freshly generated content via LLM merge
+	w.RegisterActivity(cw.ReadExistingContentActivity)  // Load existing content.md from MinIO for patch-only fast path
 
 	// Per-Batch Chunked Conversion Activities (for large files that exceed single-shot limits)
 	w.RegisterActivity(cw.GetPageCountActivity)         // Query cached document for total page count
