@@ -254,6 +254,10 @@ func (w *Worker) GetFileContentActivity(ctx context.Context, param *GetFileConte
 // DeleteOldConvertedFilesActivityParam for removing old converted files
 type DeleteOldConvertedFilesActivityParam struct {
 	FileUID types.FileUIDType // File unique identifier to clean up old conversions for
+	// OnlyTypes, when non-empty, restricts deletion to converted files whose
+	// type is in this list.  Files with types not listed are preserved.
+	// When empty (default), ALL converted files are deleted.
+	OnlyTypes []artifactpb.ConvertedFileType
 }
 
 // CreateConvertedFileRecordActivityParam for creating a converted file DB record
@@ -339,12 +343,32 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 		return nil
 	}
 
+	// When OnlyTypes is set, filter to only delete those specific types
+	if len(param.OnlyTypes) > 0 {
+		allowed := make(map[string]bool, len(param.OnlyTypes))
+		for _, t := range param.OnlyTypes {
+			allowed[t.String()] = true
+		}
+		filtered := make([]repository.ConvertedFileModel, 0, len(allConvertedFiles))
+		for _, f := range allConvertedFiles {
+			if allowed[f.ConvertedType] {
+				filtered = append(filtered, f)
+			}
+		}
+		allConvertedFiles = filtered
+		if len(allConvertedFiles) == 0 {
+			w.log.Info("DeleteOldConvertedFilesActivity: No matching converted files to delete after type filter")
+			return nil
+		}
+	}
+
 	w.log.Info("DeleteOldConvertedFilesActivity: Found converted files to delete",
 		zap.Int("count", len(allConvertedFiles)))
 
-	// Delete ALL old converted files (content, summary, PDF, etc.)
-	// When reprocessing, we recreate all converted files from scratch
-	// This runs BEFORE StandardizeFileTypeActivity, so old standardized files (PDF, PNG, etc.) are cleaned before new ones are created
+	// Delete old converted files (content, summary, PDF, etc.)
+	// In full reprocessing this deletes everything (OnlyTypes is empty).
+	// In patch-only mode OnlyTypes is set to content+summary so the
+	// standardized preview file (PDF/PNG/OGG/MP4) is preserved.
 	for _, file := range allConvertedFiles {
 		w.log.Info("DeleteOldConvertedFilesActivity: Deleting old converted file",
 			zap.String("oldConvertedFileUID", file.UID.String()),

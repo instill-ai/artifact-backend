@@ -35,7 +35,7 @@ type fileMetadata struct {
 	shouldProcessFull  bool // Full processing (NOTSTARTED/PROCESSING)
 	shouldProcessChunk bool // Resume from chunking
 	shouldProcessEmbed bool // Resume from embedding
-	isPatchOnly        bool // Patch-only fast path (COMPLETED + x-instill-patch)
+	isPatchOnly        bool // Patch-only fast path (x-instill-patch flag present)
 }
 
 // hasPatchFlag checks whether ExternalMetadata contains the x-instill-patch flag.
@@ -331,9 +331,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			return handleFileError(fileUID, "get file metadata", err)
 		}
 
-		// Detect patch-only mode: previously completed file with x-instill-patch flag.
-		patchOnly := startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED &&
-			hasPatchFlag(metadata.ExternalMetadata)
+		// Detect patch-only mode: file with x-instill-patch flag.
+		// The handler (ReprocessFile) sets status to PROCESSING before starting
+		// the workflow, so we accept both COMPLETED and PROCESSING here.
+		patchOnly := hasPatchFlag(metadata.ExternalMetadata) &&
+			(startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED ||
+				startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING)
 		if patchOnly {
 			logger.Info("Patch-only reprocessing detected — will skip transcription/standardization",
 				"fileUID", fileUID.String())
@@ -393,9 +396,9 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		"modelFamily", kbModelFamily,
 		"useCaching", useCaching)
 
-	// Step 1b: Patch-only fast path — files with x-instill-patch that were
-	// previously COMPLETED. We read existing content from MinIO, apply the
-	// patch, re-save, re-summarize, then rejoin the normal chunk/embed path.
+	// Step 1b: Patch-only fast path — files with x-instill-patch flag.
+	// We read existing content from MinIO, apply the patch, re-save,
+	// re-summarize, then rejoin the normal chunk/embed path.
 	filesToPatchOnly := make([]fileMetadata, 0)
 	for _, fm := range filesMetadata {
 		if fm.isPatchOnly {
@@ -465,9 +468,15 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				continue
 			}
 
-			// 3. Delete old converted files, then save patched content via the standard saga
+			// 3. Delete old content & summary only — preserve the standardized
+			//    preview file (PDF/PNG/OGG/MP4) since it is derived from the
+			//    original upload and unaffected by the text patch.
 			if err := workflow.ExecuteActivity(ctx, w.DeleteOldConvertedFilesActivity, &DeleteOldConvertedFilesActivityParam{
 				FileUID: fuid,
+				OnlyTypes: []artifactpb.ConvertedFileType{
+					artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT,
+					artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_SUMMARY,
+				},
 			}).Get(ctx, nil); err != nil {
 				logger.Warn("Patch-only: failed to cleanup old converted files", "fileUID", fuid.String(), "error", err)
 			}
