@@ -550,6 +550,13 @@ type RepositoryMock struct {
 	beforeGetObjectByIDCounter uint64
 	GetObjectByIDMock          mRepositoryMockGetObjectByID
 
+	funcGetObjectByIDOnly          func(ctx context.Context, id types.ObjectIDType) (op1 *mm_repository.ObjectModel, err error)
+	funcGetObjectByIDOnlyOrigin    string
+	inspectFuncGetObjectByIDOnly   func(ctx context.Context, id types.ObjectIDType)
+	afterGetObjectByIDOnlyCounter  uint64
+	beforeGetObjectByIDOnlyCounter uint64
+	GetObjectByIDOnlyMock          mRepositoryMockGetObjectByIDOnly
+
 	funcGetObjectByUID          func(ctx context.Context, uid types.ObjectUIDType) (op1 *mm_repository.ObjectModel, err error)
 	funcGetObjectByUIDOrigin    string
 	inspectFuncGetObjectByUID   func(ctx context.Context, uid types.ObjectUIDType)
@@ -1266,6 +1273,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.GetObjectByIDMock = mRepositoryMockGetObjectByID{mock: m}
 	m.GetObjectByIDMock.callArgs = []*RepositoryMockGetObjectByIDParams{}
+
+	m.GetObjectByIDOnlyMock = mRepositoryMockGetObjectByIDOnly{mock: m}
+	m.GetObjectByIDOnlyMock.callArgs = []*RepositoryMockGetObjectByIDOnlyParams{}
 
 	m.GetObjectByUIDMock = mRepositoryMockGetObjectByUID{mock: m}
 	m.GetObjectByUIDMock.callArgs = []*RepositoryMockGetObjectByUIDParams{}
@@ -27742,6 +27752,349 @@ func (m *RepositoryMock) MinimockGetObjectByIDInspect() {
 	}
 }
 
+type mRepositoryMockGetObjectByIDOnly struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetObjectByIDOnlyExpectation
+	expectations       []*RepositoryMockGetObjectByIDOnlyExpectation
+
+	callArgs []*RepositoryMockGetObjectByIDOnlyParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetObjectByIDOnlyExpectation specifies expectation struct of the Repository.GetObjectByIDOnly
+type RepositoryMockGetObjectByIDOnlyExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetObjectByIDOnlyParams
+	paramPtrs          *RepositoryMockGetObjectByIDOnlyParamPtrs
+	expectationOrigins RepositoryMockGetObjectByIDOnlyExpectationOrigins
+	results            *RepositoryMockGetObjectByIDOnlyResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetObjectByIDOnlyParams contains parameters of the Repository.GetObjectByIDOnly
+type RepositoryMockGetObjectByIDOnlyParams struct {
+	ctx context.Context
+	id  types.ObjectIDType
+}
+
+// RepositoryMockGetObjectByIDOnlyParamPtrs contains pointers to parameters of the Repository.GetObjectByIDOnly
+type RepositoryMockGetObjectByIDOnlyParamPtrs struct {
+	ctx *context.Context
+	id  *types.ObjectIDType
+}
+
+// RepositoryMockGetObjectByIDOnlyResults contains results of the Repository.GetObjectByIDOnly
+type RepositoryMockGetObjectByIDOnlyResults struct {
+	op1 *mm_repository.ObjectModel
+	err error
+}
+
+// RepositoryMockGetObjectByIDOnlyOrigins contains origins of expectations of the Repository.GetObjectByIDOnly
+type RepositoryMockGetObjectByIDOnlyExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originId  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) Optional() *mRepositoryMockGetObjectByIDOnly {
+	mmGetObjectByIDOnly.optional = true
+	return mmGetObjectByIDOnly
+}
+
+// Expect sets up expected params for Repository.GetObjectByIDOnly
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) Expect(ctx context.Context, id types.ObjectIDType) *mRepositoryMockGetObjectByIDOnly {
+	if mmGetObjectByIDOnly.mock.funcGetObjectByIDOnly != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("RepositoryMock.GetObjectByIDOnly mock is already set by Set")
+	}
+
+	if mmGetObjectByIDOnly.defaultExpectation == nil {
+		mmGetObjectByIDOnly.defaultExpectation = &RepositoryMockGetObjectByIDOnlyExpectation{}
+	}
+
+	if mmGetObjectByIDOnly.defaultExpectation.paramPtrs != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("RepositoryMock.GetObjectByIDOnly mock is already set by ExpectParams functions")
+	}
+
+	mmGetObjectByIDOnly.defaultExpectation.params = &RepositoryMockGetObjectByIDOnlyParams{ctx, id}
+	mmGetObjectByIDOnly.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetObjectByIDOnly.expectations {
+		if minimock.Equal(e.params, mmGetObjectByIDOnly.defaultExpectation.params) {
+			mmGetObjectByIDOnly.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetObjectByIDOnly.defaultExpectation.params)
+		}
+	}
+
+	return mmGetObjectByIDOnly
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetObjectByIDOnly
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetObjectByIDOnly {
+	if mmGetObjectByIDOnly.mock.funcGetObjectByIDOnly != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("RepositoryMock.GetObjectByIDOnly mock is already set by Set")
+	}
+
+	if mmGetObjectByIDOnly.defaultExpectation == nil {
+		mmGetObjectByIDOnly.defaultExpectation = &RepositoryMockGetObjectByIDOnlyExpectation{}
+	}
+
+	if mmGetObjectByIDOnly.defaultExpectation.params != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("RepositoryMock.GetObjectByIDOnly mock is already set by Expect")
+	}
+
+	if mmGetObjectByIDOnly.defaultExpectation.paramPtrs == nil {
+		mmGetObjectByIDOnly.defaultExpectation.paramPtrs = &RepositoryMockGetObjectByIDOnlyParamPtrs{}
+	}
+	mmGetObjectByIDOnly.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetObjectByIDOnly.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetObjectByIDOnly
+}
+
+// ExpectIdParam2 sets up expected param id for Repository.GetObjectByIDOnly
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) ExpectIdParam2(id types.ObjectIDType) *mRepositoryMockGetObjectByIDOnly {
+	if mmGetObjectByIDOnly.mock.funcGetObjectByIDOnly != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("RepositoryMock.GetObjectByIDOnly mock is already set by Set")
+	}
+
+	if mmGetObjectByIDOnly.defaultExpectation == nil {
+		mmGetObjectByIDOnly.defaultExpectation = &RepositoryMockGetObjectByIDOnlyExpectation{}
+	}
+
+	if mmGetObjectByIDOnly.defaultExpectation.params != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("RepositoryMock.GetObjectByIDOnly mock is already set by Expect")
+	}
+
+	if mmGetObjectByIDOnly.defaultExpectation.paramPtrs == nil {
+		mmGetObjectByIDOnly.defaultExpectation.paramPtrs = &RepositoryMockGetObjectByIDOnlyParamPtrs{}
+	}
+	mmGetObjectByIDOnly.defaultExpectation.paramPtrs.id = &id
+	mmGetObjectByIDOnly.defaultExpectation.expectationOrigins.originId = minimock.CallerInfo(1)
+
+	return mmGetObjectByIDOnly
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetObjectByIDOnly
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) Inspect(f func(ctx context.Context, id types.ObjectIDType)) *mRepositoryMockGetObjectByIDOnly {
+	if mmGetObjectByIDOnly.mock.inspectFuncGetObjectByIDOnly != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetObjectByIDOnly")
+	}
+
+	mmGetObjectByIDOnly.mock.inspectFuncGetObjectByIDOnly = f
+
+	return mmGetObjectByIDOnly
+}
+
+// Return sets up results that will be returned by Repository.GetObjectByIDOnly
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) Return(op1 *mm_repository.ObjectModel, err error) *RepositoryMock {
+	if mmGetObjectByIDOnly.mock.funcGetObjectByIDOnly != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("RepositoryMock.GetObjectByIDOnly mock is already set by Set")
+	}
+
+	if mmGetObjectByIDOnly.defaultExpectation == nil {
+		mmGetObjectByIDOnly.defaultExpectation = &RepositoryMockGetObjectByIDOnlyExpectation{mock: mmGetObjectByIDOnly.mock}
+	}
+	mmGetObjectByIDOnly.defaultExpectation.results = &RepositoryMockGetObjectByIDOnlyResults{op1, err}
+	mmGetObjectByIDOnly.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetObjectByIDOnly.mock
+}
+
+// Set uses given function f to mock the Repository.GetObjectByIDOnly method
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) Set(f func(ctx context.Context, id types.ObjectIDType) (op1 *mm_repository.ObjectModel, err error)) *RepositoryMock {
+	if mmGetObjectByIDOnly.defaultExpectation != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("Default expectation is already set for the Repository.GetObjectByIDOnly method")
+	}
+
+	if len(mmGetObjectByIDOnly.expectations) > 0 {
+		mmGetObjectByIDOnly.mock.t.Fatalf("Some expectations are already set for the Repository.GetObjectByIDOnly method")
+	}
+
+	mmGetObjectByIDOnly.mock.funcGetObjectByIDOnly = f
+	mmGetObjectByIDOnly.mock.funcGetObjectByIDOnlyOrigin = minimock.CallerInfo(1)
+	return mmGetObjectByIDOnly.mock
+}
+
+// When sets expectation for the Repository.GetObjectByIDOnly which will trigger the result defined by the following
+// Then helper
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) When(ctx context.Context, id types.ObjectIDType) *RepositoryMockGetObjectByIDOnlyExpectation {
+	if mmGetObjectByIDOnly.mock.funcGetObjectByIDOnly != nil {
+		mmGetObjectByIDOnly.mock.t.Fatalf("RepositoryMock.GetObjectByIDOnly mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetObjectByIDOnlyExpectation{
+		mock:               mmGetObjectByIDOnly.mock,
+		params:             &RepositoryMockGetObjectByIDOnlyParams{ctx, id},
+		expectationOrigins: RepositoryMockGetObjectByIDOnlyExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetObjectByIDOnly.expectations = append(mmGetObjectByIDOnly.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetObjectByIDOnly return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetObjectByIDOnlyExpectation) Then(op1 *mm_repository.ObjectModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetObjectByIDOnlyResults{op1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetObjectByIDOnly should be invoked
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) Times(n uint64) *mRepositoryMockGetObjectByIDOnly {
+	if n == 0 {
+		mmGetObjectByIDOnly.mock.t.Fatalf("Times of RepositoryMock.GetObjectByIDOnly mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetObjectByIDOnly.expectedInvocations, n)
+	mmGetObjectByIDOnly.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetObjectByIDOnly
+}
+
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) invocationsDone() bool {
+	if len(mmGetObjectByIDOnly.expectations) == 0 && mmGetObjectByIDOnly.defaultExpectation == nil && mmGetObjectByIDOnly.mock.funcGetObjectByIDOnly == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetObjectByIDOnly.mock.afterGetObjectByIDOnlyCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetObjectByIDOnly.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetObjectByIDOnly implements mm_repository.Repository
+func (mmGetObjectByIDOnly *RepositoryMock) GetObjectByIDOnly(ctx context.Context, id types.ObjectIDType) (op1 *mm_repository.ObjectModel, err error) {
+	mm_atomic.AddUint64(&mmGetObjectByIDOnly.beforeGetObjectByIDOnlyCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetObjectByIDOnly.afterGetObjectByIDOnlyCounter, 1)
+
+	mmGetObjectByIDOnly.t.Helper()
+
+	if mmGetObjectByIDOnly.inspectFuncGetObjectByIDOnly != nil {
+		mmGetObjectByIDOnly.inspectFuncGetObjectByIDOnly(ctx, id)
+	}
+
+	mm_params := RepositoryMockGetObjectByIDOnlyParams{ctx, id}
+
+	// Record call args
+	mmGetObjectByIDOnly.GetObjectByIDOnlyMock.mutex.Lock()
+	mmGetObjectByIDOnly.GetObjectByIDOnlyMock.callArgs = append(mmGetObjectByIDOnly.GetObjectByIDOnlyMock.callArgs, &mm_params)
+	mmGetObjectByIDOnly.GetObjectByIDOnlyMock.mutex.Unlock()
+
+	for _, e := range mmGetObjectByIDOnly.GetObjectByIDOnlyMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.op1, e.results.err
+		}
+	}
+
+	if mmGetObjectByIDOnly.GetObjectByIDOnlyMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetObjectByIDOnly.GetObjectByIDOnlyMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetObjectByIDOnly.GetObjectByIDOnlyMock.defaultExpectation.params
+		mm_want_ptrs := mmGetObjectByIDOnly.GetObjectByIDOnlyMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetObjectByIDOnlyParams{ctx, id}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetObjectByIDOnly.t.Errorf("RepositoryMock.GetObjectByIDOnly got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObjectByIDOnly.GetObjectByIDOnlyMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.id != nil && !minimock.Equal(*mm_want_ptrs.id, mm_got.id) {
+				mmGetObjectByIDOnly.t.Errorf("RepositoryMock.GetObjectByIDOnly got unexpected parameter id, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObjectByIDOnly.GetObjectByIDOnlyMock.defaultExpectation.expectationOrigins.originId, *mm_want_ptrs.id, mm_got.id, minimock.Diff(*mm_want_ptrs.id, mm_got.id))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetObjectByIDOnly.t.Errorf("RepositoryMock.GetObjectByIDOnly got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetObjectByIDOnly.GetObjectByIDOnlyMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetObjectByIDOnly.GetObjectByIDOnlyMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetObjectByIDOnly.t.Fatal("No results are set for the RepositoryMock.GetObjectByIDOnly")
+		}
+		return (*mm_results).op1, (*mm_results).err
+	}
+	if mmGetObjectByIDOnly.funcGetObjectByIDOnly != nil {
+		return mmGetObjectByIDOnly.funcGetObjectByIDOnly(ctx, id)
+	}
+	mmGetObjectByIDOnly.t.Fatalf("Unexpected call to RepositoryMock.GetObjectByIDOnly. %v %v", ctx, id)
+	return
+}
+
+// GetObjectByIDOnlyAfterCounter returns a count of finished RepositoryMock.GetObjectByIDOnly invocations
+func (mmGetObjectByIDOnly *RepositoryMock) GetObjectByIDOnlyAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectByIDOnly.afterGetObjectByIDOnlyCounter)
+}
+
+// GetObjectByIDOnlyBeforeCounter returns a count of RepositoryMock.GetObjectByIDOnly invocations
+func (mmGetObjectByIDOnly *RepositoryMock) GetObjectByIDOnlyBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectByIDOnly.beforeGetObjectByIDOnlyCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetObjectByIDOnly.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetObjectByIDOnly *mRepositoryMockGetObjectByIDOnly) Calls() []*RepositoryMockGetObjectByIDOnlyParams {
+	mmGetObjectByIDOnly.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetObjectByIDOnlyParams, len(mmGetObjectByIDOnly.callArgs))
+	copy(argCopy, mmGetObjectByIDOnly.callArgs)
+
+	mmGetObjectByIDOnly.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetObjectByIDOnlyDone returns true if the count of the GetObjectByIDOnly invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetObjectByIDOnlyDone() bool {
+	if m.GetObjectByIDOnlyMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetObjectByIDOnlyMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetObjectByIDOnlyMock.invocationsDone()
+}
+
+// MinimockGetObjectByIDOnlyInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetObjectByIDOnlyInspect() {
+	for _, e := range m.GetObjectByIDOnlyMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetObjectByIDOnly at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetObjectByIDOnlyCounter := mm_atomic.LoadUint64(&m.afterGetObjectByIDOnlyCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetObjectByIDOnlyMock.defaultExpectation != nil && afterGetObjectByIDOnlyCounter < 1 {
+		if m.GetObjectByIDOnlyMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetObjectByIDOnly at\n%s", m.GetObjectByIDOnlyMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetObjectByIDOnly at\n%s with params: %#v", m.GetObjectByIDOnlyMock.defaultExpectation.expectationOrigins.origin, *m.GetObjectByIDOnlyMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetObjectByIDOnly != nil && afterGetObjectByIDOnlyCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetObjectByIDOnly at\n%s", m.funcGetObjectByIDOnlyOrigin)
+	}
+
+	if !m.GetObjectByIDOnlyMock.invocationsDone() && afterGetObjectByIDOnlyCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetObjectByIDOnly at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetObjectByIDOnlyMock.expectedInvocations), m.GetObjectByIDOnlyMock.expectedInvocationsOrigin, afterGetObjectByIDOnlyCounter)
+	}
+}
+
 type mRepositoryMockGetObjectByUID struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -53231,6 +53584,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockGetObjectByIDInspect()
 
+			m.MinimockGetObjectByIDOnlyInspect()
+
 			m.MinimockGetObjectByUIDInspect()
 
 			m.MinimockGetRepositoryTagInspect()
@@ -53465,6 +53820,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockGetNotStartedFileCountDone() &&
 		m.MinimockGetNotStartedFileCountExcludingDone() &&
 		m.MinimockGetObjectByIDDone() &&
+		m.MinimockGetObjectByIDOnlyDone() &&
 		m.MinimockGetObjectByUIDDone() &&
 		m.MinimockGetRepositoryTagDone() &&
 		m.MinimockGetRollbackKBForProductionDone() &&

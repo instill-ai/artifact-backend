@@ -38,6 +38,7 @@ type Service interface {
 	UpdateObject(context.Context, types.NamespaceUIDType, string, string, *artifactpb.Object, *fieldmaskpb.FieldMask) (*artifactpb.Object, error)
 	GetDownloadURL(context.Context, string, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
 	GetDownloadURLByObjectUID(context.Context, types.ObjectUIDType, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
+	ResolveBlobPresignedURL(ctx context.Context, objectID string) (string, error)
 	CheckCatalogUserPermission(context.Context, string, string, string) (*resource.Namespace, *repository.KnowledgeBaseModel, error)
 	GetNamespaceAndCheckPermission(context.Context, string) (*resource.Namespace, error)
 

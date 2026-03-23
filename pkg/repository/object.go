@@ -24,6 +24,7 @@ type Object interface {
 	DeleteObject(ctx context.Context, uid types.ObjectUIDType) error
 	GetObjectByUID(ctx context.Context, uid types.ObjectUIDType) (*ObjectModel, error)
 	GetObjectByID(ctx context.Context, namespaceUID types.NamespaceUIDType, id types.ObjectIDType) (*ObjectModel, error)
+	GetObjectByIDOnly(ctx context.Context, id types.ObjectIDType) (*ObjectModel, error)
 	UpdateObjectByUpdateMap(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) (*ObjectModel, error)
 	HardDeleteExpiredObjects(ctx context.Context, gracePeriod time.Duration, batchSize int) (int64, error)
 }
@@ -193,6 +194,18 @@ func (r *repository) GetObjectByID(ctx context.Context, namespaceUID types.Names
 	var obj ObjectModel
 	whereString := fmt.Sprintf("%v = ? AND %v = ? AND %v IS NULL", ObjectColumn.NamespaceUID, ObjectColumn.ID, ObjectColumn.DeleteTime)
 	if err := r.db.WithContext(ctx).Where(whereString, namespaceUID, id).First(&obj).Error; err != nil {
+		return nil, err
+	}
+	return &obj, nil
+}
+
+// GetObjectByIDOnly fetches an ObjectModel record by its hash-based ID
+// without requiring a namespace UID. Used by internal endpoints where the
+// caller only has the object_id (e.g., blob URL resolution).
+func (r *repository) GetObjectByIDOnly(ctx context.Context, id types.ObjectIDType) (*ObjectModel, error) {
+	var obj ObjectModel
+	whereString := fmt.Sprintf("%v = ? AND %v IS NULL", ObjectColumn.ID, ObjectColumn.DeleteTime)
+	if err := r.db.WithContext(ctx).Where(whereString, id).First(&obj).Error; err != nil {
 		return nil, err
 	}
 	return &obj, nil

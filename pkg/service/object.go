@@ -453,6 +453,49 @@ func (s *service) GetDownloadURLByObjectUID(
 	}, nil
 }
 
+// ResolveBlobPresignedURL looks up an object by its hash-based ID (without
+// namespace) and returns a raw presigned URL string for downloading. This is
+// used by the API gateway blob plugin to resolve stable object_id-based blob
+// URLs on demand, avoiding the 7-day presigned URL expiry problem.
+func (s *service) ResolveBlobPresignedURL(ctx context.Context, objectID string) (string, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	obj, err := s.repository.GetObjectByIDOnly(ctx, types.ObjectIDType(objectID))
+	if err != nil {
+		logger.Error("failed to resolve blob: object not found", zap.Error(err), zap.String("objectID", objectID))
+		return "", fmt.Errorf("object not found: %w", err)
+	}
+
+	if !obj.IsUploaded {
+		if !strings.HasPrefix(obj.StoragePath, "ns-") {
+			return "", ErrObjectNotUploaded
+		}
+
+		objectInfo, err := s.repository.GetMinIOStorage().GetFileMetadata(ctx, object.BlobBucketName, obj.StoragePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to verify object in storage: %w", err)
+		}
+		obj.IsUploaded = true
+		obj.Size = objectInfo.Size
+		obj.ContentType = objectInfo.ContentType
+	}
+
+	presignedURL, err := s.repository.GetMinIOStorage().GetPresignedURLForDownload(
+		ctx,
+		object.BlobBucketName,
+		obj.StoragePath,
+		"",
+		obj.ContentType,
+		7*24*time.Hour,
+	)
+	if err != nil {
+		logger.Error("failed to generate presigned URL for blob resolution", zap.Error(err))
+		return "", fmt.Errorf("failed to generate presigned URL: %w", err)
+	}
+
+	return presignedURL.String(), nil
+}
+
 // EncodeBlobURL encodes the presigned URL to a blob URL. The presigned URL
 // provided by MinIO is a self-contained URL that can be used to upload or
 // download the object. The structure follows the AWS S3 presigned URL format,

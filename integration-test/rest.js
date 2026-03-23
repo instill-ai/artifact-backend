@@ -877,6 +877,22 @@ export function TEST_08_E2EKnowledgeBase(data) {
             ),
         });
       }
+
+      // Verify isTextBased field for document files after processing
+      for (const docFile of documentFiles) {
+        const getFileRes = http.request(
+          "GET",
+          `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${docFile.fileId}`,
+          null,
+          data.header
+        );
+        let getFileJson; try { getFileJson = getFileRes.json(); } catch (e) { getFileJson = {}; }
+        const file = getFileJson.file || {};
+        check(getFileRes, {
+          [`E2E: File ${docFile.type} has isTextBased field`]: () => typeof file.isTextBased === "boolean",
+        });
+        console.log(`E2E: isTextBased=${file.isTextBased} for ${docFile.type} (fileId: ${docFile.fileId})`);
+      }
     }
 
     // Cleanup

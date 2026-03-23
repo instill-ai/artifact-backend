@@ -736,6 +736,17 @@ function runFileTest(data, opts) {
       console.log(`⚠ Token count is zero for ${testLabel} - usage metadata may not be populated yet`);
     }
 
+    // Verify isTextBased field for document types (PDF classification)
+    const documentTypesForTextCheck = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX",
+      "TYPE_XLS", "TYPE_XLSX", "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
+    if (documentTypesForTextCheck.includes(fileType)) {
+      const isTextBased = fileAfterProcessing.file ? fileAfterProcessing.file.isTextBased : undefined;
+      check(fileAfterProcessing, {
+        [`File has isTextBased field after processing (${testLabel})`]: () => isTextBased !== undefined && typeof isTextBased === "boolean",
+      });
+      console.log(`✓ isTextBased=${isTextBased} for ${testLabel}`);
+    }
+
     // Get file content (using VIEW_CONTENT)
     const getKBFileContent = http.request("GET", `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files/${fileId}?view=VIEW_CONTENT`, null, data.header);
     logUnexpected(getKBFileContent, 'GET /v1alpha/namespaces/{namespace_id}/files/{file_uid}?view=VIEW_CONTENT');

@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package artifact.v1alpha;
+
+import "artifact/v1alpha/file.proto";
+import "artifact/v1alpha/knowledge_base.proto";
+import "artifact/v1alpha/object.proto";
+import "artifact/v1alpha/system.proto";
+import "artifact/v1alpha/update.proto";
+
+// ArtifactPrivateService exposes the private endpoints that allow clients to
+// manage artifacts.
+service ArtifactPrivateService {
+  // Create a knowledge base without setting a creator (admin only)
+  //
+  // Creates a system-level knowledge base that has no creator. Used by internal
+  // services (e.g., agent-backend) to create shared knowledge bases like
+  // "instill-agent" that are not owned by any specific user.
+  rpc CreateKnowledgeBaseAdmin(CreateKnowledgeBaseAdminRequest) returns (CreateKnowledgeBaseAdminResponse);
+
+  // List knowledge bases without ACL filtering (admin only)
+  //
+  // Lists all knowledge bases in a namespace without ACL filtering. Unlike the
+  // public ListKnowledgeBases endpoint which filters results based on user
+  // permissions, this admin endpoint returns all knowledge bases including
+  // system-created ones (e.g., those created via CreateKnowledgeBaseAdmin).
+  // Used by internal services (e.g., agent-backend) to find existing system
+  // knowledge bases.
+  rpc ListKnowledgeBasesAdmin(ListKnowledgeBasesAdminRequest) returns (ListKnowledgeBasesAdminResponse);
+
+  // Update a knowledge base with system-reserved tags (admin only)
+  //
+  // Updates a knowledge base allowing system-reserved tag prefixes like
+  // "instill-". Used by internal services to manage system-level knowledge base
+  // metadata.
+  rpc UpdateKnowledgeBaseAdmin(UpdateKnowledgeBaseAdminRequest) returns (UpdateKnowledgeBaseAdminResponse);
+
+  // Update a file with system-reserved tags (admin only)
+  //
+  // Updates a file allowing system-reserved tag prefixes like "agent:".
+  // Used by agent-backend to set collection association tags (e.g.,
+  // "agent:collection:{id}" where {id} is hash-based like col-xxx).
+  rpc UpdateFileAdmin(UpdateFileAdminRequest) returns (UpdateFileAdminResponse);
+
+  // Get Object (admin only)
+  rpc GetObjectAdmin(GetObjectAdminRequest) returns (GetObjectAdminResponse);
+
+  // Update Object (admin only)
+  rpc UpdateObjectAdmin(UpdateObjectAdminRequest) returns (UpdateObjectAdminResponse);
+
+  // GetFileAsMarkdownAdmin and GetChatFileAdmin have been removed.
+  // Use GetFile with VIEW_CONTENT instead to get the converted markdown via
+  // pre-signed URL.
+
+  // Delete a knowledge base file (admin only)
+  //
+  // Deletes a file from a knowledge base using only the file ID. Unlike the
+  // public DeleteFile endpoint which requires namespace and knowledge base IDs,
+  // this admin endpoint automatically looks up the file's knowledge base and
+  // owner to perform the deletion. Primarily used for integration testing and
+  // internal operations where the caller has a file ID but not the full
+  // resource path. Authentication metadata is injected automatically based on
+  // the file owner.
+  rpc DeleteFileAdmin(DeleteFileAdminRequest) returns (DeleteFileAdminResponse);
+
+  // Reprocess a file (admin only)
+  //
+  // Triggers file reprocessing without ACL checks. This allows admin tools like
+  // commander to reprocess files directly by UID, bypassing OpenFGA permission
+  // validation. The file's knowledge base and owner are automatically looked
+  // up. Used for administrative operations where the caller needs to force
+  // reprocess files without authentication context.
+  rpc ReprocessFileAdmin(ReprocessFileAdminRequest) returns (ReprocessFileAdminResponse);
+
+  // Knowledge Base Management Admin APIs
+
+  // Execute knowledge base update (admin only)
+  rpc ExecuteKnowledgeBaseUpdateAdmin(ExecuteKnowledgeBaseUpdateAdminRequest) returns (ExecuteKnowledgeBaseUpdateAdminResponse);
+
+  // Abort knowledge base update (admin only)
+  //
+  // Cancels ongoing update workflows and cleans up staging KB resources
+  // (both finished and unfinished). Can abort specific knowledge bases by ID or
+  // all currently updating knowledge bases if no IDs provided. Sets knowledge
+  // base status to 'aborted'.
+  rpc AbortKnowledgeBaseUpdateAdmin(AbortKnowledgeBaseUpdateAdminRequest) returns (AbortKnowledgeBaseUpdateAdminResponse);
+
+  // Rollback a specific knowledge base to previous version (admin only)
+  rpc RollbackAdmin(RollbackAdminRequest) returns (RollbackAdminResponse);
+
+  // Purge rollback immediately (admin only)
+  rpc PurgeRollbackAdmin(PurgeRollbackAdminRequest) returns (PurgeRollbackAdminResponse);
+
+  // Set rollback retention period (admin only)
+  rpc SetRollbackRetentionAdmin(SetRollbackRetentionAdminRequest) returns (SetRollbackRetentionAdminResponse);
+
+  // Get knowledge base update status (admin only)
+  rpc GetKnowledgeBaseUpdateStatusAdmin(GetKnowledgeBaseUpdateStatusAdminRequest) returns (GetKnowledgeBaseUpdateStatusAdminResponse);
+
+  // System Management Admin APIs
+
+  // Create a new system configuration (admin only)
+  rpc CreateSystemAdmin(CreateSystemAdminRequest) returns (CreateSystemAdminResponse);
+
+  // Get a system configuration (admin only)
+  rpc GetSystemAdmin(GetSystemAdminRequest) returns (GetSystemAdminResponse);
+
+  // Update an existing system configuration (admin only)
+  rpc UpdateSystemAdmin(UpdateSystemAdminRequest) returns (UpdateSystemAdminResponse);
+
+  // Delete a system configuration (admin only)
+  rpc DeleteSystemAdmin(DeleteSystemAdminRequest) returns (DeleteSystemAdminResponse);
+
+  // List all system configurations (admin only)
+  rpc ListSystemsAdmin(ListSystemsAdminRequest) returns (ListSystemsAdminResponse);
+
+  // Rename a system configuration (admin only)
+  rpc RenameSystemAdmin(RenameSystemAdminRequest) returns (RenameSystemAdminResponse);
+
+  // Set the default system configuration (admin only)
+  rpc SetDefaultSystemAdmin(SetDefaultSystemAdminRequest) returns (SetDefaultSystemAdminResponse);
+
+  // Get the current default system configuration (admin only)
+  rpc GetDefaultSystemAdmin(GetDefaultSystemAdminRequest) returns (GetDefaultSystemAdminResponse);
+
+  // Reset knowledge base embeddings (admin only)
+  rpc ResetKnowledgeBaseEmbeddingsAdmin(ResetKnowledgeBaseEmbeddingsAdminRequest) returns (ResetKnowledgeBaseEmbeddingsAdminResponse);
+
+  // List files in a knowledge base without ACL filtering (admin only)
+  //
+  // Lists all files in a knowledge base without per-file FGA permission checks.
+  // Unlike the public ListFiles endpoint which filters results based on
+  // can_read_file permission, this admin endpoint returns all files.
+  // Supports AIP-160 filter expressions for filtering by file ID and tags.
+  // Used by internal services (e.g., agent-backend) for service-to-service
+  // file lookups where the calling service handles authorization at its own
+  // level.
+  rpc ListFilesAdmin(ListFilesAdminRequest) returns (ListFilesAdminResponse);
+
+  // Delete a knowledge base (admin only)
+  //
+  // Force-deletes a knowledge base and CASCADE removes file-KB associations.
+  // Used by admin consolidation operations to remove duplicate KBs after moving
+  // files.
+  rpc DeleteKnowledgeBaseAdmin(DeleteKnowledgeBaseAdminRequest) returns (DeleteKnowledgeBaseAdminResponse);
+
+  // Add files to a knowledge base (admin only)
+  //
+  // Adds file associations to a target KB by file resource names. Files can
+  // belong to multiple KBs (many-to-many relationship).
+  rpc AddFilesToKnowledgeBaseAdmin(AddFilesToKnowledgeBaseAdminRequest) returns (AddFilesToKnowledgeBaseAdminResponse);
+
+  // Copy a file to a different knowledge base (admin only)
+  //
+  // Performs a lightweight copy of a file: copies the MinIO object, creates a
+  // new file record, and copies converted files (content markdown + summary)
+  // to the target KB. Does NOT re-run the processing pipeline (no chunking or
+  // embedding). The new file is marked as COMPLETED immediately.
+  // Used by agent-backend for DeepCopyCollection to clone published collection
+  // files without AI cost.
+  rpc CopyFileToKnowledgeBaseAdmin(CopyFileToKnowledgeBaseAdminRequest) returns (CopyFileToKnowledgeBaseAdminResponse);
+}

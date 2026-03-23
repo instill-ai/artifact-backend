@@ -285,6 +285,10 @@ func main() {
 		logger.Fatal("Failed to set up MinIO audit endpoint", zap.Error(err))
 	}
 
+	if err := privateServeMux.HandlePath("GET", "/internal/resolve-blob/{object_id}", privateHandler.ResolveBlobByObjectID); err != nil {
+		logger.Fatal("Failed to set up blob resolution endpoint", zap.Error(err))
+	}
+
 	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
 	errSig := make(chan error)
 	defer close(errSig)

@@ -989,6 +989,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			ConvertingPipeline: kbFile.ConvertingPipeline(),
 			Tags:               []string(kbFile.Tags),
 			Collections:        extractCollectionIDs(kbFile.Tags),
+			IsTextBased:        kbFile.IsTextBased,
 		}
 
 		// Include status message (error or success message)

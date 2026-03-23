@@ -176,6 +176,9 @@ type FileModel struct {
 	UsageMetadataUnmarshal *UsageMetadata `gorm:"-" json:"usage_metadata_unmarshal"`
 	// SHA256 hash of the file content for deduplication
 	ContentSHA256 string `gorm:"column:content_sha256;size:64" json:"content_sha256"`
+	// Whether the document has a native text layer (true) or is image-based/scanned (false).
+	// Determined during file processing. Only meaningful for document types (PDF, DOCX, etc.).
+	IsTextBased bool `gorm:"column:is_text_based;default:false" json:"is_text_based"`
 }
 
 // TableName overrides the default table name for GORM

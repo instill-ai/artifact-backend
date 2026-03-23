@@ -71,6 +71,33 @@ Converts files to a canonical format via the `indexing-convert-file-type` pipeli
 
 The standardized file is always re-generated to ensure it reflects the latest conversion logic.
 
+#### PDF Text-Based Classification
+
+**Activity:** `ClassifyPDFTextActivity` (runs after standardization for document types)
+
+After a document is standardized to PDF, the pipeline classifies it as **text-based** or **image-based**. This classification drives downstream visual grounding behavior:
+
+- **Text-based PDFs** have a selectable text layer (e.g., natively authored PDFs, DOCX/PPTX conversions). Citations for these files carry a `highlight_text` field and the frontend uses PDF.js text-layer highlighting for precise text selection.
+- **Image-based PDFs** are scanned documents without a text layer (e.g., scanned receipts, photographed pages). Citations for these files use bounding box polygon overlays (`UNIT_PIXEL` coordinates).
+
+**How it works:**
+
+1. The standardized PDF is read using `github.com/ledongthuc/pdf`.
+2. Text is extracted from the first few pages using `pdf.GetPlainText()`.
+3. If extracted text exceeds a character threshold, the file is classified as text-based; otherwise image-based.
+4. The result is stored in the `is_text_based` boolean column on the `file` table (DB migration `000064`).
+5. The `is_text_based` field is exposed via the `File` protobuf message and returned in API responses.
+
+**Key files:**
+
+| File | Purpose |
+|---|---|
+| `pkg/worker/pdf_text_detect.go` | `IsTextBasedPDF()` — text extraction and classification logic |
+| `pkg/worker/process_file_activity.go` | Calls classification after standardization |
+| `pkg/db/migration/000064_add_is_text_based_to_file.up.sql` | Adds `is_text_based` column |
+| `pkg/repository/file.go` | Reads/writes `is_text_based` from DB |
+| `pkg/handler/file.go` | Exposes `is_text_based` in API responses |
+
 ### Phase 3: Duration Probing & Routing (Media Only)
 
 **Activity:** `GetMediaDurationActivity`

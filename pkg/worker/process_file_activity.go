@@ -1069,6 +1069,7 @@ type StandardizeFileTypeActivityResult struct {
 	PipelineRelease      pipeline.Release     // Pipeline used for conversion
 	ConvertedFileUID     types.FileUIDType    // UUID of created converted_file record (nil if not saved as converted_file)
 	PositionData         *types.PositionData  // Position data from conversion (for PDFs)
+	IsTextBased          bool                 // Whether the document has a native text layer
 }
 
 // StandardizeFileTypeActivity standardizes non-AI-native file types to AI-supported formats
@@ -1168,28 +1169,35 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				zap.String("convertedFileUID", convertedFileUID.String()),
 				zap.String("convertedDestination", convertedDestination))
 
-			// Return original location for processing (ProcessContentActivity needs original blob)
-			// but also include converted file info for VIEW_STANDARD_FILE_TYPE access
+			isTextBased := ClassifyDocumentTextBased(param.FileType, fileContent)
+			w.classifyAndUpdateFile(ctx, param.FileUID, isTextBased)
+
 			return &StandardizeFileTypeActivityResult{
-				ConvertedDestination: param.Destination, // Use original blob for processing
-				ConvertedBucket:      param.Bucket,      // Use original blob bucket
+				ConvertedDestination: param.Destination,
+				ConvertedBucket:      param.Bucket,
 				ConvertedType:        param.FileType,
 				OriginalType:         param.FileType,
-				Converted:            false,            // Not converted, just copied
-				ConvertedFileUID:     convertedFileUID, // Track the converted_file record
+				Converted:            false,
+				ConvertedFileUID:     convertedFileUID,
 				PositionData:         nil,
+				IsTextBased:          isTextBased,
 			}, nil
 		}
 
-		// For AI-native files that don't need conversion and no standard file type support
+		// For AI-native files that don't need conversion and no standard file type support.
+		// No file content available here; classify by type heuristic only.
+		isTextBased := ClassifyDocumentTextBased(param.FileType, nil)
+		w.classifyAndUpdateFile(ctx, param.FileUID, isTextBased)
+
 		return &StandardizeFileTypeActivityResult{
-			ConvertedDestination: "", // No conversion, use original file
+			ConvertedDestination: "",
 			ConvertedBucket:      "",
 			ConvertedType:        param.FileType,
 			OriginalType:         param.FileType,
 			Converted:            false,
 			ConvertedFileUID:     types.FileUIDType(uuid.Nil),
 			PositionData:         nil,
+			IsTextBased:          isTextBased,
 		}, nil
 	}
 
@@ -1341,16 +1349,36 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		zap.String("format", targetFormat),
 		zap.String("convertedType", convertedFileTypeEnum.String()))
 
+	isTextBased := ClassifyDocumentTextBased(param.FileType, convertedContent)
+	w.classifyAndUpdateFile(ctx, param.FileUID, isTextBased)
+
 	return &StandardizeFileTypeActivityResult{
 		ConvertedDestination: convertedDestination,
-		ConvertedBucket:      config.Config.Minio.BucketName, // Converted files go to artifact bucket
+		ConvertedBucket:      config.Config.Minio.BucketName,
 		ConvertedType:        convertedFileType,
 		OriginalType:         param.FileType,
 		Converted:            true,
 		PipelineRelease:      pipeline.ConvertFileTypePipeline,
-		ConvertedFileUID:     convertedFileUID, // Return the created converted_file UID
-		PositionData:         nil,              // Position data extraction not yet implemented
+		ConvertedFileUID:     convertedFileUID,
+		PositionData:         nil,
+		IsTextBased:          isTextBased,
 	}, nil
+}
+
+// classifyAndUpdateFile persists the is_text_based classification on the file record.
+func (w *Worker) classifyAndUpdateFile(ctx context.Context, fileUID types.FileUIDType, isTextBased bool) {
+	if _, err := w.repository.UpdateFile(ctx, fileUID.String(), map[string]any{
+		"is_text_based": isTextBased,
+	}); err != nil {
+		w.log.Warn("Failed to persist is_text_based classification (non-fatal)",
+			zap.String("fileUID", fileUID.String()),
+			zap.Bool("isTextBased", isTextBased),
+			zap.Error(err))
+	} else {
+		w.log.Info("Classified document text layer",
+			zap.String("fileUID", fileUID.String()),
+			zap.Bool("isTextBased", isTextBased))
+	}
 }
 
 // ===== CACHE FILE CONTEXT ACTIVITY =====

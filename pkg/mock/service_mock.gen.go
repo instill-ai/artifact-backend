@@ -285,6 +285,13 @@ type ServiceMock struct {
 	beforeRepositoryCounter uint64
 	RepositoryMock          mServiceMockRepository
 
+	funcResolveBlobPresignedURL          func(ctx context.Context, objectID string) (s1 string, err error)
+	funcResolveBlobPresignedURLOrigin    string
+	inspectFuncResolveBlobPresignedURL   func(ctx context.Context, objectID string)
+	afterResolveBlobPresignedURLCounter  uint64
+	beforeResolveBlobPresignedURLCounter uint64
+	ResolveBlobPresignedURLMock          mServiceMockResolveBlobPresignedURL
+
 	funcRollbackAdmin          func(ctx context.Context, o1 types.OwnerUIDType, s1 string, s2 string) (rp1 *artifactpb.RollbackAdminResponse, err error)
 	funcRollbackAdminOrigin    string
 	inspectFuncRollbackAdmin   func(ctx context.Context, o1 types.OwnerUIDType, s1 string, s2 string)
@@ -442,6 +449,9 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 	m.RenewFileCacheMock.callArgs = []*ServiceMockRenewFileCacheParams{}
 
 	m.RepositoryMock = mServiceMockRepository{mock: m}
+
+	m.ResolveBlobPresignedURLMock = mServiceMockResolveBlobPresignedURL{mock: m}
+	m.ResolveBlobPresignedURLMock.callArgs = []*ServiceMockResolveBlobPresignedURLParams{}
 
 	m.RollbackAdminMock = mServiceMockRollbackAdmin{mock: m}
 	m.RollbackAdminMock.callArgs = []*ServiceMockRollbackAdminParams{}
@@ -13705,6 +13715,349 @@ func (m *ServiceMock) MinimockRepositoryInspect() {
 	}
 }
 
+type mServiceMockResolveBlobPresignedURL struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockResolveBlobPresignedURLExpectation
+	expectations       []*ServiceMockResolveBlobPresignedURLExpectation
+
+	callArgs []*ServiceMockResolveBlobPresignedURLParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockResolveBlobPresignedURLExpectation specifies expectation struct of the Service.ResolveBlobPresignedURL
+type ServiceMockResolveBlobPresignedURLExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockResolveBlobPresignedURLParams
+	paramPtrs          *ServiceMockResolveBlobPresignedURLParamPtrs
+	expectationOrigins ServiceMockResolveBlobPresignedURLExpectationOrigins
+	results            *ServiceMockResolveBlobPresignedURLResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockResolveBlobPresignedURLParams contains parameters of the Service.ResolveBlobPresignedURL
+type ServiceMockResolveBlobPresignedURLParams struct {
+	ctx      context.Context
+	objectID string
+}
+
+// ServiceMockResolveBlobPresignedURLParamPtrs contains pointers to parameters of the Service.ResolveBlobPresignedURL
+type ServiceMockResolveBlobPresignedURLParamPtrs struct {
+	ctx      *context.Context
+	objectID *string
+}
+
+// ServiceMockResolveBlobPresignedURLResults contains results of the Service.ResolveBlobPresignedURL
+type ServiceMockResolveBlobPresignedURLResults struct {
+	s1  string
+	err error
+}
+
+// ServiceMockResolveBlobPresignedURLOrigins contains origins of expectations of the Service.ResolveBlobPresignedURL
+type ServiceMockResolveBlobPresignedURLExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originObjectID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) Optional() *mServiceMockResolveBlobPresignedURL {
+	mmResolveBlobPresignedURL.optional = true
+	return mmResolveBlobPresignedURL
+}
+
+// Expect sets up expected params for Service.ResolveBlobPresignedURL
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) Expect(ctx context.Context, objectID string) *mServiceMockResolveBlobPresignedURL {
+	if mmResolveBlobPresignedURL.mock.funcResolveBlobPresignedURL != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("ServiceMock.ResolveBlobPresignedURL mock is already set by Set")
+	}
+
+	if mmResolveBlobPresignedURL.defaultExpectation == nil {
+		mmResolveBlobPresignedURL.defaultExpectation = &ServiceMockResolveBlobPresignedURLExpectation{}
+	}
+
+	if mmResolveBlobPresignedURL.defaultExpectation.paramPtrs != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("ServiceMock.ResolveBlobPresignedURL mock is already set by ExpectParams functions")
+	}
+
+	mmResolveBlobPresignedURL.defaultExpectation.params = &ServiceMockResolveBlobPresignedURLParams{ctx, objectID}
+	mmResolveBlobPresignedURL.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmResolveBlobPresignedURL.expectations {
+		if minimock.Equal(e.params, mmResolveBlobPresignedURL.defaultExpectation.params) {
+			mmResolveBlobPresignedURL.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmResolveBlobPresignedURL.defaultExpectation.params)
+		}
+	}
+
+	return mmResolveBlobPresignedURL
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.ResolveBlobPresignedURL
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) ExpectCtxParam1(ctx context.Context) *mServiceMockResolveBlobPresignedURL {
+	if mmResolveBlobPresignedURL.mock.funcResolveBlobPresignedURL != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("ServiceMock.ResolveBlobPresignedURL mock is already set by Set")
+	}
+
+	if mmResolveBlobPresignedURL.defaultExpectation == nil {
+		mmResolveBlobPresignedURL.defaultExpectation = &ServiceMockResolveBlobPresignedURLExpectation{}
+	}
+
+	if mmResolveBlobPresignedURL.defaultExpectation.params != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("ServiceMock.ResolveBlobPresignedURL mock is already set by Expect")
+	}
+
+	if mmResolveBlobPresignedURL.defaultExpectation.paramPtrs == nil {
+		mmResolveBlobPresignedURL.defaultExpectation.paramPtrs = &ServiceMockResolveBlobPresignedURLParamPtrs{}
+	}
+	mmResolveBlobPresignedURL.defaultExpectation.paramPtrs.ctx = &ctx
+	mmResolveBlobPresignedURL.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmResolveBlobPresignedURL
+}
+
+// ExpectObjectIDParam2 sets up expected param objectID for Service.ResolveBlobPresignedURL
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) ExpectObjectIDParam2(objectID string) *mServiceMockResolveBlobPresignedURL {
+	if mmResolveBlobPresignedURL.mock.funcResolveBlobPresignedURL != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("ServiceMock.ResolveBlobPresignedURL mock is already set by Set")
+	}
+
+	if mmResolveBlobPresignedURL.defaultExpectation == nil {
+		mmResolveBlobPresignedURL.defaultExpectation = &ServiceMockResolveBlobPresignedURLExpectation{}
+	}
+
+	if mmResolveBlobPresignedURL.defaultExpectation.params != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("ServiceMock.ResolveBlobPresignedURL mock is already set by Expect")
+	}
+
+	if mmResolveBlobPresignedURL.defaultExpectation.paramPtrs == nil {
+		mmResolveBlobPresignedURL.defaultExpectation.paramPtrs = &ServiceMockResolveBlobPresignedURLParamPtrs{}
+	}
+	mmResolveBlobPresignedURL.defaultExpectation.paramPtrs.objectID = &objectID
+	mmResolveBlobPresignedURL.defaultExpectation.expectationOrigins.originObjectID = minimock.CallerInfo(1)
+
+	return mmResolveBlobPresignedURL
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.ResolveBlobPresignedURL
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) Inspect(f func(ctx context.Context, objectID string)) *mServiceMockResolveBlobPresignedURL {
+	if mmResolveBlobPresignedURL.mock.inspectFuncResolveBlobPresignedURL != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("Inspect function is already set for ServiceMock.ResolveBlobPresignedURL")
+	}
+
+	mmResolveBlobPresignedURL.mock.inspectFuncResolveBlobPresignedURL = f
+
+	return mmResolveBlobPresignedURL
+}
+
+// Return sets up results that will be returned by Service.ResolveBlobPresignedURL
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) Return(s1 string, err error) *ServiceMock {
+	if mmResolveBlobPresignedURL.mock.funcResolveBlobPresignedURL != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("ServiceMock.ResolveBlobPresignedURL mock is already set by Set")
+	}
+
+	if mmResolveBlobPresignedURL.defaultExpectation == nil {
+		mmResolveBlobPresignedURL.defaultExpectation = &ServiceMockResolveBlobPresignedURLExpectation{mock: mmResolveBlobPresignedURL.mock}
+	}
+	mmResolveBlobPresignedURL.defaultExpectation.results = &ServiceMockResolveBlobPresignedURLResults{s1, err}
+	mmResolveBlobPresignedURL.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmResolveBlobPresignedURL.mock
+}
+
+// Set uses given function f to mock the Service.ResolveBlobPresignedURL method
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) Set(f func(ctx context.Context, objectID string) (s1 string, err error)) *ServiceMock {
+	if mmResolveBlobPresignedURL.defaultExpectation != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("Default expectation is already set for the Service.ResolveBlobPresignedURL method")
+	}
+
+	if len(mmResolveBlobPresignedURL.expectations) > 0 {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("Some expectations are already set for the Service.ResolveBlobPresignedURL method")
+	}
+
+	mmResolveBlobPresignedURL.mock.funcResolveBlobPresignedURL = f
+	mmResolveBlobPresignedURL.mock.funcResolveBlobPresignedURLOrigin = minimock.CallerInfo(1)
+	return mmResolveBlobPresignedURL.mock
+}
+
+// When sets expectation for the Service.ResolveBlobPresignedURL which will trigger the result defined by the following
+// Then helper
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) When(ctx context.Context, objectID string) *ServiceMockResolveBlobPresignedURLExpectation {
+	if mmResolveBlobPresignedURL.mock.funcResolveBlobPresignedURL != nil {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("ServiceMock.ResolveBlobPresignedURL mock is already set by Set")
+	}
+
+	expectation := &ServiceMockResolveBlobPresignedURLExpectation{
+		mock:               mmResolveBlobPresignedURL.mock,
+		params:             &ServiceMockResolveBlobPresignedURLParams{ctx, objectID},
+		expectationOrigins: ServiceMockResolveBlobPresignedURLExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmResolveBlobPresignedURL.expectations = append(mmResolveBlobPresignedURL.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.ResolveBlobPresignedURL return parameters for the expectation previously defined by the When method
+func (e *ServiceMockResolveBlobPresignedURLExpectation) Then(s1 string, err error) *ServiceMock {
+	e.results = &ServiceMockResolveBlobPresignedURLResults{s1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.ResolveBlobPresignedURL should be invoked
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) Times(n uint64) *mServiceMockResolveBlobPresignedURL {
+	if n == 0 {
+		mmResolveBlobPresignedURL.mock.t.Fatalf("Times of ServiceMock.ResolveBlobPresignedURL mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmResolveBlobPresignedURL.expectedInvocations, n)
+	mmResolveBlobPresignedURL.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmResolveBlobPresignedURL
+}
+
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) invocationsDone() bool {
+	if len(mmResolveBlobPresignedURL.expectations) == 0 && mmResolveBlobPresignedURL.defaultExpectation == nil && mmResolveBlobPresignedURL.mock.funcResolveBlobPresignedURL == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmResolveBlobPresignedURL.mock.afterResolveBlobPresignedURLCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmResolveBlobPresignedURL.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ResolveBlobPresignedURL implements mm_service.Service
+func (mmResolveBlobPresignedURL *ServiceMock) ResolveBlobPresignedURL(ctx context.Context, objectID string) (s1 string, err error) {
+	mm_atomic.AddUint64(&mmResolveBlobPresignedURL.beforeResolveBlobPresignedURLCounter, 1)
+	defer mm_atomic.AddUint64(&mmResolveBlobPresignedURL.afterResolveBlobPresignedURLCounter, 1)
+
+	mmResolveBlobPresignedURL.t.Helper()
+
+	if mmResolveBlobPresignedURL.inspectFuncResolveBlobPresignedURL != nil {
+		mmResolveBlobPresignedURL.inspectFuncResolveBlobPresignedURL(ctx, objectID)
+	}
+
+	mm_params := ServiceMockResolveBlobPresignedURLParams{ctx, objectID}
+
+	// Record call args
+	mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.mutex.Lock()
+	mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.callArgs = append(mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.callArgs, &mm_params)
+	mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.mutex.Unlock()
+
+	for _, e := range mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.s1, e.results.err
+		}
+	}
+
+	if mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.defaultExpectation.Counter, 1)
+		mm_want := mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.defaultExpectation.params
+		mm_want_ptrs := mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockResolveBlobPresignedURLParams{ctx, objectID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmResolveBlobPresignedURL.t.Errorf("ServiceMock.ResolveBlobPresignedURL got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.objectID != nil && !minimock.Equal(*mm_want_ptrs.objectID, mm_got.objectID) {
+				mmResolveBlobPresignedURL.t.Errorf("ServiceMock.ResolveBlobPresignedURL got unexpected parameter objectID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.defaultExpectation.expectationOrigins.originObjectID, *mm_want_ptrs.objectID, mm_got.objectID, minimock.Diff(*mm_want_ptrs.objectID, mm_got.objectID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmResolveBlobPresignedURL.t.Errorf("ServiceMock.ResolveBlobPresignedURL got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmResolveBlobPresignedURL.ResolveBlobPresignedURLMock.defaultExpectation.results
+		if mm_results == nil {
+			mmResolveBlobPresignedURL.t.Fatal("No results are set for the ServiceMock.ResolveBlobPresignedURL")
+		}
+		return (*mm_results).s1, (*mm_results).err
+	}
+	if mmResolveBlobPresignedURL.funcResolveBlobPresignedURL != nil {
+		return mmResolveBlobPresignedURL.funcResolveBlobPresignedURL(ctx, objectID)
+	}
+	mmResolveBlobPresignedURL.t.Fatalf("Unexpected call to ServiceMock.ResolveBlobPresignedURL. %v %v", ctx, objectID)
+	return
+}
+
+// ResolveBlobPresignedURLAfterCounter returns a count of finished ServiceMock.ResolveBlobPresignedURL invocations
+func (mmResolveBlobPresignedURL *ServiceMock) ResolveBlobPresignedURLAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmResolveBlobPresignedURL.afterResolveBlobPresignedURLCounter)
+}
+
+// ResolveBlobPresignedURLBeforeCounter returns a count of ServiceMock.ResolveBlobPresignedURL invocations
+func (mmResolveBlobPresignedURL *ServiceMock) ResolveBlobPresignedURLBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmResolveBlobPresignedURL.beforeResolveBlobPresignedURLCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.ResolveBlobPresignedURL.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmResolveBlobPresignedURL *mServiceMockResolveBlobPresignedURL) Calls() []*ServiceMockResolveBlobPresignedURLParams {
+	mmResolveBlobPresignedURL.mutex.RLock()
+
+	argCopy := make([]*ServiceMockResolveBlobPresignedURLParams, len(mmResolveBlobPresignedURL.callArgs))
+	copy(argCopy, mmResolveBlobPresignedURL.callArgs)
+
+	mmResolveBlobPresignedURL.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockResolveBlobPresignedURLDone returns true if the count of the ResolveBlobPresignedURL invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockResolveBlobPresignedURLDone() bool {
+	if m.ResolveBlobPresignedURLMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ResolveBlobPresignedURLMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ResolveBlobPresignedURLMock.invocationsDone()
+}
+
+// MinimockResolveBlobPresignedURLInspect logs each unmet expectation
+func (m *ServiceMock) MinimockResolveBlobPresignedURLInspect() {
+	for _, e := range m.ResolveBlobPresignedURLMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.ResolveBlobPresignedURL at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterResolveBlobPresignedURLCounter := mm_atomic.LoadUint64(&m.afterResolveBlobPresignedURLCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ResolveBlobPresignedURLMock.defaultExpectation != nil && afterResolveBlobPresignedURLCounter < 1 {
+		if m.ResolveBlobPresignedURLMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.ResolveBlobPresignedURL at\n%s", m.ResolveBlobPresignedURLMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.ResolveBlobPresignedURL at\n%s with params: %#v", m.ResolveBlobPresignedURLMock.defaultExpectation.expectationOrigins.origin, *m.ResolveBlobPresignedURLMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcResolveBlobPresignedURL != nil && afterResolveBlobPresignedURLCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.ResolveBlobPresignedURL at\n%s", m.funcResolveBlobPresignedURLOrigin)
+	}
+
+	if !m.ResolveBlobPresignedURLMock.invocationsDone() && afterResolveBlobPresignedURLCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.ResolveBlobPresignedURL at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ResolveBlobPresignedURLMock.expectedInvocations), m.ResolveBlobPresignedURLMock.expectedInvocationsOrigin, afterResolveBlobPresignedURLCounter)
+	}
+}
+
 type mServiceMockRollbackAdmin struct {
 	optional           bool
 	mock               *ServiceMock
@@ -16182,6 +16535,8 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockRepositoryInspect()
 
+			m.MinimockResolveBlobPresignedURLInspect()
+
 			m.MinimockRollbackAdminInspect()
 
 			m.MinimockSearchChunksInspect()
@@ -16253,6 +16608,7 @@ func (m *ServiceMock) minimockDone() bool {
 		m.MinimockRenameSystemAdminDone() &&
 		m.MinimockRenewFileCacheDone() &&
 		m.MinimockRepositoryDone() &&
+		m.MinimockResolveBlobPresignedURLDone() &&
 		m.MinimockRollbackAdminDone() &&
 		m.MinimockSearchChunksDone() &&
 		m.MinimockSetDefaultSystemAdminDone() &&
