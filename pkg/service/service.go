@@ -36,7 +36,7 @@ type Service interface {
 	GetUploadURL(context.Context, *artifactpb.GetObjectUploadURLRequest, types.NamespaceUIDType, string, types.CreatorUIDType) (*artifactpb.GetObjectUploadURLResponse, error)
 	GetObject(context.Context, types.NamespaceUIDType, string, string) (*artifactpb.Object, error)
 	UpdateObject(context.Context, types.NamespaceUIDType, string, string, *artifactpb.Object, *fieldmaskpb.FieldMask) (*artifactpb.Object, error)
-	GetDownloadURL(context.Context, string, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
+	GetDownloadURL(ctx context.Context, objectID string, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilename string, format string, authUID string) (*artifactpb.GetObjectDownloadURLResponse, error)
 	GetDownloadURLByObjectUID(context.Context, types.ObjectUIDType, types.NamespaceUIDType, string, int32, string) (*artifactpb.GetObjectDownloadURLResponse, error)
 	ResolveBlobPresignedURL(ctx context.Context, objectID string) (string, error)
 	CheckCatalogUserPermission(context.Context, string, string, string) (*resource.Namespace, *repository.KnowledgeBaseModel, error)

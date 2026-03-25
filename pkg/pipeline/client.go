@@ -39,9 +39,7 @@ func withServiceHeader(ctx context.Context, requesterUID string) context.Context
 	// Create a copy and add the required headers
 	md = md.Copy()
 	md.Set("instill-service", "instill")
-	// Add user context headers for internal calls
-	// Both instill-user-uid and instill-requester-uid should be the actual requester
-	// (the user/namespace that owns the resources being operated on)
+	md.Set("instill-backend", "artifact-backend")
 	md.Set("instill-auth-type", "user")
 	if requesterUID != "" {
 		md.Set("instill-user-uid", requesterUID)
@@ -191,11 +189,7 @@ func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 	// via CalculateStandardizationTimeout, which accounts for two-pass ffmpeg
 	// conversion of large video files.
 
-	// Use empty requesterUID for service-to-service calls, consistent with other pipeline calls
-	// (GenerateContentPipe, GenerateSummaryPipe, EmbedPipe all use empty requesterUID)
-	// This prevents "fetching requester namespace: namespace error" when the KB owner's
-	// user/organization namespace was deleted but files still need processing during migration
-	ctx = withServiceHeader(ctx, "")
+	ctx = withServiceHeader(ctx, requesterUID)
 
 	// Determine input variable name based on source type
 	inputVarName := getInputVariableName(sourceType)
@@ -209,8 +203,7 @@ func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 
 	// Look up pipeline by slug to get the pipeline ID
 	// TriggerPipelineRelease requires the pipeline ID (e.g., pip-xxx), not the slug
-	// Use empty requesterUID consistent with service-to-service calls
-	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, ConvertFileTypePipeline, "")
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, ConvertFileTypePipeline, requesterUID)
 	if err != nil {
 		return nil, fmt.Errorf("looking up pipeline ID: %w", err)
 	}

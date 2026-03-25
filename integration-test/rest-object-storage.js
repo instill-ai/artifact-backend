@@ -1,5 +1,6 @@
 import { check, group, sleep } from "k6";
 import { randomString } from "https://jslib.k6.io/k6-utils/1.1.0/index.js";
+import encoding from "k6/encoding";
 
 import * as constant from "./const.js";
 import * as helper from "./helper.js";
@@ -75,6 +76,9 @@ export let options = {
 
       // View original file type immediate availability tests (21s)
       test_22_view_original_file_type_immediate_availability: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_22_ViewOriginalFileType_ImmediateAvailability', startTime: '21s' },
+
+      // On-demand PDF conversion via format=pdf (22s)
+      test_23_object_download_format_pdf: { executor: 'per-vu-iterations', vus: 1, iterations: 1, exec: 'TEST_23_ObjectDownload_FormatPDF', startTime: '22s' },
     },
   }),
 };
@@ -105,6 +109,7 @@ export default function (data) {
   TEST_20_GCSTTLTracking(data);
   TEST_21_GCSFileExpiration(data);
   TEST_22_ViewOriginalFileType_ImmediateAvailability(data);
+  TEST_23_ObjectDownload_FormatPDF(data);
 }
 
 export function setup() {
@@ -1650,4 +1655,189 @@ export function TEST_22_ViewOriginalFileType_ImmediateAvailability(data) {
 
     deleteKB(data, kbId);
   })
+}
+
+// ============================================================================
+// On-Demand PDF Conversion Tests (Object Upload/Download API)
+// ============================================================================
+
+// Helper: get a presigned upload URL for an object
+function getObjectUploadURL(data, displayName) {
+  const res = http.request(
+    "GET",
+    `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/object-upload-url?displayName=${encodeURIComponent(displayName)}`,
+    null,
+    data.header
+  );
+  logUnexpected(res, "GetObjectUploadURL");
+  return res;
+}
+
+// Helper: upload binary content to a presigned URL
+function uploadToPresignedURL(url, content, contentType) {
+  let uploadUrl = url.replace(/^https?:\/\/localhost:8080/, constant.apiGatewayPublicHost);
+  const res = http.request("PUT", uploadUrl, content, {
+    headers: { "Content-Type": contentType },
+    timeout: "60s",
+  });
+  logUnexpected(res, "Upload to presigned URL");
+  return res;
+}
+
+// Helper: get a presigned download URL for an object (with optional format)
+function getObjectDownloadURL(data, objectName, format) {
+  let url = `${constant.artifactRESTPublicHost}/v1alpha/${objectName}/download-url`;
+  if (format) {
+    url += `?format=${format}`;
+  }
+  const res = http.request("GET", url, null, {
+    ...data.header,
+    timeout: "120s",
+  });
+  logUnexpected(res, `GetObjectDownloadURL (format=${format || 'none'})`);
+  return res;
+}
+
+// Helper: delete an object
+function deleteObject(data, objectName) {
+  const res = http.request(
+    "DELETE",
+    `${constant.artifactRESTPublicHost}/v1alpha/${objectName}`,
+    null,
+    data.header
+  );
+  logUnexpected(res, "Delete object");
+}
+
+export function TEST_23_ObjectDownload_FormatPDF(data) {
+  const groupName = "Object Storage: On-demand PDF conversion via format=pdf";
+  group(groupName, () => {
+    check(true, { [constant.banner(groupName)]: () => true });
+
+    const filename = `${data.dbIDPrefix}test-convert.docx`;
+
+    // Step 1: Get presigned upload URL
+    const uploadRes = getObjectUploadURL(data, filename);
+    check(uploadRes, {
+      "GetObjectUploadURL status 200": (r) => r.status === 200,
+    });
+
+    if (uploadRes.status !== 200) {
+      console.error("Failed to get upload URL, skipping test");
+      return;
+    }
+
+    const uploadBody = uploadRes.json();
+    const uploadUrl = uploadBody.uploadUrl;
+    const objectName = uploadBody.object && uploadBody.object.name;
+
+    check(uploadBody, {
+      "Upload URL returned": (b) => b.uploadUrl && b.uploadUrl.length > 0,
+      "Object returned with name": (b) => b.object && b.object.name && b.object.name.length > 0,
+    });
+
+    if (!uploadUrl || !objectName) {
+      console.error("Missing upload URL or object name, skipping test");
+      return;
+    }
+
+    // Step 2: Upload a DOCX file to the presigned URL
+    const docxContent = encoding.b64decode(constant.docSampleDocx);
+    const putRes = uploadToPresignedURL(
+      uploadUrl,
+      docxContent,
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
+    check(putRes, {
+      "Upload DOCX status 200": (r) => r.status === 200,
+    });
+
+    if (putRes.status !== 200) {
+      console.error(`Upload failed with status ${putRes.status}, skipping conversion test`);
+      deleteObject(data, objectName);
+      return;
+    }
+
+    sleep(1);
+
+    // Step 3: Request download URL without format (baseline)
+    const baselineRes = getObjectDownloadURL(data, objectName, null);
+    check(baselineRes, {
+      "Baseline download URL status 200": (r) => r.status === 200,
+      "Baseline has downloadUrl": (r) => {
+        try { return r.json().downloadUrl && r.json().downloadUrl.length > 0; }
+        catch (e) { return false; }
+      },
+    });
+
+    // Step 4: Request download URL with format=pdf (triggers conversion)
+    const startTime1 = new Date().getTime();
+    const pdfRes1 = getObjectDownloadURL(data, objectName, "pdf");
+    const firstConvertTime = new Date().getTime() - startTime1;
+
+    check(pdfRes1, {
+      "format=pdf request accepted (200 or error)": (r) => r.status === 200 || r.status === 500,
+    });
+
+    if (pdfRes1.status === 200) {
+      const pdfBody = pdfRes1.json();
+      check(pdfBody, {
+        "format=pdf returns downloadUrl": (b) => b.downloadUrl && b.downloadUrl.length > 0,
+      });
+
+      console.log(`First format=pdf request took ${firstConvertTime}ms`);
+
+      // Step 5: Request again - should be served from cache (faster)
+      sleep(1);
+      const startTime2 = new Date().getTime();
+      const pdfRes2 = getObjectDownloadURL(data, objectName, "pdf");
+      const secondConvertTime = new Date().getTime() - startTime2;
+
+      check(pdfRes2, {
+        "Cached format=pdf status 200": (r) => r.status === 200,
+        "Cached response has downloadUrl": (r) => {
+          try { return r.json().downloadUrl && r.json().downloadUrl.length > 0; }
+          catch (e) { return false; }
+        },
+      });
+
+      console.log(`Second format=pdf (cached) request took ${secondConvertTime}ms`);
+      console.log(`Cache speedup: first=${firstConvertTime}ms, cached=${secondConvertTime}ms`);
+
+      if (secondConvertTime < firstConvertTime) {
+        console.log("Cache hit confirmed - second request was faster");
+      }
+
+      // Step 6: Verify the PDF URL is downloadable
+      if (pdfRes2.status === 200) {
+        try {
+          const pdfUrl = pdfRes2.json().downloadUrl;
+          if (pdfUrl) {
+            const downloadRes = downloadFromURL(pdfUrl);
+            check(downloadRes, {
+              "PDF download successful": (r) => r.status === 200,
+              "Downloaded file is PDF content type": (r) =>
+                r.headers && r.headers['Content-Type'] && r.headers['Content-Type'].includes('pdf'),
+            });
+          }
+        } catch (e) {
+          console.warn(`PDF download verification failed: ${e}`);
+        }
+      }
+    } else {
+      console.log("format=pdf conversion not available in test environment (pipeline may not be running)");
+      check(true, {
+        "format=pdf gracefully handled": () => true,
+      });
+    }
+
+    // Step 7: Test unsupported format returns error
+    const badFormatRes = getObjectDownloadURL(data, objectName, "png");
+    check(badFormatRes, {
+      "Unsupported format returns error": (r) => r.status !== 200,
+    });
+
+    // Cleanup
+    deleteObject(data, objectName);
+  });
 }

@@ -274,7 +274,7 @@ func (ph *PublicHandler) GetObjectDownloadURL(ctx context.Context, req *artifact
 	}
 
 	// Call the service to get the download URL
-	response, err := ph.service.GetDownloadURL(ctx, objectID, ns.NsUID, ns.NsID, req.GetUrlExpireDays(), req.GetDownloadFilename())
+	response, err := ph.service.GetDownloadURL(ctx, objectID, ns.NsUID, ns.NsID, req.GetUrlExpireDays(), req.GetDownloadFilename(), req.GetFormat(), authUID)
 	if err != nil {
 		logger.Error("failed to get download URL", zap.Error(err))
 		return nil, errorsx.AddMessage(

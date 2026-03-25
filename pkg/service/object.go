@@ -17,12 +17,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/instill-ai/artifact-backend/config"
+	"github.com/instill-ai/artifact-backend/pkg/pipeline"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 	"github.com/instill-ai/artifact-backend/pkg/utils"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
+	filetype "github.com/instill-ai/x/file"
 	logx "github.com/instill-ai/x/log"
 )
 
@@ -214,6 +216,11 @@ func (s *service) UpdateObject(
 		}
 	}
 
+	// If mask contains display_name, update the field
+	if containsPath(paths, "display_name") && obj.GetDisplayName() != "" {
+		updateMap[repository.ObjectColumn.DisplayName] = obj.GetDisplayName()
+	}
+
 	if len(updateMap) == 0 {
 		// Nothing to update, return existing object
 		return repository.TurnObjectInDBToObjectInProto(existingObj, namespaceID), nil
@@ -243,8 +250,30 @@ func containsPath(paths []string, target string) bool {
 	return false
 }
 
-// GetDownloadURL gets the download url of the object
-// this function will create a new object_url record in the database for downloading
+// deriveDownloadFilename extracts a user-facing filename from a display name
+// that may be a path like "code_executor_agent/namespace/chat/filename.png/0".
+func deriveDownloadFilename(displayName string) string {
+	name := displayName
+	parts := strings.Split(displayName, "/")
+	if len(parts) > 1 {
+		last := parts[len(parts)-1]
+		if _, err := strconv.Atoi(last); err == nil && len(parts) > 2 {
+			name = parts[len(parts)-2]
+		} else {
+			name = last
+		}
+	}
+	return name
+}
+
+const convertedFileCacheSuffix = "-converted.pdf"
+const conversionTimeout = 60 * time.Second
+
+// GetDownloadURL gets the download url of the object.
+// When format is "pdf" and the object is a convertible document type
+// (DOC, DOCX, PPT, PPTX, XLS, XLSX), the file is converted on-demand
+// using the indexing-convert-file-type pipeline and the result is cached
+// in MinIO at {storagePath}-converted.pdf for subsequent requests.
 func (s *service) GetDownloadURL(
 	ctx context.Context,
 	objectID string,
@@ -252,8 +281,14 @@ func (s *service) GetDownloadURL(
 	namespaceID string,
 	urlExpireDays int32,
 	downloadFilenameParam string,
+	format string,
+	authUID string,
 ) (*artifactpb.GetObjectDownloadURLResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
+
+	if format != "" && format != "pdf" {
+		return nil, status.Errorf(codes.InvalidArgument, "unsupported format %q, only \"pdf\" is supported", format)
+	}
 
 	// Get the object from database using the hash-based ID
 	obj, err := s.repository.GetObjectByID(ctx, namespaceUID, types.ObjectIDType(objectID))
@@ -294,25 +329,29 @@ func (s *service) GetDownloadURL(
 
 	expirationTime := time.Duration(urlExpireDays) * time.Hour * 24
 
-	// Determine download filename:
-	// 1. Use custom download_filename from request if provided (user-friendly name)
-	// 2. Otherwise extract filename from the object display name path
 	downloadFilename := downloadFilenameParam
 	if downloadFilename == "" {
-		// Extract filename from obj.DisplayName which might be a path like
-		// "code_executor_agent/namespace/chat/filename.png/0"
-		downloadFilename = obj.DisplayName
-		nameParts := strings.Split(obj.DisplayName, "/")
-		if len(nameParts) > 1 {
-			// Check if the last part is a version number (all digits)
-			lastPart := nameParts[len(nameParts)-1]
-			if _, err := strconv.Atoi(lastPart); err == nil && len(nameParts) > 2 {
-				// Last part is version number, use second-to-last as filename
-				downloadFilename = nameParts[len(nameParts)-2]
-			} else {
-				// Last part is the filename
-				downloadFilename = lastPart
+		downloadFilename = deriveDownloadFilename(obj.DisplayName)
+	}
+
+	storagePath := obj.StoragePath
+	contentType := obj.ContentType
+
+	if format == "pdf" {
+		ft := filetype.DetermineFileType(obj.ContentType, obj.DisplayName)
+		needsConversion, _, _ := filetype.NeedFileTypeConversion(ft)
+		if needsConversion {
+			cachePath := obj.StoragePath + convertedFileCacheSuffix
+			_, cacheErr := s.repository.GetMinIOStorage().GetFileMetadata(ctx, object.BlobBucketName, cachePath)
+			if cacheErr != nil {
+				// Cache miss — convert and store
+				if err := s.convertAndCacheObject(ctx, obj, ft, cachePath, authUID); err != nil {
+					logger.Error("failed to convert object to PDF", zap.Error(err))
+					return nil, status.Errorf(codes.Internal, "failed to convert object to PDF: %v", err)
+				}
 			}
+			storagePath = cachePath
+			contentType = "application/pdf"
 		}
 	}
 
@@ -320,9 +359,9 @@ func (s *service) GetDownloadURL(
 	presignedURL, err := s.repository.GetMinIOStorage().GetPresignedURLForDownload(
 		ctx,
 		object.BlobBucketName,
-		obj.StoragePath,
+		storagePath,
 		downloadFilename,
-		obj.ContentType,
+		contentType,
 		expirationTime,
 	)
 	if err != nil {
@@ -349,6 +388,41 @@ func (s *service) GetDownloadURL(
 		UrlExpireAt: timestamppb.New(expireAtTS),
 		Object:      objectInProto,
 	}, nil
+}
+
+// convertAndCacheObject downloads the original file, converts it to PDF via
+// the indexing-convert-file-type preset pipeline, and uploads the result to
+// cachePath in MinIO.
+func (s *service) convertAndCacheObject(ctx context.Context, obj *repository.ObjectModel, ft artifactpb.File_Type, cachePath string, requesterUID string) error {
+	convCtx, cancel := context.WithTimeout(ctx, conversionTimeout)
+	defer cancel()
+
+	content, err := s.repository.GetMinIOStorage().GetFile(convCtx, object.BlobBucketName, obj.StoragePath)
+	if err != nil {
+		return fmt.Errorf("downloading original object: %w", err)
+	}
+
+	mimeType := filetype.FileTypeToMimeType(ft)
+	pdfContent, err := pipeline.ConvertFileTypePipe(convCtx, s.pipelinePub, content, ft, mimeType, requesterUID)
+	if err != nil {
+		return fmt.Errorf("converting to PDF: %w", err)
+	}
+
+	if err := s.repository.GetMinIOStorage().UploadFile(convCtx, object.BlobBucketName, cachePath, pdfContent, "application/pdf"); err != nil {
+		return fmt.Errorf("uploading converted PDF: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteConvertedFileCache removes the cached converted PDF for an object.
+// Best-effort: errors are logged but not returned.
+func (s *service) DeleteConvertedFileCache(ctx context.Context, storagePath string) {
+	cachePath := storagePath + convertedFileCacheSuffix
+	if err := s.repository.GetMinIOStorage().DeleteFile(ctx, object.BlobBucketName, cachePath); err != nil {
+		logger, _ := logx.GetZapLogger(ctx)
+		logger.Debug("no converted file cache to delete (expected for most objects)", zap.String("cachePath", cachePath))
+	}
 }
 
 // GetDownloadURLByObjectUID gets the download url of the object by its UID.
@@ -480,11 +554,13 @@ func (s *service) ResolveBlobPresignedURL(ctx context.Context, objectID string) 
 		obj.ContentType = objectInfo.ContentType
 	}
 
+	downloadFilename := deriveDownloadFilename(obj.DisplayName)
+
 	presignedURL, err := s.repository.GetMinIOStorage().GetPresignedURLForDownload(
 		ctx,
 		object.BlobBucketName,
 		obj.StoragePath,
-		"",
+		downloadFilename,
 		obj.ContentType,
 		7*24*time.Hour,
 	)

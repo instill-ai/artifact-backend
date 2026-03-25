@@ -145,9 +145,9 @@ type ServiceMock struct {
 	beforeGetDefaultSystemAdminCounter uint64
 	GetDefaultSystemAdminMock          mServiceMockGetDefaultSystemAdmin
 
-	funcGetDownloadURL          func(ctx context.Context, s1 string, n1 types.NamespaceUIDType, s2 string, i1 int32, s3 string) (gp1 *artifactpb.GetObjectDownloadURLResponse, err error)
+	funcGetDownloadURL          func(ctx context.Context, objectID string, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilename string, format string, authUID string) (gp1 *artifactpb.GetObjectDownloadURLResponse, err error)
 	funcGetDownloadURLOrigin    string
-	inspectFuncGetDownloadURL   func(ctx context.Context, s1 string, n1 types.NamespaceUIDType, s2 string, i1 int32, s3 string)
+	inspectFuncGetDownloadURL   func(ctx context.Context, objectID string, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilename string, format string, authUID string)
 	afterGetDownloadURLCounter  uint64
 	beforeGetDownloadURLCounter uint64
 	GetDownloadURLMock          mServiceMockGetDownloadURL
@@ -6486,22 +6486,26 @@ type ServiceMockGetDownloadURLExpectation struct {
 
 // ServiceMockGetDownloadURLParams contains parameters of the Service.GetDownloadURL
 type ServiceMockGetDownloadURLParams struct {
-	ctx context.Context
-	s1  string
-	n1  types.NamespaceUIDType
-	s2  string
-	i1  int32
-	s3  string
+	ctx              context.Context
+	objectID         string
+	namespaceUID     types.NamespaceUIDType
+	namespaceID      string
+	urlExpireDays    int32
+	downloadFilename string
+	format           string
+	authUID          string
 }
 
 // ServiceMockGetDownloadURLParamPtrs contains pointers to parameters of the Service.GetDownloadURL
 type ServiceMockGetDownloadURLParamPtrs struct {
-	ctx *context.Context
-	s1  *string
-	n1  *types.NamespaceUIDType
-	s2  *string
-	i1  *int32
-	s3  *string
+	ctx              *context.Context
+	objectID         *string
+	namespaceUID     *types.NamespaceUIDType
+	namespaceID      *string
+	urlExpireDays    *int32
+	downloadFilename *string
+	format           *string
+	authUID          *string
 }
 
 // ServiceMockGetDownloadURLResults contains results of the Service.GetDownloadURL
@@ -6512,13 +6516,15 @@ type ServiceMockGetDownloadURLResults struct {
 
 // ServiceMockGetDownloadURLOrigins contains origins of expectations of the Service.GetDownloadURL
 type ServiceMockGetDownloadURLExpectationOrigins struct {
-	origin    string
-	originCtx string
-	originS1  string
-	originN1  string
-	originS2  string
-	originI1  string
-	originS3  string
+	origin                 string
+	originCtx              string
+	originObjectID         string
+	originNamespaceUID     string
+	originNamespaceID      string
+	originUrlExpireDays    string
+	originDownloadFilename string
+	originFormat           string
+	originAuthUID          string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -6532,7 +6538,7 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) Optional() *mServiceMockGetD
 }
 
 // Expect sets up expected params for Service.GetDownloadURL
-func (mmGetDownloadURL *mServiceMockGetDownloadURL) Expect(ctx context.Context, s1 string, n1 types.NamespaceUIDType, s2 string, i1 int32, s3 string) *mServiceMockGetDownloadURL {
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) Expect(ctx context.Context, objectID string, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilename string, format string, authUID string) *mServiceMockGetDownloadURL {
 	if mmGetDownloadURL.mock.funcGetDownloadURL != nil {
 		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Set")
 	}
@@ -6545,7 +6551,7 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) Expect(ctx context.Context, 
 		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by ExpectParams functions")
 	}
 
-	mmGetDownloadURL.defaultExpectation.params = &ServiceMockGetDownloadURLParams{ctx, s1, n1, s2, i1, s3}
+	mmGetDownloadURL.defaultExpectation.params = &ServiceMockGetDownloadURLParams{ctx, objectID, namespaceUID, namespaceID, urlExpireDays, downloadFilename, format, authUID}
 	mmGetDownloadURL.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmGetDownloadURL.expectations {
 		if minimock.Equal(e.params, mmGetDownloadURL.defaultExpectation.params) {
@@ -6579,8 +6585,8 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectCtxParam1(ctx context.
 	return mmGetDownloadURL
 }
 
-// ExpectS1Param2 sets up expected param s1 for Service.GetDownloadURL
-func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectS1Param2(s1 string) *mServiceMockGetDownloadURL {
+// ExpectObjectIDParam2 sets up expected param objectID for Service.GetDownloadURL
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectObjectIDParam2(objectID string) *mServiceMockGetDownloadURL {
 	if mmGetDownloadURL.mock.funcGetDownloadURL != nil {
 		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Set")
 	}
@@ -6596,14 +6602,14 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectS1Param2(s1 string) *m
 	if mmGetDownloadURL.defaultExpectation.paramPtrs == nil {
 		mmGetDownloadURL.defaultExpectation.paramPtrs = &ServiceMockGetDownloadURLParamPtrs{}
 	}
-	mmGetDownloadURL.defaultExpectation.paramPtrs.s1 = &s1
-	mmGetDownloadURL.defaultExpectation.expectationOrigins.originS1 = minimock.CallerInfo(1)
+	mmGetDownloadURL.defaultExpectation.paramPtrs.objectID = &objectID
+	mmGetDownloadURL.defaultExpectation.expectationOrigins.originObjectID = minimock.CallerInfo(1)
 
 	return mmGetDownloadURL
 }
 
-// ExpectN1Param3 sets up expected param n1 for Service.GetDownloadURL
-func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectN1Param3(n1 types.NamespaceUIDType) *mServiceMockGetDownloadURL {
+// ExpectNamespaceUIDParam3 sets up expected param namespaceUID for Service.GetDownloadURL
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectNamespaceUIDParam3(namespaceUID types.NamespaceUIDType) *mServiceMockGetDownloadURL {
 	if mmGetDownloadURL.mock.funcGetDownloadURL != nil {
 		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Set")
 	}
@@ -6619,14 +6625,14 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectN1Param3(n1 types.Name
 	if mmGetDownloadURL.defaultExpectation.paramPtrs == nil {
 		mmGetDownloadURL.defaultExpectation.paramPtrs = &ServiceMockGetDownloadURLParamPtrs{}
 	}
-	mmGetDownloadURL.defaultExpectation.paramPtrs.n1 = &n1
-	mmGetDownloadURL.defaultExpectation.expectationOrigins.originN1 = minimock.CallerInfo(1)
+	mmGetDownloadURL.defaultExpectation.paramPtrs.namespaceUID = &namespaceUID
+	mmGetDownloadURL.defaultExpectation.expectationOrigins.originNamespaceUID = minimock.CallerInfo(1)
 
 	return mmGetDownloadURL
 }
 
-// ExpectS2Param4 sets up expected param s2 for Service.GetDownloadURL
-func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectS2Param4(s2 string) *mServiceMockGetDownloadURL {
+// ExpectNamespaceIDParam4 sets up expected param namespaceID for Service.GetDownloadURL
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectNamespaceIDParam4(namespaceID string) *mServiceMockGetDownloadURL {
 	if mmGetDownloadURL.mock.funcGetDownloadURL != nil {
 		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Set")
 	}
@@ -6642,14 +6648,14 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectS2Param4(s2 string) *m
 	if mmGetDownloadURL.defaultExpectation.paramPtrs == nil {
 		mmGetDownloadURL.defaultExpectation.paramPtrs = &ServiceMockGetDownloadURLParamPtrs{}
 	}
-	mmGetDownloadURL.defaultExpectation.paramPtrs.s2 = &s2
-	mmGetDownloadURL.defaultExpectation.expectationOrigins.originS2 = minimock.CallerInfo(1)
+	mmGetDownloadURL.defaultExpectation.paramPtrs.namespaceID = &namespaceID
+	mmGetDownloadURL.defaultExpectation.expectationOrigins.originNamespaceID = minimock.CallerInfo(1)
 
 	return mmGetDownloadURL
 }
 
-// ExpectI1Param5 sets up expected param i1 for Service.GetDownloadURL
-func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectI1Param5(i1 int32) *mServiceMockGetDownloadURL {
+// ExpectUrlExpireDaysParam5 sets up expected param urlExpireDays for Service.GetDownloadURL
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectUrlExpireDaysParam5(urlExpireDays int32) *mServiceMockGetDownloadURL {
 	if mmGetDownloadURL.mock.funcGetDownloadURL != nil {
 		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Set")
 	}
@@ -6665,14 +6671,14 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectI1Param5(i1 int32) *mS
 	if mmGetDownloadURL.defaultExpectation.paramPtrs == nil {
 		mmGetDownloadURL.defaultExpectation.paramPtrs = &ServiceMockGetDownloadURLParamPtrs{}
 	}
-	mmGetDownloadURL.defaultExpectation.paramPtrs.i1 = &i1
-	mmGetDownloadURL.defaultExpectation.expectationOrigins.originI1 = minimock.CallerInfo(1)
+	mmGetDownloadURL.defaultExpectation.paramPtrs.urlExpireDays = &urlExpireDays
+	mmGetDownloadURL.defaultExpectation.expectationOrigins.originUrlExpireDays = minimock.CallerInfo(1)
 
 	return mmGetDownloadURL
 }
 
-// ExpectS3Param6 sets up expected param s3 for Service.GetDownloadURL
-func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectS3Param6(s3 string) *mServiceMockGetDownloadURL {
+// ExpectDownloadFilenameParam6 sets up expected param downloadFilename for Service.GetDownloadURL
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectDownloadFilenameParam6(downloadFilename string) *mServiceMockGetDownloadURL {
 	if mmGetDownloadURL.mock.funcGetDownloadURL != nil {
 		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Set")
 	}
@@ -6688,14 +6694,60 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectS3Param6(s3 string) *m
 	if mmGetDownloadURL.defaultExpectation.paramPtrs == nil {
 		mmGetDownloadURL.defaultExpectation.paramPtrs = &ServiceMockGetDownloadURLParamPtrs{}
 	}
-	mmGetDownloadURL.defaultExpectation.paramPtrs.s3 = &s3
-	mmGetDownloadURL.defaultExpectation.expectationOrigins.originS3 = minimock.CallerInfo(1)
+	mmGetDownloadURL.defaultExpectation.paramPtrs.downloadFilename = &downloadFilename
+	mmGetDownloadURL.defaultExpectation.expectationOrigins.originDownloadFilename = minimock.CallerInfo(1)
+
+	return mmGetDownloadURL
+}
+
+// ExpectFormatParam7 sets up expected param format for Service.GetDownloadURL
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectFormatParam7(format string) *mServiceMockGetDownloadURL {
+	if mmGetDownloadURL.mock.funcGetDownloadURL != nil {
+		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Set")
+	}
+
+	if mmGetDownloadURL.defaultExpectation == nil {
+		mmGetDownloadURL.defaultExpectation = &ServiceMockGetDownloadURLExpectation{}
+	}
+
+	if mmGetDownloadURL.defaultExpectation.params != nil {
+		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Expect")
+	}
+
+	if mmGetDownloadURL.defaultExpectation.paramPtrs == nil {
+		mmGetDownloadURL.defaultExpectation.paramPtrs = &ServiceMockGetDownloadURLParamPtrs{}
+	}
+	mmGetDownloadURL.defaultExpectation.paramPtrs.format = &format
+	mmGetDownloadURL.defaultExpectation.expectationOrigins.originFormat = minimock.CallerInfo(1)
+
+	return mmGetDownloadURL
+}
+
+// ExpectAuthUIDParam8 sets up expected param authUID for Service.GetDownloadURL
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) ExpectAuthUIDParam8(authUID string) *mServiceMockGetDownloadURL {
+	if mmGetDownloadURL.mock.funcGetDownloadURL != nil {
+		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Set")
+	}
+
+	if mmGetDownloadURL.defaultExpectation == nil {
+		mmGetDownloadURL.defaultExpectation = &ServiceMockGetDownloadURLExpectation{}
+	}
+
+	if mmGetDownloadURL.defaultExpectation.params != nil {
+		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Expect")
+	}
+
+	if mmGetDownloadURL.defaultExpectation.paramPtrs == nil {
+		mmGetDownloadURL.defaultExpectation.paramPtrs = &ServiceMockGetDownloadURLParamPtrs{}
+	}
+	mmGetDownloadURL.defaultExpectation.paramPtrs.authUID = &authUID
+	mmGetDownloadURL.defaultExpectation.expectationOrigins.originAuthUID = minimock.CallerInfo(1)
 
 	return mmGetDownloadURL
 }
 
 // Inspect accepts an inspector function that has same arguments as the Service.GetDownloadURL
-func (mmGetDownloadURL *mServiceMockGetDownloadURL) Inspect(f func(ctx context.Context, s1 string, n1 types.NamespaceUIDType, s2 string, i1 int32, s3 string)) *mServiceMockGetDownloadURL {
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) Inspect(f func(ctx context.Context, objectID string, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilename string, format string, authUID string)) *mServiceMockGetDownloadURL {
 	if mmGetDownloadURL.mock.inspectFuncGetDownloadURL != nil {
 		mmGetDownloadURL.mock.t.Fatalf("Inspect function is already set for ServiceMock.GetDownloadURL")
 	}
@@ -6720,7 +6772,7 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) Return(gp1 *artifactpb.GetOb
 }
 
 // Set uses given function f to mock the Service.GetDownloadURL method
-func (mmGetDownloadURL *mServiceMockGetDownloadURL) Set(f func(ctx context.Context, s1 string, n1 types.NamespaceUIDType, s2 string, i1 int32, s3 string) (gp1 *artifactpb.GetObjectDownloadURLResponse, err error)) *ServiceMock {
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) Set(f func(ctx context.Context, objectID string, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilename string, format string, authUID string) (gp1 *artifactpb.GetObjectDownloadURLResponse, err error)) *ServiceMock {
 	if mmGetDownloadURL.defaultExpectation != nil {
 		mmGetDownloadURL.mock.t.Fatalf("Default expectation is already set for the Service.GetDownloadURL method")
 	}
@@ -6736,14 +6788,14 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) Set(f func(ctx context.Conte
 
 // When sets expectation for the Service.GetDownloadURL which will trigger the result defined by the following
 // Then helper
-func (mmGetDownloadURL *mServiceMockGetDownloadURL) When(ctx context.Context, s1 string, n1 types.NamespaceUIDType, s2 string, i1 int32, s3 string) *ServiceMockGetDownloadURLExpectation {
+func (mmGetDownloadURL *mServiceMockGetDownloadURL) When(ctx context.Context, objectID string, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilename string, format string, authUID string) *ServiceMockGetDownloadURLExpectation {
 	if mmGetDownloadURL.mock.funcGetDownloadURL != nil {
 		mmGetDownloadURL.mock.t.Fatalf("ServiceMock.GetDownloadURL mock is already set by Set")
 	}
 
 	expectation := &ServiceMockGetDownloadURLExpectation{
 		mock:               mmGetDownloadURL.mock,
-		params:             &ServiceMockGetDownloadURLParams{ctx, s1, n1, s2, i1, s3},
+		params:             &ServiceMockGetDownloadURLParams{ctx, objectID, namespaceUID, namespaceID, urlExpireDays, downloadFilename, format, authUID},
 		expectationOrigins: ServiceMockGetDownloadURLExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmGetDownloadURL.expectations = append(mmGetDownloadURL.expectations, expectation)
@@ -6778,17 +6830,17 @@ func (mmGetDownloadURL *mServiceMockGetDownloadURL) invocationsDone() bool {
 }
 
 // GetDownloadURL implements mm_service.Service
-func (mmGetDownloadURL *ServiceMock) GetDownloadURL(ctx context.Context, s1 string, n1 types.NamespaceUIDType, s2 string, i1 int32, s3 string) (gp1 *artifactpb.GetObjectDownloadURLResponse, err error) {
+func (mmGetDownloadURL *ServiceMock) GetDownloadURL(ctx context.Context, objectID string, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilename string, format string, authUID string) (gp1 *artifactpb.GetObjectDownloadURLResponse, err error) {
 	mm_atomic.AddUint64(&mmGetDownloadURL.beforeGetDownloadURLCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetDownloadURL.afterGetDownloadURLCounter, 1)
 
 	mmGetDownloadURL.t.Helper()
 
 	if mmGetDownloadURL.inspectFuncGetDownloadURL != nil {
-		mmGetDownloadURL.inspectFuncGetDownloadURL(ctx, s1, n1, s2, i1, s3)
+		mmGetDownloadURL.inspectFuncGetDownloadURL(ctx, objectID, namespaceUID, namespaceID, urlExpireDays, downloadFilename, format, authUID)
 	}
 
-	mm_params := ServiceMockGetDownloadURLParams{ctx, s1, n1, s2, i1, s3}
+	mm_params := ServiceMockGetDownloadURLParams{ctx, objectID, namespaceUID, namespaceID, urlExpireDays, downloadFilename, format, authUID}
 
 	// Record call args
 	mmGetDownloadURL.GetDownloadURLMock.mutex.Lock()
@@ -6807,7 +6859,7 @@ func (mmGetDownloadURL *ServiceMock) GetDownloadURL(ctx context.Context, s1 stri
 		mm_want := mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.params
 		mm_want_ptrs := mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.paramPtrs
 
-		mm_got := ServiceMockGetDownloadURLParams{ctx, s1, n1, s2, i1, s3}
+		mm_got := ServiceMockGetDownloadURLParams{ctx, objectID, namespaceUID, namespaceID, urlExpireDays, downloadFilename, format, authUID}
 
 		if mm_want_ptrs != nil {
 
@@ -6816,29 +6868,39 @@ func (mmGetDownloadURL *ServiceMock) GetDownloadURL(ctx context.Context, s1 stri
 					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.s1 != nil && !minimock.Equal(*mm_want_ptrs.s1, mm_got.s1) {
-				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter s1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originS1, *mm_want_ptrs.s1, mm_got.s1, minimock.Diff(*mm_want_ptrs.s1, mm_got.s1))
+			if mm_want_ptrs.objectID != nil && !minimock.Equal(*mm_want_ptrs.objectID, mm_got.objectID) {
+				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter objectID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originObjectID, *mm_want_ptrs.objectID, mm_got.objectID, minimock.Diff(*mm_want_ptrs.objectID, mm_got.objectID))
 			}
 
-			if mm_want_ptrs.n1 != nil && !minimock.Equal(*mm_want_ptrs.n1, mm_got.n1) {
-				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter n1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originN1, *mm_want_ptrs.n1, mm_got.n1, minimock.Diff(*mm_want_ptrs.n1, mm_got.n1))
+			if mm_want_ptrs.namespaceUID != nil && !minimock.Equal(*mm_want_ptrs.namespaceUID, mm_got.namespaceUID) {
+				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter namespaceUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originNamespaceUID, *mm_want_ptrs.namespaceUID, mm_got.namespaceUID, minimock.Diff(*mm_want_ptrs.namespaceUID, mm_got.namespaceUID))
 			}
 
-			if mm_want_ptrs.s2 != nil && !minimock.Equal(*mm_want_ptrs.s2, mm_got.s2) {
-				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter s2, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originS2, *mm_want_ptrs.s2, mm_got.s2, minimock.Diff(*mm_want_ptrs.s2, mm_got.s2))
+			if mm_want_ptrs.namespaceID != nil && !minimock.Equal(*mm_want_ptrs.namespaceID, mm_got.namespaceID) {
+				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter namespaceID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originNamespaceID, *mm_want_ptrs.namespaceID, mm_got.namespaceID, minimock.Diff(*mm_want_ptrs.namespaceID, mm_got.namespaceID))
 			}
 
-			if mm_want_ptrs.i1 != nil && !minimock.Equal(*mm_want_ptrs.i1, mm_got.i1) {
-				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter i1, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originI1, *mm_want_ptrs.i1, mm_got.i1, minimock.Diff(*mm_want_ptrs.i1, mm_got.i1))
+			if mm_want_ptrs.urlExpireDays != nil && !minimock.Equal(*mm_want_ptrs.urlExpireDays, mm_got.urlExpireDays) {
+				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter urlExpireDays, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originUrlExpireDays, *mm_want_ptrs.urlExpireDays, mm_got.urlExpireDays, minimock.Diff(*mm_want_ptrs.urlExpireDays, mm_got.urlExpireDays))
 			}
 
-			if mm_want_ptrs.s3 != nil && !minimock.Equal(*mm_want_ptrs.s3, mm_got.s3) {
-				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter s3, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originS3, *mm_want_ptrs.s3, mm_got.s3, minimock.Diff(*mm_want_ptrs.s3, mm_got.s3))
+			if mm_want_ptrs.downloadFilename != nil && !minimock.Equal(*mm_want_ptrs.downloadFilename, mm_got.downloadFilename) {
+				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter downloadFilename, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originDownloadFilename, *mm_want_ptrs.downloadFilename, mm_got.downloadFilename, minimock.Diff(*mm_want_ptrs.downloadFilename, mm_got.downloadFilename))
+			}
+
+			if mm_want_ptrs.format != nil && !minimock.Equal(*mm_want_ptrs.format, mm_got.format) {
+				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter format, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originFormat, *mm_want_ptrs.format, mm_got.format, minimock.Diff(*mm_want_ptrs.format, mm_got.format))
+			}
+
+			if mm_want_ptrs.authUID != nil && !minimock.Equal(*mm_want_ptrs.authUID, mm_got.authUID) {
+				mmGetDownloadURL.t.Errorf("ServiceMock.GetDownloadURL got unexpected parameter authUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetDownloadURL.GetDownloadURLMock.defaultExpectation.expectationOrigins.originAuthUID, *mm_want_ptrs.authUID, mm_got.authUID, minimock.Diff(*mm_want_ptrs.authUID, mm_got.authUID))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -6853,9 +6915,9 @@ func (mmGetDownloadURL *ServiceMock) GetDownloadURL(ctx context.Context, s1 stri
 		return (*mm_results).gp1, (*mm_results).err
 	}
 	if mmGetDownloadURL.funcGetDownloadURL != nil {
-		return mmGetDownloadURL.funcGetDownloadURL(ctx, s1, n1, s2, i1, s3)
+		return mmGetDownloadURL.funcGetDownloadURL(ctx, objectID, namespaceUID, namespaceID, urlExpireDays, downloadFilename, format, authUID)
 	}
-	mmGetDownloadURL.t.Fatalf("Unexpected call to ServiceMock.GetDownloadURL. %v %v %v %v %v %v", ctx, s1, n1, s2, i1, s3)
+	mmGetDownloadURL.t.Fatalf("Unexpected call to ServiceMock.GetDownloadURL. %v %v %v %v %v %v %v %v", ctx, objectID, namespaceUID, namespaceID, urlExpireDays, downloadFilename, format, authUID)
 	return
 }
 
