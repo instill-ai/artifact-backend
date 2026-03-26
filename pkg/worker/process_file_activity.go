@@ -1123,18 +1123,33 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				convertedFilename,
 			)
 
-			// Use server-side copy to avoid loading the file into memory.
-			// This is critical for large files (e.g. 500MB+ videos) that would
-			// otherwise OOM the worker.
-			srcBucket := object.BucketFromDestination(param.Destination)
-			dstBucket := config.Config.Minio.BucketName
-			err := w.repository.GetMinIOStorage().CopyObject(authCtx, srcBucket, param.Destination, dstBucket, convertedDestination)
-			if err != nil {
-				return nil, activityErrorWithCauseFlat(
-					fmt.Sprintf("Failed to copy original file to converted-file folder: %s", errorsx.MessageOrErr(err)),
-					standardizeFileTypeActivityError,
-					err,
-				)
+			isVideoType := convertedFileTypeEnum == artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_VIDEO
+
+			if isVideoType {
+				// Video files require ffmpeg remux to guarantee Gemini API compatibility.
+				// Some MP4/MOV files have audio chunks before video frames, which Gemini
+				// rejects with "audio chunks are stored before the video frames".
+				// The remux reorders streams (video first) and moves moov atom to front.
+				err := w.remuxVideoToConvertedFolder(authCtx, param.Bucket, param.Destination, config.Config.Minio.BucketName, convertedDestination)
+				if err != nil {
+					return nil, activityErrorWithCauseFlat(
+						fmt.Sprintf("Failed to remux video to converted-file folder: %s", errorsx.MessageOrErr(err)),
+						standardizeFileTypeActivityError,
+						err,
+					)
+				}
+			} else {
+				// Non-video AI-native files: server-side copy to avoid loading into memory.
+				srcBucket := object.BucketFromDestination(param.Destination)
+				dstBucket := config.Config.Minio.BucketName
+				err := w.repository.GetMinIOStorage().CopyObject(authCtx, srcBucket, param.Destination, dstBucket, convertedDestination)
+				if err != nil {
+					return nil, activityErrorWithCauseFlat(
+						fmt.Sprintf("Failed to copy original file to converted-file folder: %s", errorsx.MessageOrErr(err)),
+						standardizeFileTypeActivityError,
+						err,
+					)
+				}
 			}
 
 			// Create converted_file DB record with actual destination (after successful upload)
@@ -1148,13 +1163,13 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				PositionData:     nil,
 			}
 
-			_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
-			if err != nil {
+			_, dbErr := w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
+			if dbErr != nil {
 				_ = w.repository.GetMinIOStorage().DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
 				return nil, activityErrorWithCauseFlat(
-					fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
+					fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(dbErr)),
 					standardizeFileTypeActivityError,
-					err,
+					dbErr,
 				)
 			}
 
@@ -2468,6 +2483,81 @@ func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTa
 
 // probeMediaDuration writes content to a temp file and runs ffprobe to extract
 // the media duration in seconds.
+// remuxVideoToConvertedFolder downloads a video from storage, runs ffmpeg to
+// remux it with Gemini API-compliant stream ordering (video first, moov atom
+// at front), and uploads the result to the converted-file destination.
+// Falls back to audio re-encoding if the fast stream-copy remux fails.
+func (w *Worker) remuxVideoToConvertedFolder(ctx context.Context, srcBucket, srcPath, dstBucket, dstPath string) error {
+	content, err := w.repository.GetMinIOStorage().GetFile(ctx, srcBucket, srcPath)
+	if err != nil {
+		return fmt.Errorf("download video for remux: %w", err)
+	}
+	inputSize := len(content)
+
+	tmpIn, err := os.CreateTemp("", "video-remux-in-*.mp4")
+	if err != nil {
+		return fmt.Errorf("create temp input: %w", err)
+	}
+	defer os.Remove(tmpIn.Name())
+
+	if _, err := tmpIn.Write(content); err != nil {
+		tmpIn.Close()
+		return fmt.Errorf("write temp input: %w", err)
+	}
+	tmpIn.Close()
+
+	tmpOut, err := os.CreateTemp("", "video-remux-out-*.mp4")
+	if err != nil {
+		return fmt.Errorf("create temp output: %w", err)
+	}
+	tmpOutPath := tmpOut.Name()
+	tmpOut.Close()
+	defer os.Remove(tmpOutPath)
+
+	// Fast path: stream-copy with video-first ordering and faststart.
+	args := []string{
+		"-i", tmpIn.Name(),
+		"-map", "0:v:0", "-map", "0:a?",
+		"-c", "copy",
+		"-movflags", "+faststart",
+		"-avoid_negative_ts", "make_zero",
+		"-y", tmpOutPath,
+	}
+	if out, err := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); err != nil {
+		w.log.Warn("remuxVideoToConvertedFolder: fast remux failed, falling back to audio re-encode",
+			zap.Error(err), zap.String("ffmpegOutput", string(out)))
+
+		// Slow path: re-encode audio to guarantee correct interleaving.
+		args = []string{
+			"-i", tmpIn.Name(),
+			"-map", "0:v:0", "-map", "0:a?",
+			"-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+			"-movflags", "+faststart",
+			"-y", tmpOutPath,
+		}
+		if out2, err2 := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); err2 != nil {
+			return fmt.Errorf("ffmpeg fallback re-encode failed: %w\noutput: %s", err2, string(out2))
+		}
+	}
+
+	remuxed, err := os.ReadFile(tmpOutPath)
+	if err != nil {
+		return fmt.Errorf("read remuxed output: %w", err)
+	}
+
+	b64 := base64.StdEncoding.EncodeToString(remuxed)
+	if err := w.repository.GetMinIOStorage().UploadBase64File(ctx, dstBucket, dstPath, b64, "video/mp4"); err != nil {
+		return fmt.Errorf("upload remuxed video: %w", err)
+	}
+
+	w.log.Info("remuxVideoToConvertedFolder: video remuxed and uploaded",
+		zap.Int("inputSize", inputSize),
+		zap.Int("outputSize", len(remuxed)),
+		zap.String("dstPath", dstPath))
+
+	return nil
+}
+
 func probeMediaDuration(content []byte) (float64, error) {
 	tmp, err := os.CreateTemp("", "media-probe-*.mp4")
 	if err != nil {

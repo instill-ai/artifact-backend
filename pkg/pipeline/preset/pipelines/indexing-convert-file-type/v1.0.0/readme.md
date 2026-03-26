@@ -14,20 +14,28 @@ This pipeline converts various file types into standardized formats for consiste
 
 ## Video Conversion: Two-Pass Gemini Compliance
 
-MP4-to-MP4 conversions use a two-pass strategy to guarantee the output file is
-accepted by the Gemini API, which rejects files where audio data appears before
-video data.
+Video standardization ensures files are accepted by the Gemini API, which
+rejects MP4/MOV containers where audio data appears before video data.
 
-1. **Fast path** — `ffmpeg -c copy -avoid_negative_ts make_zero -movflags +faststart`.
-   Stream-copies all tracks (no re-encoding), shifts timestamps non-negative,
-   and moves the moov atom to the front. Completes in ~1 min for 500 MB files.
-2. **Compliance check** — `ffprobe` inspects the first 20 packets for negative
-   video DTS or audio byte offsets preceding video byte offsets.
-3. **Slow path (fallback)** — If non-compliant, re-runs with `-c:v copy -c:a aac -b:a 192k`
-   to re-encode audio and guarantee correct interleaving.
+### In `artifact-backend` (StandardizeFileTypeActivity)
 
-For non-MP4-to-MP4 conversions (e.g., MKV → MP4), the pipeline uses explicit
-stream mapping (`-map 0:v:0 -map 0:a?`) with `+faststart`.
+AI-native video formats (MP4, MOV, etc.) are remuxed directly by the worker
+via ffmpeg, bypassing the preset pipeline to avoid memory overhead from
+base64 transport:
+
+1. **Fast path** — `ffmpeg -map 0:v:0 -map 0:a? -c copy -movflags +faststart -avoid_negative_ts make_zero`.
+   Stream-copies all tracks (no re-encoding), ensures video stream is first,
+   shifts timestamps non-negative, and moves the moov atom to the front.
+2. **Slow path (fallback)** — If stream copy fails, re-runs with
+   `-c:v copy -c:a aac -b:a 192k` to re-encode audio while keeping video
+   stream-copied, guaranteeing correct interleaving.
+
+### In `pipeline-backend` (convertVideo)
+
+Non-AI-native video formats (MKV, etc.) are converted to MP4 via the preset
+pipeline. MP4 inputs also go through ffmpeg normalization with the same
+two-pass strategy (fast remux first, audio re-encode fallback). All conversions
+use `-map 0:v:0 -map 0:a? -movflags +faststart`.
 
 ## Long Media Chunking (Upstream Workflow)
 
