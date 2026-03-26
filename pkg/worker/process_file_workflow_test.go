@@ -276,10 +276,9 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 	// Optional because the workflow may fail before reaching this call path.
 	mockRepository.GetConvertedFileByFileUIDAndTypeMock.Optional().Return(nil, fmt.Errorf("not found"))
 
-	// Mock for StandardizeFileTypeActivity - mock MinIO storage for file retrieval and saving
+	// Mock for StandardizeFileTypeActivity - server-side copy for AI-native files
 	mockStorage := mock.NewStorageMock(mc)
-	mockStorage.GetFileMock.Return([]byte("test file content"), nil)
-	mockStorage.SaveConvertedFileMock.Return("converted/test.pdf", nil)
+	mockStorage.CopyObjectMock.Return(nil)
 	mockStorage.ListTextChunksByFileUIDMock.Optional().Return([]string{}, nil)
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	// Mock for creating converted file record

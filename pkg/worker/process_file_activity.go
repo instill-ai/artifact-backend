@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -1110,29 +1111,24 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				}
 			}
 
-			// Fetch original file content from MinIO blob location
-			fileContent, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
-			if err != nil {
-				return nil, activityErrorWithCauseFlat(
-					fmt.Sprintf("Failed to retrieve original file from storage: %s", errorsx.MessageOrErr(err)),
-					standardizeFileTypeActivityError,
-					err,
-				)
-			}
-
 			// Generate UUID for the converted file
 			convertedFileUID := types.FileUIDType(uuid.Must(uuid.NewV4()))
 
-			// Upload to MinIO FIRST (before creating DB record)
-			// This makes the activity idempotent - retries will generate new UUIDs and upload new files
-			convertedDestination, err := w.repository.GetMinIOStorage().SaveConvertedFile(
-				authCtx,
-				param.KBUID,
-				param.FileUID,
-				convertedFileUID,
-				fileExtension,
-				fileContent,
+			// Build the converted-file destination path (same logic as SaveConvertedFile)
+			convertedFilename := convertedFileUID.String() + "." + fileExtension
+			convertedDestination := filepath.Join(
+				"kb-"+param.KBUID.String(),
+				"file-"+param.FileUID.String(),
+				object.ConvertedFileDir,
+				convertedFilename,
 			)
+
+			// Use server-side copy to avoid loading the file into memory.
+			// This is critical for large files (e.g. 500MB+ videos) that would
+			// otherwise OOM the worker.
+			srcBucket := object.BucketFromDestination(param.Destination)
+			dstBucket := config.Config.Minio.BucketName
+			err := w.repository.GetMinIOStorage().CopyObject(authCtx, srcBucket, param.Destination, dstBucket, convertedDestination)
 			if err != nil {
 				return nil, activityErrorWithCauseFlat(
 					fmt.Sprintf("Failed to copy original file to converted-file folder: %s", errorsx.MessageOrErr(err)),
@@ -1148,13 +1144,12 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				FileUID:          param.FileUID,
 				ContentType:      contentType,
 				ConvertedType:    convertedFileTypeEnum.String(),
-				StoragePath:      convertedDestination, // Use actual storage path, not placeholder
+				StoragePath:      convertedDestination,
 				PositionData:     nil,
 			}
 
 			_, err = w.repository.CreateConvertedFileWithDestination(authCtx, convertedFileRecord)
 			if err != nil {
-				// Compensate: delete the uploaded MinIO file
 				_ = w.repository.GetMinIOStorage().DeleteFile(authCtx, config.Config.Minio.BucketName, convertedDestination)
 				return nil, activityErrorWithCauseFlat(
 					fmt.Sprintf("Failed to create converted_file record: %s", errorsx.MessageOrErr(err)),
@@ -1169,7 +1164,7 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				zap.String("convertedFileUID", convertedFileUID.String()),
 				zap.String("convertedDestination", convertedDestination))
 
-			isTextBased := ClassifyDocumentTextBased(param.FileType, fileContent)
+			isTextBased := ClassifyDocumentTextBased(param.FileType, nil)
 			w.classifyAndUpdateFile(ctx, param.FileUID, isTextBased)
 
 			return &StandardizeFileTypeActivityResult{
