@@ -41,6 +41,8 @@ RUN --mount=type=bind,target=. \
 
 FROM golang:${GOLANG_VERSION}
 
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 USER nobody:nogroup
 
 ARG SERVICE_NAME SERVICE_VERSION
