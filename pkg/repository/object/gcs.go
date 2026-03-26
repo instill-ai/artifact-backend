@@ -455,6 +455,74 @@ func (g *gcsStorage) generateSignedURLWithParams(ctx context.Context, bucketName
 
 
 
+// GetFileReader returns a streaming reader for a GCS object and its size.
+func (g *gcsStorage) GetFileReader(ctx context.Context, bucket string, filePath string) (io.ReadCloser, int64, error) {
+	if g.client == nil {
+		return nil, 0, fmt.Errorf("GCS client not initialized")
+	}
+	if bucket == "" {
+		bucket = g.bucket
+	}
+
+	obj := g.client.Bucket(bucket).Object(filePath)
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("getting GCS object attrs: %w", err)
+	}
+
+	reader, err := obj.NewReader(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("opening GCS object reader: %w", err)
+	}
+
+	return reader, attrs.Size, nil
+}
+
+// UploadFromReader streams data from a reader to GCS without buffering
+// the entire content in memory. Uses 32 MB resumable-upload chunks.
+func (g *gcsStorage) UploadFromReader(ctx context.Context, bucket string, filePath string, reader io.Reader, size int64, mimeType string) error {
+	if g.client == nil {
+		return fmt.Errorf("GCS client not initialized")
+	}
+	if bucket == "" {
+		bucket = g.bucket
+	}
+
+	sizeMB := size / (1024 * 1024)
+	timeout := 15*time.Minute + time.Duration(sizeMB)*2*time.Second
+	uploadCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	g.logger.Info("Starting streaming GCS upload",
+		zap.String("bucket", bucket),
+		zap.String("path", filePath),
+		zap.Int64("sizeMB", sizeMB),
+		zap.Duration("timeout", timeout))
+
+	obj := g.client.Bucket(bucket).Object(filePath)
+	writer := obj.NewWriter(uploadCtx)
+	writer.ContentType = mimeType
+	writer.ChunkSize = 32 * 1024 * 1024
+	writer.Metadata = map[string]string{
+		"upload_time": time.Now().Format(time.RFC3339),
+		"source":      "artifact-backend",
+	}
+
+	if _, err := io.Copy(writer, reader); err != nil {
+		writer.Close()
+		return fmt.Errorf("streaming to GCS: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("finalizing GCS streaming upload: %w", err)
+	}
+
+	g.logger.Info("Streaming GCS upload complete",
+		zap.String("bucket", bucket),
+		zap.String("path", filePath))
+
+	return nil
+}
+
 // CopyObject copies an object from one location to another in GCS.
 func (g *gcsStorage) CopyObject(ctx context.Context, srcBucket, srcPath, dstBucket, dstPath string) error {
 	src := g.client.Bucket(srcBucket).Object(srcPath)

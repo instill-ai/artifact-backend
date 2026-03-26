@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -399,6 +400,38 @@ func BucketFromDestination(destination string) string {
 
 	// All other paths (kb-{uuid}/..., legacy paths) use the artifact bucket
 	return config.Config.Minio.BucketName
+}
+
+// GetFileReader returns a streaming reader for a MinIO object and its size.
+func (m *minioStorage) GetFileReader(ctx context.Context, bucketName string, objectName string) (io.ReadCloser, int64, error) {
+	opts := minio.GetObjectOptions{}
+	opts.Set(miniox.MinIOHeaderUserUID, m.authenticatedUser(ctx))
+
+	object, err := m.client.GetObject(ctx, bucketName, objectName, opts)
+	if err != nil {
+		return nil, 0, fmt.Errorf("opening MinIO object stream: %w", err)
+	}
+
+	info, err := object.Stat()
+	if err != nil {
+		object.Close()
+		return nil, 0, fmt.Errorf("stat MinIO object: %w", err)
+	}
+
+	return object, info.Size, nil
+}
+
+// UploadFromReader streams data from a reader to MinIO without buffering
+// the entire content in memory.
+func (m *minioStorage) UploadFromReader(ctx context.Context, bucket string, filePathName string, reader io.Reader, size int64, fileMimeType string) error {
+	_, err := m.client.PutObject(ctx, bucket, filePathName, reader, size, minio.PutObjectOptions{
+		ContentType:  fileMimeType,
+		UserMetadata: map[string]string{miniox.MinIOHeaderUserUID: m.authenticatedUser(ctx)},
+	})
+	if err != nil {
+		return fmt.Errorf("streaming upload to MinIO: %w", err)
+	}
+	return nil
 }
 
 // GetBucket returns the default MinIO bucket name

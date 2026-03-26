@@ -3,6 +3,7 @@ package object
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"time"
 
@@ -57,4 +58,15 @@ type Storage interface {
 
 	// UploadFile uploads raw bytes directly without base64 encoding overhead.
 	UploadFile(ctx context.Context, bucket string, filePath string, content []byte, fileMimeType string) error
+
+	// GetFileReader returns a streaming reader for a file and its size.
+	// Callers must close the returned ReadCloser when done.
+	// This avoids loading entire files into memory for large-file operations.
+	GetFileReader(ctx context.Context, bucket string, filePath string) (io.ReadCloser, int64, error)
+
+	// UploadFromReader streams data from a reader to storage without buffering
+	// the entire content in memory. The size parameter must reflect the total
+	// number of bytes that will be read; pass -1 if unknown (not all backends
+	// support unknown size).
+	UploadFromReader(ctx context.Context, bucket string, filePath string, reader io.Reader, size int64, fileMimeType string) error
 }
