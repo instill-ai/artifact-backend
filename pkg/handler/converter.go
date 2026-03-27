@@ -143,6 +143,8 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 		file.Object = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
 	}
 
+	file.ContentSha256 = kbf.ContentSHA256
+
 	// Note: TotalChunks and TotalTokens are computed aggregates, not stored directly in the file model
 	// These would need to be fetched separately if needed
 

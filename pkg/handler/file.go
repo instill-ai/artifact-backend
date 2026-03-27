@@ -673,6 +673,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			ConvertingPipeline: res.ConvertingPipeline(),
 			Tags:               res.Tags,
 			Collections:        extractCollectionIDs(res.Tags),
+			ContentSha256:      res.ContentSHA256,
 		},
 	}, nil
 }
@@ -990,6 +991,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			Tags:               []string(kbFile.Tags),
 			Collections:        extractCollectionIDs(kbFile.Tags),
 			IsTextBased:        kbFile.IsTextBased,
+			ContentSha256:      kbFile.ContentSHA256,
 		}
 
 		// Include status message (error or success message)
