@@ -52,7 +52,7 @@ type KnowledgeBase interface {
 	// Aliases preserve old URLs when display_name is renamed
 	GetKnowledgeBaseByIDOrAlias(ctx context.Context, ownerUID types.OwnerUIDType, id string) (*KnowledgeBaseModel, error)
 	GetKnowledgeBaseByID(ctx context.Context, kbID string) (*KnowledgeBaseModel, error)
-	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error
+	IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int64) error
 	GetKnowledgeBasesByUIDs(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseModel, error)
 	// GetKnowledgeBasesByUIDsWithConfig retrieves multiple KBs with their system configs
 	GetKnowledgeBasesByUIDsWithConfig(ctx context.Context, kbUIDs []types.KBUIDType) ([]KnowledgeBaseWithConfig, error)
@@ -906,7 +906,7 @@ func (r *repository) ListAllKnowledgeBasesAdmin(ctx context.Context) ([]Knowledg
 }
 
 // IncreaseKnowledgeBaseUsage increments the usage count of a KnowledgeBaseModel record by a specified amount.
-func (r *repository) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) error {
+func (r *repository) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int64) error {
 	if tx == nil {
 		tx = r.db.WithContext(ctx)
 	}

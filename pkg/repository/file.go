@@ -494,11 +494,7 @@ func (r *repository) CreateFile(ctx context.Context, file FileModel, kbUID types
 			return fmt.Errorf("creating file-kb association: %w", err)
 		}
 
-		// Increase knowledge base usage in same transaction
-		// This prevents race conditions and makes the operation atomic with file creation
-		where := fmt.Sprintf("%v = ?", KnowledgeBaseColumn.UID)
-		expr := fmt.Sprintf("%v + ?", KnowledgeBaseColumn.Usage)
-		if err := tx.Model(&KnowledgeBaseModel{}).Where(where, kbUID.String()).Update(KnowledgeBaseColumn.Usage, gorm.Expr(expr, int(file.Size))).Error; err != nil {
+		if err := r.IncreaseKnowledgeBaseUsage(ctx, tx, kbUID.String(), file.Size); err != nil {
 			return fmt.Errorf("increasing knowledge base usage: %w", err)
 		}
 
@@ -1381,7 +1377,7 @@ func (r *repository) DeleteFileAndDecreaseUsage(ctx context.Context, fileUID typ
 
 		// Decrease usage for all associated KBs
 		for _, assoc := range associations {
-			err = r.IncreaseKnowledgeBaseUsage(ctx, tx, assoc.KBUID.String(), int(-file[0].Size))
+			err = r.IncreaseKnowledgeBaseUsage(ctx, tx, assoc.KBUID.String(), -file[0].Size)
 			if err != nil {
 				return err
 			}

@@ -703,9 +703,9 @@ type RepositoryMock struct {
 	beforeHardDeleteTextChunksByKBUIDCounter uint64
 	HardDeleteTextChunksByKBUIDMock          mRepositoryMockHardDeleteTextChunksByKBUID
 
-	funcIncreaseKnowledgeBaseUsage          func(ctx context.Context, tx *gorm.DB, kbUID string, amount int) (err error)
+	funcIncreaseKnowledgeBaseUsage          func(ctx context.Context, tx *gorm.DB, kbUID string, amount int64) (err error)
 	funcIncreaseKnowledgeBaseUsageOrigin    string
-	inspectFuncIncreaseKnowledgeBaseUsage   func(ctx context.Context, tx *gorm.DB, kbUID string, amount int)
+	inspectFuncIncreaseKnowledgeBaseUsage   func(ctx context.Context, tx *gorm.DB, kbUID string, amount int64)
 	afterIncreaseKnowledgeBaseUsageCounter  uint64
 	beforeIncreaseKnowledgeBaseUsageCounter uint64
 	IncreaseKnowledgeBaseUsageMock          mRepositoryMockIncreaseKnowledgeBaseUsage
@@ -35126,7 +35126,7 @@ type RepositoryMockIncreaseKnowledgeBaseUsageParams struct {
 	ctx    context.Context
 	tx     *gorm.DB
 	kbUID  string
-	amount int
+	amount int64
 }
 
 // RepositoryMockIncreaseKnowledgeBaseUsageParamPtrs contains pointers to parameters of the Repository.IncreaseKnowledgeBaseUsage
@@ -35134,7 +35134,7 @@ type RepositoryMockIncreaseKnowledgeBaseUsageParamPtrs struct {
 	ctx    *context.Context
 	tx     **gorm.DB
 	kbUID  *string
-	amount *int
+	amount *int64
 }
 
 // RepositoryMockIncreaseKnowledgeBaseUsageResults contains results of the Repository.IncreaseKnowledgeBaseUsage
@@ -35162,7 +35162,7 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) O
 }
 
 // Expect sets up expected params for Repository.IncreaseKnowledgeBaseUsage
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) Expect(ctx context.Context, tx *gorm.DB, kbUID string, amount int) *mRepositoryMockIncreaseKnowledgeBaseUsage {
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) Expect(ctx context.Context, tx *gorm.DB, kbUID string, amount int64) *mRepositoryMockIncreaseKnowledgeBaseUsage {
 	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
 	}
@@ -35256,7 +35256,7 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) E
 }
 
 // ExpectAmountParam4 sets up expected param amount for Repository.IncreaseKnowledgeBaseUsage
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) ExpectAmountParam4(amount int) *mRepositoryMockIncreaseKnowledgeBaseUsage {
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) ExpectAmountParam4(amount int64) *mRepositoryMockIncreaseKnowledgeBaseUsage {
 	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
 	}
@@ -35279,7 +35279,7 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) E
 }
 
 // Inspect accepts an inspector function that has same arguments as the Repository.IncreaseKnowledgeBaseUsage
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) Inspect(f func(ctx context.Context, tx *gorm.DB, kbUID string, amount int)) *mRepositoryMockIncreaseKnowledgeBaseUsage {
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) Inspect(f func(ctx context.Context, tx *gorm.DB, kbUID string, amount int64)) *mRepositoryMockIncreaseKnowledgeBaseUsage {
 	if mmIncreaseKnowledgeBaseUsage.mock.inspectFuncIncreaseKnowledgeBaseUsage != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Inspect function is already set for RepositoryMock.IncreaseKnowledgeBaseUsage")
 	}
@@ -35304,7 +35304,7 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) R
 }
 
 // Set uses given function f to mock the Repository.IncreaseKnowledgeBaseUsage method
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) Set(f func(ctx context.Context, tx *gorm.DB, kbUID string, amount int) (err error)) *RepositoryMock {
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) Set(f func(ctx context.Context, tx *gorm.DB, kbUID string, amount int64) (err error)) *RepositoryMock {
 	if mmIncreaseKnowledgeBaseUsage.defaultExpectation != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("Default expectation is already set for the Repository.IncreaseKnowledgeBaseUsage method")
 	}
@@ -35320,7 +35320,7 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) S
 
 // When sets expectation for the Repository.IncreaseKnowledgeBaseUsage which will trigger the result defined by the following
 // Then helper
-func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) When(ctx context.Context, tx *gorm.DB, kbUID string, amount int) *RepositoryMockIncreaseKnowledgeBaseUsageExpectation {
+func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) When(ctx context.Context, tx *gorm.DB, kbUID string, amount int64) *RepositoryMockIncreaseKnowledgeBaseUsageExpectation {
 	if mmIncreaseKnowledgeBaseUsage.mock.funcIncreaseKnowledgeBaseUsage != nil {
 		mmIncreaseKnowledgeBaseUsage.mock.t.Fatalf("RepositoryMock.IncreaseKnowledgeBaseUsage mock is already set by Set")
 	}
@@ -35362,7 +35362,7 @@ func (mmIncreaseKnowledgeBaseUsage *mRepositoryMockIncreaseKnowledgeBaseUsage) i
 }
 
 // IncreaseKnowledgeBaseUsage implements mm_repository.Repository
-func (mmIncreaseKnowledgeBaseUsage *RepositoryMock) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int) (err error) {
+func (mmIncreaseKnowledgeBaseUsage *RepositoryMock) IncreaseKnowledgeBaseUsage(ctx context.Context, tx *gorm.DB, kbUID string, amount int64) (err error) {
 	mm_atomic.AddUint64(&mmIncreaseKnowledgeBaseUsage.beforeIncreaseKnowledgeBaseUsageCounter, 1)
 	defer mm_atomic.AddUint64(&mmIncreaseKnowledgeBaseUsage.afterIncreaseKnowledgeBaseUsageCounter, 1)
 

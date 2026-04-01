@@ -898,7 +898,7 @@ func (w *Worker) reconcileKBFiles(ctx context.Context, productionKBUID, stagingK
 		reconciledFileUIDs = append(reconciledFileUIDs, createdFile.UID)
 
 		// Update KB usage
-		err = w.repository.IncreaseKnowledgeBaseUsage(ctx, nil, stagingKBUID.String(), int(stagingFile.Size))
+		err = w.repository.IncreaseKnowledgeBaseUsage(ctx, nil, stagingKBUID.String(), stagingFile.Size)
 		if err != nil {
 			w.log.Warn("Failed to increase staging KB usage during reconciliation",
 				zap.Error(err),
