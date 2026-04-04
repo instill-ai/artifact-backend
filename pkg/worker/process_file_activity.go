@@ -259,6 +259,12 @@ type DeleteOldConvertedFilesActivityParam struct {
 	// type is in this list.  Files with types not listed are preserved.
 	// When empty (default), ALL converted files are deleted.
 	OnlyTypes []artifactpb.ConvertedFileType
+	// ClearPatch, when true, also deletes patch.md from MinIO and removes the
+	// x-instill-patch flag from external_metadata. Set this during full
+	// reprocessing so stale patches are not re-applied to freshly generated
+	// content. Requires KBUID to be set.
+	ClearPatch bool
+	KBUID      types.KBUIDType
 }
 
 // CreateConvertedFileRecordActivityParam for creating a converted file DB record
@@ -328,6 +334,28 @@ type UpdateUsageMetadataActivityParam struct {
 func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *DeleteOldConvertedFilesActivityParam) error {
 	w.log.Info("DeleteOldConvertedFilesActivity: Checking for old converted files",
 		zap.String("fileUID", param.FileUID.String()))
+
+	if param.ClearPatch {
+		path := patchPath(param.KBUID, param.FileUID)
+		_ = w.repository.GetMinIOStorage().DeleteFile(ctx, config.Config.Minio.BucketName, path)
+
+		files, err := w.repository.GetFilesByFileUIDs(ctx, []types.FileUIDType{param.FileUID})
+		if err == nil && len(files) > 0 {
+			file := files[0]
+			em := file.ExternalMetadataUnmarshal
+			if em != nil && em.Fields != nil {
+				if _, ok := em.Fields["x-instill-patch"]; ok {
+					delete(em.Fields, "x-instill-patch")
+					if err := file.ExternalMetadataToJSON(); err == nil {
+						_, _ = w.repository.UpdateFile(ctx, param.FileUID.String(),
+							map[string]any{repository.FileColumn.ExternalMetadata: file.ExternalMetadata})
+					}
+				}
+			}
+		}
+		w.log.Info("DeleteOldConvertedFilesActivity: cleared patch.md and x-instill-patch flag",
+			zap.String("fileUID", param.FileUID.String()))
+	}
 
 	// Get ALL converted files for this file UID (content + summary + any others)
 	allConvertedFiles, err := w.repository.GetAllConvertedFilesByFileUID(ctx, param.FileUID)
@@ -743,6 +771,7 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 		w.log.Info("ChunkContentActivity: No page delimiters, splitting non-paginated content")
 
 		chunks := splitTextIntoChunks(param.Content, maxChunkChars, param.Type)
+		populateTimeRanges(chunks)
 
 		w.log.Info("ChunkContentActivity: Created chunks from non-paginated content",
 			zap.Int("contentLength", len(param.Content)),
@@ -873,6 +902,78 @@ func splitTextIntoChunks(content string, maxChars int, chunkType artifactpb.Chun
 	}
 
 	return chunks
+}
+
+// extractTimeRange scans text for [Audio:]/[Video:]/[Sound:] timestamp markers
+// and returns the first and last timestamps in milliseconds. Returns nil if no
+// timestamps are found. Uses the same inlineTimestampPattern defined in
+// chunked_conversion.go.
+func extractTimeRange(text string) *[2]uint64 {
+	matches := inlineTimestampPattern.FindAllStringSubmatch(text, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	var firstMs, lastMs uint64
+
+	for i, m := range matches {
+		ts := m[2] // first (or only) timestamp
+		sec := parseHHMMSS(ts)
+		if sec == 0 && !isZeroTimestamp(ts) {
+			sec = parseMMSS(ts)
+		}
+		ms := uint64(sec) * 1000
+
+		if i == 0 {
+			firstMs = ms
+		}
+		lastMs = ms
+
+		if m[3] != "" {
+			endSec := parseHHMMSS(m[3])
+			if endSec == 0 && !isZeroTimestamp(m[3]) {
+				endSec = parseMMSS(m[3])
+			}
+			endMs := uint64(endSec) * 1000
+			if endMs > lastMs {
+				lastMs = endMs
+			}
+		}
+	}
+
+	return &[2]uint64{firstMs, lastMs}
+}
+
+func isZeroTimestamp(ts string) bool {
+	for _, c := range ts {
+		if c != '0' && c != ':' {
+			return false
+		}
+	}
+	return true
+}
+
+func parseMMSS(ts string) int {
+	parts := strings.SplitN(ts, ":", 2)
+	if len(parts) != 2 {
+		return 0
+	}
+	m, _ := strconv.Atoi(parts[0])
+	s, _ := strconv.Atoi(parts[1])
+	return m*60 + s
+}
+
+// populateTimeRanges sets TimeRange on each chunk by scanning for timestamp
+// markers in the chunk text. Chunks without timestamps are left unchanged.
+func populateTimeRanges(chunks []types.Chunk) {
+	for i := range chunks {
+		if tr := extractTimeRange(chunks[i].Text); tr != nil {
+			if chunks[i].Reference == nil {
+				chunks[i].Reference = &types.ChunkReference{}
+			}
+			chunks[i].Reference.TimeRange = *tr
+		}
+	}
 }
 
 // DeleteOldTextChunksActivityParam for deleting old chunk DB records

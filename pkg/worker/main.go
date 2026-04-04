@@ -297,7 +297,7 @@ func batchProfile(ft artifactpb.File_Type) BatchProfile {
 	if isMediaFileType(ft) {
 		return BatchProfile{
 			// Time-range mode (primary for media)
-			SegmentDuration:   5 * time.Minute,
+			SegmentDuration:   2 * time.Minute,
 			DirectMaxDuration: 10 * time.Minute,
 
 			// Page-based fallback (used when duration is unavailable)

@@ -60,6 +60,10 @@ type ChunkReference struct {
 	// belongs to a document. Positions in this case are 1-indexed in order
 	// to align with the document visualization standards (e.g. page 4 of 4).
 	PageRange [2]uint32 `json:"PageRange,omitempty"`
+	// TimeRange contains the start and end timestamps (in milliseconds) of the
+	// text chunk within the original media file. Populated for audio/video
+	// content by parsing [Audio:]/[Video:]/[Sound:] markers from the chunk text.
+	TimeRange [2]uint64 `json:"TimeRange,omitempty"`
 }
 
 // Chunk represents a chunk of text extracted from a file.

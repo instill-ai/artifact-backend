@@ -255,7 +255,7 @@ func main() {
 	w.RegisterActivity(cw.GetFileMetadataActivity)                // Fetch file metadata from database
 	w.RegisterActivity(cw.FindTargetFileByNameActivity)           // Find target file for dual-processing coordination
 	w.RegisterActivity(cw.GetFileContentActivity)                 // Retrieve file binary content from MinIO
-	w.RegisterActivity(cw.DeleteOldConvertedFilesActivity)        // Remove previous conversion artifacts
+	w.RegisterActivity(cw.DeleteOldConvertedFilesActivity)        // Remove previous conversion artifacts (+ patch.md when ClearPatch is set)
 	w.RegisterActivity(cw.CreateConvertedFileRecordActivity)      // Create DB record for converted file
 	w.RegisterActivity(cw.UploadConvertedFileToMinIOActivity)     // Upload converted markdown to MinIO
 	w.RegisterActivity(cw.UpdateConvertedFileDestinationActivity) // Update MinIO destination in DB

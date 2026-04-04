@@ -331,12 +331,12 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			return handleFileError(fileUID, "get file metadata", err)
 		}
 
-		// Detect patch-only mode: file with x-instill-patch flag.
-		// The handler (ReprocessFile) sets status to PROCESSING before starting
-		// the workflow, so we accept both COMPLETED and PROCESSING here.
+		// Detect patch-only mode: file with x-instill-patch flag whose status
+		// is still COMPLETED. The patch-update handler keeps COMPLETED and sets
+		// the flag, whereas a full reprocess (ReprocessFile) sets status to
+		// PROCESSING — that distinction lets us tell the two apart.
 		patchOnly := hasPatchFlag(metadata.ExternalMetadata) &&
-			(startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED ||
-				startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING)
+			startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED
 		if patchOnly {
 			logger.Info("Patch-only reprocessing detected — will skip transcription/standardization",
 				"fileUID", fileUID.String())
@@ -721,16 +721,17 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 		}
 
-		// Step 2b: Clean up old converted files (for reprocessing)
+		// Step 2b: Clean up old converted files and stale patches (for reprocessing)
 		logger.Info("Cleaning up old converted files before standardization", "fileCount", len(filesToProcessFull))
 		for _, fm := range filesToProcessFull {
 			if err := workflow.ExecuteActivity(ctx, w.DeleteOldConvertedFilesActivity, &DeleteOldConvertedFilesActivityParam{
-				FileUID: fm.fileUID,
+				FileUID:    fm.fileUID,
+				ClearPatch: true,
+				KBUID:      param.KBUID,
 			}).Get(ctx, nil); err != nil {
 				logger.Error("Failed to cleanup old converted files before standardization",
 					"fileUID", fm.fileUID.String(),
 					"error", err)
-				// Don't fail the workflow - continue with standardization
 			}
 		}
 
@@ -1343,14 +1344,16 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 							if errors.As(err, &appErr) && appErr.Type() == "CacheExpired" {
 								return true, true
 							}
-							msg := err.Error()
-							if strings.Contains(msg, "RESOURCE_EXHAUSTED") || strings.Contains(msg, "429") ||
-								strings.Contains(msg, "transient error retries exhausted") ||
-								strings.Contains(msg, "DEADLINE_EXCEEDED") || strings.Contains(msg, "504") ||
-								strings.Contains(msg, "UNAVAILABLE") || strings.Contains(msg, "503") ||
-								strings.Contains(msg, "document has no pages") {
-								return false, true
-							}
+						msg := err.Error()
+						if strings.Contains(msg, "RESOURCE_EXHAUSTED") || strings.Contains(msg, "429") ||
+							strings.Contains(msg, "transient error retries exhausted") ||
+							strings.Contains(msg, "DEADLINE_EXCEEDED") || strings.Contains(msg, "504") ||
+							strings.Contains(msg, "UNAVAILABLE") || strings.Contains(msg, "503") ||
+							strings.Contains(msg, "document has no pages") ||
+							strings.Contains(msg, "i/o timeout") || strings.Contains(msg, "connection reset") ||
+							strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host") {
+							return false, true
+						}
 							return false, false
 						}
 

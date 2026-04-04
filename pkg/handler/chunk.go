@@ -97,20 +97,30 @@ func convertToProtoChunk(chunk repository.ChunkModel, namespaceID, kbID, fileID 
 		},
 	}
 
-	// Add page reference if available
-	if chunk.Reference != nil && chunk.Reference.PageRange[0] != 0 && chunk.Reference.PageRange[1] != 0 {
-		// We only extract one kind of reference for now. When more file
-		// types are supported, we'll need to inspect the reference object
-		// to build the response correctly.
-		pbChunk.Reference = &artifactpb.Chunk_Reference{
-			Start: &artifactpb.File_Position{
-				Unit:        artifactpb.File_Position_UNIT_PAGE,
-				Coordinates: []uint32{chunk.Reference.PageRange[0]},
-			},
-			End: &artifactpb.File_Position{
-				Unit:        artifactpb.File_Position_UNIT_PAGE,
-				Coordinates: []uint32{chunk.Reference.PageRange[1]},
-			},
+	if chunk.Reference != nil {
+		switch {
+		case chunk.Reference.TimeRange[0] != 0 || chunk.Reference.TimeRange[1] != 0:
+			pbChunk.Reference = &artifactpb.Chunk_Reference{
+				Start: &artifactpb.File_Position{
+					Unit:        artifactpb.File_Position_UNIT_TIME_MS,
+					Coordinates: []uint32{uint32(chunk.Reference.TimeRange[0])},
+				},
+				End: &artifactpb.File_Position{
+					Unit:        artifactpb.File_Position_UNIT_TIME_MS,
+					Coordinates: []uint32{uint32(chunk.Reference.TimeRange[1])},
+				},
+			}
+		case chunk.Reference.PageRange[0] != 0 && chunk.Reference.PageRange[1] != 0:
+			pbChunk.Reference = &artifactpb.Chunk_Reference{
+				Start: &artifactpb.File_Position{
+					Unit:        artifactpb.File_Position_UNIT_PAGE,
+					Coordinates: []uint32{chunk.Reference.PageRange[0]},
+				},
+				End: &artifactpb.File_Position{
+					Unit:        artifactpb.File_Position_UNIT_PAGE,
+					Coordinates: []uint32{chunk.Reference.PageRange[1]},
+				},
+			}
 		}
 	}
 
