@@ -113,6 +113,11 @@ func (c *compositeClient) ConvertAudioDirect(ctx context.Context, gsURI string, 
 	return c.defaultClient.ConvertAudioDirect(ctx, gsURI, mimeType, prompt)
 }
 
+// ConvertVideoRange delegates to the default client
+func (c *compositeClient) ConvertVideoRange(ctx context.Context, gsURI string, mimeType string, startOffset, endOffset time.Duration, prompt string) (*ConversionResult, error) {
+	return c.defaultClient.ConvertVideoRange(ctx, gsURI, mimeType, startOffset, endOffset, prompt)
+}
+
 // UploadToGCS delegates to the default client
 func (c *compositeClient) UploadToGCS(ctx context.Context, content []byte, objectPath string, mimeType string) (string, error) {
 	return c.defaultClient.UploadToGCS(ctx, content, objectPath, mimeType)

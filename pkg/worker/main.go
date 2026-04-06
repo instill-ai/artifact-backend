@@ -95,9 +95,10 @@ const (
 // Videos exceeding MaxVideoChunkDuration are physically split into chunks using
 // ffmpeg, each processed independently through the existing cache+batch pipeline.
 const (
-	MaxVideoChunkDuration = 30 * time.Minute // Gemini limit ~45 min for video with audio; 30 min gives safety margin
-	MaxAudioChunkDuration = 8 * time.Hour    // Gemini limit ~9.5 hours for audio-only
-	ChunkOverlap          = 60 * time.Second // Overlap between adjacent chunks to avoid boundary content loss
+	MaxVideoChunkDuration    = 30 * time.Minute // Gemini limit ~45 min for video with audio; 30 min gives safety margin
+	MaxAudioChunkDuration    = 8 * time.Hour    // Gemini limit ~9.5 hours for audio-only
+	ChunkOverlap             = 60 * time.Second // Overlap between adjacent chunks to avoid boundary content loss
+	SegmentOverlapLookback   = 15 * time.Second // Extra API window before a non-first segment's logical start, so the model assigns accurate timestamps to boundary audio that can then be deterministically clipped
 )
 
 // BatchProfile holds per-file-type tuning parameters for the concurrent batch
@@ -225,6 +226,30 @@ func isVideoFileType(ft artifactpb.File_Type) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// videoMIMETypeForFileType returns the MIME type for a video file type.
+func videoMIMETypeForFileType(ft artifactpb.File_Type) string {
+	switch ft {
+	case artifactpb.File_TYPE_MP4:
+		return "video/mp4"
+	case artifactpb.File_TYPE_AVI:
+		return "video/x-msvideo"
+	case artifactpb.File_TYPE_MOV:
+		return "video/quicktime"
+	case artifactpb.File_TYPE_MKV:
+		return "video/x-matroska"
+	case artifactpb.File_TYPE_FLV:
+		return "video/x-flv"
+	case artifactpb.File_TYPE_WMV:
+		return "video/x-ms-wmv"
+	case artifactpb.File_TYPE_MPEG:
+		return "video/mpeg"
+	case artifactpb.File_TYPE_WEBM_VIDEO:
+		return "video/webm"
+	default:
+		return "video/mp4"
 	}
 }
 

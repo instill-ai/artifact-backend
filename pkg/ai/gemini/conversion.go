@@ -49,6 +49,15 @@ func (c *Client) ConvertAudioDirect(_ context.Context, _ string, _ string, _ str
 	)
 }
 
+// ConvertVideoRange implements ai.Client.
+// Not supported by the direct Gemini API client (requires GCS URI from VertexAI).
+func (c *Client) ConvertVideoRange(_ context.Context, _ string, _ string, _, _ time.Duration, _ string) (*ai.ConversionResult, error) {
+	return nil, errorsx.AddMessage(
+		fmt.Errorf("ConvertVideoRange not supported"),
+		"Video range processing via GCS URI requires VertexAI. Please configure VertexAI for this feature.",
+	)
+}
+
 // UploadToGCS implements ai.Client. Not supported (no GCS storage).
 func (c *Client) UploadToGCS(_ context.Context, _ []byte, _ string, _ string) (string, error) {
 	return "", fmt.Errorf("UploadToGCS not supported by direct Gemini API client")

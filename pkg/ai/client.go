@@ -44,6 +44,11 @@ type CacheResult struct {
 	// UsageMetadata contains token usage information from the AI client
 	// The actual type depends on the client
 	UsageMetadata any
+	// GCSURI is the gs:// URI of the first cached file on GCS.
+	// Available only for VertexAI-backed caches with a single file.
+	// Used by ConvertVideoRange to reference the file with VideoMetadata
+	// offsets instead of sending the full video through the cache.
+	GCSURI string
 }
 
 // CacheListResult represents a page of cached contents
@@ -110,6 +115,15 @@ type Client interface {
 	// Uses FileData with the gs:// URI and AudioTimestamp: true for timestamped output.
 	// Designed for single-call processing of audio up to ~8 hours (~720K tokens).
 	ConvertAudioDirect(ctx context.Context, gsURI string, mimeType string, prompt string) (*ConversionResult, error)
+
+	// ConvertVideoRange processes a specific time range of a video file on GCS.
+	// Uses FileData with VideoMetadata (StartOffset/EndOffset) to restrict the
+	// model's view to exactly the requested window — the model cannot see frames
+	// outside [startOffset, endOffset]. This eliminates cross-segment hallucination
+	// that occurs when using cached full-video context with prompt-only time
+	// restrictions.
+	// Only supported by VertexAI-backed clients (requires GCS URI).
+	ConvertVideoRange(ctx context.Context, gsURI string, mimeType string, startOffset, endOffset time.Duration, prompt string) (*ConversionResult, error)
 
 	// UploadToGCS uploads content to GCS and returns the gs:// URI.
 	// objectPath is the destination path within the default GCS bucket.

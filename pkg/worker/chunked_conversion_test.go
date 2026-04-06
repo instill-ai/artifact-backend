@@ -549,7 +549,7 @@ func TestBatchProfile_VideoTypes(t *testing.T) {
 		c.Assert(p.ActivityTimeout, qt.Equals, 20*time.Minute, qt.Commentf("type=%s", ft))
 		c.Assert(p.DirectMaxPages, qt.Equals, 5, qt.Commentf("type=%s", ft))
 		c.Assert(p.MaxConcurrentBatches, qt.Equals, 32, qt.Commentf("type=%s", ft))
-		c.Assert(p.SegmentDuration, qt.Equals, 5*time.Minute, qt.Commentf("type=%s", ft))
+		c.Assert(p.SegmentDuration, qt.Equals, 2*time.Minute, qt.Commentf("type=%s", ft))
 		c.Assert(p.DirectMaxDuration, qt.Equals, 10*time.Minute, qt.Commentf("type=%s", ft))
 		c.Assert(isMediaFileType(ft), qt.IsTrue, qt.Commentf("type=%s", ft))
 	}
@@ -578,7 +578,7 @@ func TestBatchProfile_AudioTypes(t *testing.T) {
 		c.Assert(p.ActivityTimeout, qt.Equals, 20*time.Minute, qt.Commentf("type=%s", ft))
 		c.Assert(p.DirectMaxPages, qt.Equals, 5, qt.Commentf("type=%s", ft))
 		c.Assert(p.MaxConcurrentBatches, qt.Equals, 32, qt.Commentf("type=%s", ft))
-		c.Assert(p.SegmentDuration, qt.Equals, 5*time.Minute, qt.Commentf("type=%s", ft))
+		c.Assert(p.SegmentDuration, qt.Equals, 2*time.Minute, qt.Commentf("type=%s", ft))
 		c.Assert(p.DirectMaxDuration, qt.Equals, 10*time.Minute, qt.Commentf("type=%s", ft))
 		c.Assert(isMediaFileType(ft), qt.IsTrue, qt.Commentf("type=%s", ft))
 	}
@@ -642,7 +642,7 @@ func TestConvertTimeRange(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	result, err := w.convertTimeRange(context.Background(), "cache-123",
-		5*time.Minute, 10*time.Minute, 2, "base prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
+		5*time.Minute, 10*time.Minute, 5*time.Minute, 2, "base prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false, "")
 	c.Assert(err, qt.IsNil)
 	// No [Page: N] tags in output
 	c.Assert(strings.Contains(result, "[Page:"), qt.IsFalse)
@@ -663,7 +663,7 @@ func TestConvertTimeRange_StripsPageTagsFromModel(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	result, err := w.convertTimeRange(context.Background(), "cache-123",
-		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
+		0, 5*time.Minute, 0, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false, "")
 	c.Assert(err, qt.IsNil)
 	c.Assert(strings.Contains(result, "[Page:"), qt.IsFalse,
 		qt.Commentf("Page tags should be stripped, got: %s", result))
@@ -684,7 +684,7 @@ func TestConvertTimeRange_TruncatesContentBeyondEndTime(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	result, err := w.convertTimeRange(context.Background(), "cache-123",
-		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
+		0, 5*time.Minute, 0, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false, "")
 	c.Assert(err, qt.IsNil)
 	// Content within range should be kept
 	c.Assert(strings.Contains(result, "First line"), qt.IsTrue)
@@ -713,7 +713,7 @@ func TestConvertTimeRangeRobust_RetriesTransient(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	result, err := w.convertTimeRangeRobust(context.Background(), "cache-123",
-		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
+		0, 5*time.Minute, 0, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false, "")
 	c.Assert(err, qt.IsNil)
 	c.Assert(strings.Contains(result, "Success after retries"), qt.IsTrue)
 	c.Assert(callCount.Load(), qt.Equals, int64(3))
@@ -730,7 +730,7 @@ func TestConvertTimeRangeRobust_PropagatesCacheExpired(t *testing.T) {
 	acc := &usageAccumulator{}
 
 	_, err := w.convertTimeRangeRobust(context.Background(), "cache-123",
-		0, 5*time.Minute, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false)
+		0, 5*time.Minute, 0, 1, "prompt", acc, 5*time.Minute, artifactpb.File_TYPE_MP4, false, "")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(isCacheExpired(err), qt.IsTrue)
 	c.Assert(mockAI.ConvertToMarkdownWithCacheAfterCounter(), qt.Equals, uint64(1))
@@ -812,7 +812,7 @@ func TestClipToTimeRange_NoClippingNeeded(t *testing.T) {
 	c := qt.New(t)
 
 	content := "[Audio: 00:00:05] Hello\n[Audio: 00:03:00] Middle\n[Audio: 00:04:50] Near end"
-	result, removed := clipToTimeRange(content, 0, 5*time.Minute)
+	result, removed := clipToTimeRange(content, 0, 5*time.Minute, defaultEndTolerance)
 	c.Assert(removed, qt.Equals, 0)
 	c.Assert(result, qt.Equals, content)
 }
@@ -821,7 +821,7 @@ func TestClipToTimeRange_ClipsEndBoundary(t *testing.T) {
 	c := qt.New(t)
 
 	content := "[Audio: 00:00:05] First\n[Audio: 00:03:00] Middle\n[Audio: 00:04:50] Near end\n[Audio: 00:07:00] Beyond end\n[Audio: 00:15:00] Way beyond"
-	result, removed := clipToTimeRange(content, 0, 5*time.Minute)
+	result, removed := clipToTimeRange(content, 0, 5*time.Minute, defaultEndTolerance)
 	c.Assert(removed > 0, qt.IsTrue)
 	c.Assert(strings.Contains(result, "First"), qt.IsTrue)
 	c.Assert(strings.Contains(result, "Near end"), qt.IsTrue)
@@ -833,7 +833,7 @@ func TestClipToTimeRange_ClipsStartBoundary(t *testing.T) {
 
 	// Segment 2: 05:00-10:00. Model returned content starting from 00:00.
 	content := "[Audio: 00:00:05] Before start\n[Audio: 00:02:00] Still before\n[Audio: 00:04:00] Just before\n[Audio: 00:05:10] In range\n[Audio: 00:08:00] Middle\n[Audio: 00:09:50] Near end"
-	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute)
+	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute, defaultEndTolerance)
 	c.Assert(removed > 0, qt.IsTrue)
 	c.Assert(strings.Contains(result, "Before start"), qt.IsFalse)
 	c.Assert(strings.Contains(result, "Still before"), qt.IsFalse)
@@ -847,7 +847,7 @@ func TestClipToTimeRange_ClipsBothBoundaries(t *testing.T) {
 
 	// Model returned the entire file for a middle segment.
 	content := "[Audio: 00:00:05] Before\n[Audio: 00:05:10] Start of range\n[Audio: 00:08:00] Middle\n[Audio: 00:12:00] After end\n[Audio: 00:20:00] Way after"
-	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute)
+	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute, defaultEndTolerance)
 	c.Assert(removed > 0, qt.IsTrue)
 	c.Assert(strings.Contains(result, "Before"), qt.IsFalse)
 	c.Assert(strings.Contains(result, "Start of range"), qt.IsTrue)
@@ -861,7 +861,7 @@ func TestClipToTimeRange_RespectsToleranceWindow(t *testing.T) {
 
 	// 5:15 is within the 30s tolerance of 5:00 end time — should be kept
 	content := "[Audio: 00:04:50] Near end\n[Audio: 00:05:15] Just over boundary"
-	result, removed := clipToTimeRange(content, 0, 5*time.Minute)
+	result, removed := clipToTimeRange(content, 0, 5*time.Minute, defaultEndTolerance)
 	c.Assert(removed, qt.Equals, 0)
 	c.Assert(result, qt.Equals, content)
 }
@@ -871,7 +871,7 @@ func TestClipToTimeRange_StartToleranceKeepsBorderline(t *testing.T) {
 
 	// 04:50 is within 15s tolerance of 05:00 start — should be kept
 	content := "[Audio: 00:04:50] Borderline\n[Audio: 00:05:10] In range"
-	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute)
+	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute, defaultEndTolerance)
 	c.Assert(removed, qt.Equals, 0)
 	c.Assert(strings.Contains(result, "Borderline"), qt.IsTrue)
 }
@@ -880,7 +880,7 @@ func TestClipToTimeRange_NoTimestamps(t *testing.T) {
 	c := qt.New(t)
 
 	content := "Plain text without timestamps\nAnother line"
-	result, removed := clipToTimeRange(content, 0, 5*time.Minute)
+	result, removed := clipToTimeRange(content, 0, 5*time.Minute, defaultEndTolerance)
 	c.Assert(removed, qt.Equals, 0)
 	c.Assert(result, qt.Equals, content)
 }
@@ -888,7 +888,7 @@ func TestClipToTimeRange_NoTimestamps(t *testing.T) {
 func TestClipToTimeRange_EmptyInput(t *testing.T) {
 	c := qt.New(t)
 
-	result, removed := clipToTimeRange("", 0, 5*time.Minute)
+	result, removed := clipToTimeRange("", 0, 5*time.Minute, defaultEndTolerance)
 	c.Assert(removed, qt.Equals, 0)
 	c.Assert(result, qt.Equals, "")
 }
@@ -897,7 +897,7 @@ func TestClipToTimeRange_AllBeyondEnd(t *testing.T) {
 	c := qt.New(t)
 
 	content := "[Audio: 00:10:00] First line beyond\n[Audio: 00:15:00] Second line beyond"
-	result, removed := clipToTimeRange(content, 0, 5*time.Minute)
+	result, removed := clipToTimeRange(content, 0, 5*time.Minute, defaultEndTolerance)
 	c.Assert(removed, qt.Equals, 2)
 	c.Assert(result, qt.Equals, "")
 }
@@ -906,9 +906,55 @@ func TestClipToTimeRange_AllBeforeStart(t *testing.T) {
 	c := qt.New(t)
 
 	content := "[Audio: 00:00:05] Early\n[Audio: 00:02:00] Still early"
-	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute)
+	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute, defaultEndTolerance)
 	c.Assert(removed, qt.Equals, 2)
 	c.Assert(result, qt.Equals, "")
+}
+
+func TestClipToTimeRange_ZeroStartTolerance(t *testing.T) {
+	c := qt.New(t)
+
+	// With zero tolerance, 04:50 (10s before 05:00) must be clipped.
+	content := "[Audio: 00:04:50] Lookback context\n[Audio: 00:05:10] Real content"
+	result, removed := clipToTimeRange(content, 5*time.Minute, 10*time.Minute, 0)
+	c.Assert(removed, qt.Equals, 1)
+	c.Assert(strings.Contains(result, "Lookback context"), qt.IsFalse)
+	c.Assert(strings.Contains(result, "Real content"), qt.IsTrue)
+}
+
+func TestClipToTimeRange_StrictStartWithLookahead(t *testing.T) {
+	c := qt.New(t)
+
+	// Simulates the overlap scenario: API window was [1:45, 4:00] but logical
+	// ownership starts at 2:00. The model produced accurate timestamps for the
+	// lookback region (01:45-01:59) which must be clipped at the boundary.
+	content := "[Video: 00:01:45 - 00:02:00] Scene description\n" +
+		"[Audio: 00:01:45] Pre-boundary speech A\n" +
+		"[Audio: 00:01:50] Pre-boundary speech B\n" +
+		"[Audio: 00:01:55] Pre-boundary speech C\n" +
+		"[Audio: 00:01:59] Pre-boundary speech D\n" +
+		"\n" +
+		"[Video: 00:02:00 - 00:02:59] New scene\n" +
+		"[Audio: 00:02:00] Post-boundary speech E\n" +
+		"[Audio: 00:02:10] Post-boundary speech F\n" +
+		"[Audio: 00:02:30] Post-boundary speech G"
+	result, removed := clipToTimeRange(content, 2*time.Minute, 4*time.Minute, 0)
+	c.Assert(removed > 0, qt.IsTrue)
+	c.Assert(strings.Contains(result, "Pre-boundary speech A"), qt.IsFalse)
+	c.Assert(strings.Contains(result, "Pre-boundary speech D"), qt.IsFalse)
+	c.Assert(strings.Contains(result, "Post-boundary speech E"), qt.IsTrue)
+	c.Assert(strings.Contains(result, "Post-boundary speech G"), qt.IsTrue)
+}
+
+func TestClipToTimeRange_ZeroToleranceExactBoundary(t *testing.T) {
+	c := qt.New(t)
+
+	// Lines at exactly the start time should be kept, even with zero tolerance.
+	content := "[Audio: 00:02:00] At boundary\n[Audio: 00:02:15] After boundary"
+	result, removed := clipToTimeRange(content, 2*time.Minute, 4*time.Minute, 0)
+	c.Assert(removed, qt.Equals, 0)
+	c.Assert(strings.Contains(result, "At boundary"), qt.IsTrue)
+	c.Assert(strings.Contains(result, "After boundary"), qt.IsTrue)
 }
 
 func TestEnforceTimestampMonotonicity_NoRegression(t *testing.T) {

@@ -47,6 +47,13 @@ type ClientMock struct {
 	beforeConvertToMarkdownWithoutCacheCounter uint64
 	ConvertToMarkdownWithoutCacheMock          mClientMockConvertToMarkdownWithoutCache
 
+	funcConvertVideoRange          func(ctx context.Context, gsURI string, mimeType string, startOffset time.Duration, endOffset time.Duration, prompt string) (cp1 *mm_ai.ConversionResult, err error)
+	funcConvertVideoRangeOrigin    string
+	inspectFuncConvertVideoRange   func(ctx context.Context, gsURI string, mimeType string, startOffset time.Duration, endOffset time.Duration, prompt string)
+	afterConvertVideoRangeCounter  uint64
+	beforeConvertVideoRangeCounter uint64
+	ConvertVideoRangeMock          mClientMockConvertVideoRange
+
 	funcCountTokens          func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string) (i1 int, a1 any, err error)
 	funcCountTokensOrigin    string
 	inspectFuncCountTokens   func(ctx context.Context, content []byte, fileType artifactpb.File_Type, filename string)
@@ -150,6 +157,9 @@ func NewClientMock(t minimock.Tester) *ClientMock {
 
 	m.ConvertToMarkdownWithoutCacheMock = mClientMockConvertToMarkdownWithoutCache{mock: m}
 	m.ConvertToMarkdownWithoutCacheMock.callArgs = []*ClientMockConvertToMarkdownWithoutCacheParams{}
+
+	m.ConvertVideoRangeMock = mClientMockConvertVideoRange{mock: m}
+	m.ConvertVideoRangeMock.callArgs = []*ClientMockConvertVideoRangeParams{}
 
 	m.CountTokensMock = mClientMockCountTokens{mock: m}
 	m.CountTokensMock.callArgs = []*ClientMockCountTokensParams{}
@@ -1588,6 +1598,473 @@ func (m *ClientMock) MinimockConvertToMarkdownWithoutCacheInspect() {
 	if !m.ConvertToMarkdownWithoutCacheMock.invocationsDone() && afterConvertToMarkdownWithoutCacheCounter > 0 {
 		m.t.Errorf("Expected %d calls to ClientMock.ConvertToMarkdownWithoutCache at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.ConvertToMarkdownWithoutCacheMock.expectedInvocations), m.ConvertToMarkdownWithoutCacheMock.expectedInvocationsOrigin, afterConvertToMarkdownWithoutCacheCounter)
+	}
+}
+
+type mClientMockConvertVideoRange struct {
+	optional           bool
+	mock               *ClientMock
+	defaultExpectation *ClientMockConvertVideoRangeExpectation
+	expectations       []*ClientMockConvertVideoRangeExpectation
+
+	callArgs []*ClientMockConvertVideoRangeParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ClientMockConvertVideoRangeExpectation specifies expectation struct of the Client.ConvertVideoRange
+type ClientMockConvertVideoRangeExpectation struct {
+	mock               *ClientMock
+	params             *ClientMockConvertVideoRangeParams
+	paramPtrs          *ClientMockConvertVideoRangeParamPtrs
+	expectationOrigins ClientMockConvertVideoRangeExpectationOrigins
+	results            *ClientMockConvertVideoRangeResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ClientMockConvertVideoRangeParams contains parameters of the Client.ConvertVideoRange
+type ClientMockConvertVideoRangeParams struct {
+	ctx         context.Context
+	gsURI       string
+	mimeType    string
+	startOffset time.Duration
+	endOffset   time.Duration
+	prompt      string
+}
+
+// ClientMockConvertVideoRangeParamPtrs contains pointers to parameters of the Client.ConvertVideoRange
+type ClientMockConvertVideoRangeParamPtrs struct {
+	ctx         *context.Context
+	gsURI       *string
+	mimeType    *string
+	startOffset *time.Duration
+	endOffset   *time.Duration
+	prompt      *string
+}
+
+// ClientMockConvertVideoRangeResults contains results of the Client.ConvertVideoRange
+type ClientMockConvertVideoRangeResults struct {
+	cp1 *mm_ai.ConversionResult
+	err error
+}
+
+// ClientMockConvertVideoRangeOrigins contains origins of expectations of the Client.ConvertVideoRange
+type ClientMockConvertVideoRangeExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originGsURI       string
+	originMimeType    string
+	originStartOffset string
+	originEndOffset   string
+	originPrompt      string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmConvertVideoRange *mClientMockConvertVideoRange) Optional() *mClientMockConvertVideoRange {
+	mmConvertVideoRange.optional = true
+	return mmConvertVideoRange
+}
+
+// Expect sets up expected params for Client.ConvertVideoRange
+func (mmConvertVideoRange *mClientMockConvertVideoRange) Expect(ctx context.Context, gsURI string, mimeType string, startOffset time.Duration, endOffset time.Duration, prompt string) *mClientMockConvertVideoRange {
+	if mmConvertVideoRange.mock.funcConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Set")
+	}
+
+	if mmConvertVideoRange.defaultExpectation == nil {
+		mmConvertVideoRange.defaultExpectation = &ClientMockConvertVideoRangeExpectation{}
+	}
+
+	if mmConvertVideoRange.defaultExpectation.paramPtrs != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by ExpectParams functions")
+	}
+
+	mmConvertVideoRange.defaultExpectation.params = &ClientMockConvertVideoRangeParams{ctx, gsURI, mimeType, startOffset, endOffset, prompt}
+	mmConvertVideoRange.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmConvertVideoRange.expectations {
+		if minimock.Equal(e.params, mmConvertVideoRange.defaultExpectation.params) {
+			mmConvertVideoRange.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmConvertVideoRange.defaultExpectation.params)
+		}
+	}
+
+	return mmConvertVideoRange
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Client.ConvertVideoRange
+func (mmConvertVideoRange *mClientMockConvertVideoRange) ExpectCtxParam1(ctx context.Context) *mClientMockConvertVideoRange {
+	if mmConvertVideoRange.mock.funcConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Set")
+	}
+
+	if mmConvertVideoRange.defaultExpectation == nil {
+		mmConvertVideoRange.defaultExpectation = &ClientMockConvertVideoRangeExpectation{}
+	}
+
+	if mmConvertVideoRange.defaultExpectation.params != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Expect")
+	}
+
+	if mmConvertVideoRange.defaultExpectation.paramPtrs == nil {
+		mmConvertVideoRange.defaultExpectation.paramPtrs = &ClientMockConvertVideoRangeParamPtrs{}
+	}
+	mmConvertVideoRange.defaultExpectation.paramPtrs.ctx = &ctx
+	mmConvertVideoRange.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmConvertVideoRange
+}
+
+// ExpectGsURIParam2 sets up expected param gsURI for Client.ConvertVideoRange
+func (mmConvertVideoRange *mClientMockConvertVideoRange) ExpectGsURIParam2(gsURI string) *mClientMockConvertVideoRange {
+	if mmConvertVideoRange.mock.funcConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Set")
+	}
+
+	if mmConvertVideoRange.defaultExpectation == nil {
+		mmConvertVideoRange.defaultExpectation = &ClientMockConvertVideoRangeExpectation{}
+	}
+
+	if mmConvertVideoRange.defaultExpectation.params != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Expect")
+	}
+
+	if mmConvertVideoRange.defaultExpectation.paramPtrs == nil {
+		mmConvertVideoRange.defaultExpectation.paramPtrs = &ClientMockConvertVideoRangeParamPtrs{}
+	}
+	mmConvertVideoRange.defaultExpectation.paramPtrs.gsURI = &gsURI
+	mmConvertVideoRange.defaultExpectation.expectationOrigins.originGsURI = minimock.CallerInfo(1)
+
+	return mmConvertVideoRange
+}
+
+// ExpectMimeTypeParam3 sets up expected param mimeType for Client.ConvertVideoRange
+func (mmConvertVideoRange *mClientMockConvertVideoRange) ExpectMimeTypeParam3(mimeType string) *mClientMockConvertVideoRange {
+	if mmConvertVideoRange.mock.funcConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Set")
+	}
+
+	if mmConvertVideoRange.defaultExpectation == nil {
+		mmConvertVideoRange.defaultExpectation = &ClientMockConvertVideoRangeExpectation{}
+	}
+
+	if mmConvertVideoRange.defaultExpectation.params != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Expect")
+	}
+
+	if mmConvertVideoRange.defaultExpectation.paramPtrs == nil {
+		mmConvertVideoRange.defaultExpectation.paramPtrs = &ClientMockConvertVideoRangeParamPtrs{}
+	}
+	mmConvertVideoRange.defaultExpectation.paramPtrs.mimeType = &mimeType
+	mmConvertVideoRange.defaultExpectation.expectationOrigins.originMimeType = minimock.CallerInfo(1)
+
+	return mmConvertVideoRange
+}
+
+// ExpectStartOffsetParam4 sets up expected param startOffset for Client.ConvertVideoRange
+func (mmConvertVideoRange *mClientMockConvertVideoRange) ExpectStartOffsetParam4(startOffset time.Duration) *mClientMockConvertVideoRange {
+	if mmConvertVideoRange.mock.funcConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Set")
+	}
+
+	if mmConvertVideoRange.defaultExpectation == nil {
+		mmConvertVideoRange.defaultExpectation = &ClientMockConvertVideoRangeExpectation{}
+	}
+
+	if mmConvertVideoRange.defaultExpectation.params != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Expect")
+	}
+
+	if mmConvertVideoRange.defaultExpectation.paramPtrs == nil {
+		mmConvertVideoRange.defaultExpectation.paramPtrs = &ClientMockConvertVideoRangeParamPtrs{}
+	}
+	mmConvertVideoRange.defaultExpectation.paramPtrs.startOffset = &startOffset
+	mmConvertVideoRange.defaultExpectation.expectationOrigins.originStartOffset = minimock.CallerInfo(1)
+
+	return mmConvertVideoRange
+}
+
+// ExpectEndOffsetParam5 sets up expected param endOffset for Client.ConvertVideoRange
+func (mmConvertVideoRange *mClientMockConvertVideoRange) ExpectEndOffsetParam5(endOffset time.Duration) *mClientMockConvertVideoRange {
+	if mmConvertVideoRange.mock.funcConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Set")
+	}
+
+	if mmConvertVideoRange.defaultExpectation == nil {
+		mmConvertVideoRange.defaultExpectation = &ClientMockConvertVideoRangeExpectation{}
+	}
+
+	if mmConvertVideoRange.defaultExpectation.params != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Expect")
+	}
+
+	if mmConvertVideoRange.defaultExpectation.paramPtrs == nil {
+		mmConvertVideoRange.defaultExpectation.paramPtrs = &ClientMockConvertVideoRangeParamPtrs{}
+	}
+	mmConvertVideoRange.defaultExpectation.paramPtrs.endOffset = &endOffset
+	mmConvertVideoRange.defaultExpectation.expectationOrigins.originEndOffset = minimock.CallerInfo(1)
+
+	return mmConvertVideoRange
+}
+
+// ExpectPromptParam6 sets up expected param prompt for Client.ConvertVideoRange
+func (mmConvertVideoRange *mClientMockConvertVideoRange) ExpectPromptParam6(prompt string) *mClientMockConvertVideoRange {
+	if mmConvertVideoRange.mock.funcConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Set")
+	}
+
+	if mmConvertVideoRange.defaultExpectation == nil {
+		mmConvertVideoRange.defaultExpectation = &ClientMockConvertVideoRangeExpectation{}
+	}
+
+	if mmConvertVideoRange.defaultExpectation.params != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Expect")
+	}
+
+	if mmConvertVideoRange.defaultExpectation.paramPtrs == nil {
+		mmConvertVideoRange.defaultExpectation.paramPtrs = &ClientMockConvertVideoRangeParamPtrs{}
+	}
+	mmConvertVideoRange.defaultExpectation.paramPtrs.prompt = &prompt
+	mmConvertVideoRange.defaultExpectation.expectationOrigins.originPrompt = minimock.CallerInfo(1)
+
+	return mmConvertVideoRange
+}
+
+// Inspect accepts an inspector function that has same arguments as the Client.ConvertVideoRange
+func (mmConvertVideoRange *mClientMockConvertVideoRange) Inspect(f func(ctx context.Context, gsURI string, mimeType string, startOffset time.Duration, endOffset time.Duration, prompt string)) *mClientMockConvertVideoRange {
+	if mmConvertVideoRange.mock.inspectFuncConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("Inspect function is already set for ClientMock.ConvertVideoRange")
+	}
+
+	mmConvertVideoRange.mock.inspectFuncConvertVideoRange = f
+
+	return mmConvertVideoRange
+}
+
+// Return sets up results that will be returned by Client.ConvertVideoRange
+func (mmConvertVideoRange *mClientMockConvertVideoRange) Return(cp1 *mm_ai.ConversionResult, err error) *ClientMock {
+	if mmConvertVideoRange.mock.funcConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Set")
+	}
+
+	if mmConvertVideoRange.defaultExpectation == nil {
+		mmConvertVideoRange.defaultExpectation = &ClientMockConvertVideoRangeExpectation{mock: mmConvertVideoRange.mock}
+	}
+	mmConvertVideoRange.defaultExpectation.results = &ClientMockConvertVideoRangeResults{cp1, err}
+	mmConvertVideoRange.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmConvertVideoRange.mock
+}
+
+// Set uses given function f to mock the Client.ConvertVideoRange method
+func (mmConvertVideoRange *mClientMockConvertVideoRange) Set(f func(ctx context.Context, gsURI string, mimeType string, startOffset time.Duration, endOffset time.Duration, prompt string) (cp1 *mm_ai.ConversionResult, err error)) *ClientMock {
+	if mmConvertVideoRange.defaultExpectation != nil {
+		mmConvertVideoRange.mock.t.Fatalf("Default expectation is already set for the Client.ConvertVideoRange method")
+	}
+
+	if len(mmConvertVideoRange.expectations) > 0 {
+		mmConvertVideoRange.mock.t.Fatalf("Some expectations are already set for the Client.ConvertVideoRange method")
+	}
+
+	mmConvertVideoRange.mock.funcConvertVideoRange = f
+	mmConvertVideoRange.mock.funcConvertVideoRangeOrigin = minimock.CallerInfo(1)
+	return mmConvertVideoRange.mock
+}
+
+// When sets expectation for the Client.ConvertVideoRange which will trigger the result defined by the following
+// Then helper
+func (mmConvertVideoRange *mClientMockConvertVideoRange) When(ctx context.Context, gsURI string, mimeType string, startOffset time.Duration, endOffset time.Duration, prompt string) *ClientMockConvertVideoRangeExpectation {
+	if mmConvertVideoRange.mock.funcConvertVideoRange != nil {
+		mmConvertVideoRange.mock.t.Fatalf("ClientMock.ConvertVideoRange mock is already set by Set")
+	}
+
+	expectation := &ClientMockConvertVideoRangeExpectation{
+		mock:               mmConvertVideoRange.mock,
+		params:             &ClientMockConvertVideoRangeParams{ctx, gsURI, mimeType, startOffset, endOffset, prompt},
+		expectationOrigins: ClientMockConvertVideoRangeExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmConvertVideoRange.expectations = append(mmConvertVideoRange.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Client.ConvertVideoRange return parameters for the expectation previously defined by the When method
+func (e *ClientMockConvertVideoRangeExpectation) Then(cp1 *mm_ai.ConversionResult, err error) *ClientMock {
+	e.results = &ClientMockConvertVideoRangeResults{cp1, err}
+	return e.mock
+}
+
+// Times sets number of times Client.ConvertVideoRange should be invoked
+func (mmConvertVideoRange *mClientMockConvertVideoRange) Times(n uint64) *mClientMockConvertVideoRange {
+	if n == 0 {
+		mmConvertVideoRange.mock.t.Fatalf("Times of ClientMock.ConvertVideoRange mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmConvertVideoRange.expectedInvocations, n)
+	mmConvertVideoRange.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmConvertVideoRange
+}
+
+func (mmConvertVideoRange *mClientMockConvertVideoRange) invocationsDone() bool {
+	if len(mmConvertVideoRange.expectations) == 0 && mmConvertVideoRange.defaultExpectation == nil && mmConvertVideoRange.mock.funcConvertVideoRange == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmConvertVideoRange.mock.afterConvertVideoRangeCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmConvertVideoRange.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ConvertVideoRange implements mm_ai.Client
+func (mmConvertVideoRange *ClientMock) ConvertVideoRange(ctx context.Context, gsURI string, mimeType string, startOffset time.Duration, endOffset time.Duration, prompt string) (cp1 *mm_ai.ConversionResult, err error) {
+	mm_atomic.AddUint64(&mmConvertVideoRange.beforeConvertVideoRangeCounter, 1)
+	defer mm_atomic.AddUint64(&mmConvertVideoRange.afterConvertVideoRangeCounter, 1)
+
+	mmConvertVideoRange.t.Helper()
+
+	if mmConvertVideoRange.inspectFuncConvertVideoRange != nil {
+		mmConvertVideoRange.inspectFuncConvertVideoRange(ctx, gsURI, mimeType, startOffset, endOffset, prompt)
+	}
+
+	mm_params := ClientMockConvertVideoRangeParams{ctx, gsURI, mimeType, startOffset, endOffset, prompt}
+
+	// Record call args
+	mmConvertVideoRange.ConvertVideoRangeMock.mutex.Lock()
+	mmConvertVideoRange.ConvertVideoRangeMock.callArgs = append(mmConvertVideoRange.ConvertVideoRangeMock.callArgs, &mm_params)
+	mmConvertVideoRange.ConvertVideoRangeMock.mutex.Unlock()
+
+	for _, e := range mmConvertVideoRange.ConvertVideoRangeMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.cp1, e.results.err
+		}
+	}
+
+	if mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.Counter, 1)
+		mm_want := mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.params
+		mm_want_ptrs := mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.paramPtrs
+
+		mm_got := ClientMockConvertVideoRangeParams{ctx, gsURI, mimeType, startOffset, endOffset, prompt}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmConvertVideoRange.t.Errorf("ClientMock.ConvertVideoRange got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.gsURI != nil && !minimock.Equal(*mm_want_ptrs.gsURI, mm_got.gsURI) {
+				mmConvertVideoRange.t.Errorf("ClientMock.ConvertVideoRange got unexpected parameter gsURI, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.expectationOrigins.originGsURI, *mm_want_ptrs.gsURI, mm_got.gsURI, minimock.Diff(*mm_want_ptrs.gsURI, mm_got.gsURI))
+			}
+
+			if mm_want_ptrs.mimeType != nil && !minimock.Equal(*mm_want_ptrs.mimeType, mm_got.mimeType) {
+				mmConvertVideoRange.t.Errorf("ClientMock.ConvertVideoRange got unexpected parameter mimeType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.expectationOrigins.originMimeType, *mm_want_ptrs.mimeType, mm_got.mimeType, minimock.Diff(*mm_want_ptrs.mimeType, mm_got.mimeType))
+			}
+
+			if mm_want_ptrs.startOffset != nil && !minimock.Equal(*mm_want_ptrs.startOffset, mm_got.startOffset) {
+				mmConvertVideoRange.t.Errorf("ClientMock.ConvertVideoRange got unexpected parameter startOffset, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.expectationOrigins.originStartOffset, *mm_want_ptrs.startOffset, mm_got.startOffset, minimock.Diff(*mm_want_ptrs.startOffset, mm_got.startOffset))
+			}
+
+			if mm_want_ptrs.endOffset != nil && !minimock.Equal(*mm_want_ptrs.endOffset, mm_got.endOffset) {
+				mmConvertVideoRange.t.Errorf("ClientMock.ConvertVideoRange got unexpected parameter endOffset, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.expectationOrigins.originEndOffset, *mm_want_ptrs.endOffset, mm_got.endOffset, minimock.Diff(*mm_want_ptrs.endOffset, mm_got.endOffset))
+			}
+
+			if mm_want_ptrs.prompt != nil && !minimock.Equal(*mm_want_ptrs.prompt, mm_got.prompt) {
+				mmConvertVideoRange.t.Errorf("ClientMock.ConvertVideoRange got unexpected parameter prompt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.expectationOrigins.originPrompt, *mm_want_ptrs.prompt, mm_got.prompt, minimock.Diff(*mm_want_ptrs.prompt, mm_got.prompt))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmConvertVideoRange.t.Errorf("ClientMock.ConvertVideoRange got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmConvertVideoRange.ConvertVideoRangeMock.defaultExpectation.results
+		if mm_results == nil {
+			mmConvertVideoRange.t.Fatal("No results are set for the ClientMock.ConvertVideoRange")
+		}
+		return (*mm_results).cp1, (*mm_results).err
+	}
+	if mmConvertVideoRange.funcConvertVideoRange != nil {
+		return mmConvertVideoRange.funcConvertVideoRange(ctx, gsURI, mimeType, startOffset, endOffset, prompt)
+	}
+	mmConvertVideoRange.t.Fatalf("Unexpected call to ClientMock.ConvertVideoRange. %v %v %v %v %v %v", ctx, gsURI, mimeType, startOffset, endOffset, prompt)
+	return
+}
+
+// ConvertVideoRangeAfterCounter returns a count of finished ClientMock.ConvertVideoRange invocations
+func (mmConvertVideoRange *ClientMock) ConvertVideoRangeAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmConvertVideoRange.afterConvertVideoRangeCounter)
+}
+
+// ConvertVideoRangeBeforeCounter returns a count of ClientMock.ConvertVideoRange invocations
+func (mmConvertVideoRange *ClientMock) ConvertVideoRangeBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmConvertVideoRange.beforeConvertVideoRangeCounter)
+}
+
+// Calls returns a list of arguments used in each call to ClientMock.ConvertVideoRange.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmConvertVideoRange *mClientMockConvertVideoRange) Calls() []*ClientMockConvertVideoRangeParams {
+	mmConvertVideoRange.mutex.RLock()
+
+	argCopy := make([]*ClientMockConvertVideoRangeParams, len(mmConvertVideoRange.callArgs))
+	copy(argCopy, mmConvertVideoRange.callArgs)
+
+	mmConvertVideoRange.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockConvertVideoRangeDone returns true if the count of the ConvertVideoRange invocations corresponds
+// the number of defined expectations
+func (m *ClientMock) MinimockConvertVideoRangeDone() bool {
+	if m.ConvertVideoRangeMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ConvertVideoRangeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ConvertVideoRangeMock.invocationsDone()
+}
+
+// MinimockConvertVideoRangeInspect logs each unmet expectation
+func (m *ClientMock) MinimockConvertVideoRangeInspect() {
+	for _, e := range m.ConvertVideoRangeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ClientMock.ConvertVideoRange at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterConvertVideoRangeCounter := mm_atomic.LoadUint64(&m.afterConvertVideoRangeCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ConvertVideoRangeMock.defaultExpectation != nil && afterConvertVideoRangeCounter < 1 {
+		if m.ConvertVideoRangeMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ClientMock.ConvertVideoRange at\n%s", m.ConvertVideoRangeMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ClientMock.ConvertVideoRange at\n%s with params: %#v", m.ConvertVideoRangeMock.defaultExpectation.expectationOrigins.origin, *m.ConvertVideoRangeMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcConvertVideoRange != nil && afterConvertVideoRangeCounter < 1 {
+		m.t.Errorf("Expected call to ClientMock.ConvertVideoRange at\n%s", m.funcConvertVideoRangeOrigin)
+	}
+
+	if !m.ConvertVideoRangeMock.invocationsDone() && afterConvertVideoRangeCounter > 0 {
+		m.t.Errorf("Expected %d calls to ClientMock.ConvertVideoRange at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ConvertVideoRangeMock.expectedInvocations), m.ConvertVideoRangeMock.expectedInvocationsOrigin, afterConvertVideoRangeCounter)
 	}
 }
 
@@ -5621,6 +6098,8 @@ func (m *ClientMock) MinimockFinish() {
 
 			m.MinimockConvertToMarkdownWithoutCacheInspect()
 
+			m.MinimockConvertVideoRangeInspect()
+
 			m.MinimockCountTokensInspect()
 
 			m.MinimockCreateCacheInspect()
@@ -5671,6 +6150,7 @@ func (m *ClientMock) minimockDone() bool {
 		m.MinimockConvertAudioDirectDone() &&
 		m.MinimockConvertToMarkdownWithCacheDone() &&
 		m.MinimockConvertToMarkdownWithoutCacheDone() &&
+		m.MinimockConvertVideoRangeDone() &&
 		m.MinimockCountTokensDone() &&
 		m.MinimockCreateCacheDone() &&
 		m.MinimockDeleteCacheDone() &&

@@ -2228,6 +2228,7 @@ func (w *Worker) processLongMedia(
 	})
 
 	chunkCacheNames := make([]string, len(splitResult.Chunks))
+	chunkGCSURIs := make([]string, len(splitResult.Chunks))
 	cacheErrs := make([]error, len(splitResult.Chunks))
 	cacheSel := workflow.NewSelector(ctx)
 	cachePending := 0
@@ -2252,6 +2253,7 @@ func (w *Worker) processLongMedia(
 				cacheErrs[i] = fmt.Errorf("caching not available for chunk %d: AI client not configured or file type %s not supported for caching", i, cr.effectiveFileType.String())
 			} else {
 				chunkCacheNames[i] = result.CacheName
+				chunkGCSURIs[i] = result.GCSURI
 			}
 			cachePending--
 		})
@@ -2313,11 +2315,12 @@ func (w *Worker) processLongMedia(
 
 	// Phase 2c: Build batch slots for ALL chunks
 	type chunkBatchSlot struct {
-		ChunkIndex     int
-		SlotIndex      int
-		StartTimestamp time.Duration
-		EndTimestamp   time.Duration
-		SegmentIndex   int
+		ChunkIndex        int
+		SlotIndex         int
+		StartTimestamp    time.Duration
+		EndTimestamp      time.Duration
+		APIStartTimestamp time.Duration // May be earlier than StartTimestamp by SegmentOverlapLookback
+		SegmentIndex      int
 	}
 
 	chunkSegCounts := make([]int, len(splitResult.Chunks))
@@ -2332,12 +2335,17 @@ func (w *Worker) processLongMedia(
 			if end > chunkDuration {
 				end = chunkDuration
 			}
+			apiStart := start
+			if si > 0 && start >= SegmentOverlapLookback {
+				apiStart = start - SegmentOverlapLookback
+			}
 			allSlots = append(allSlots, chunkBatchSlot{
-				ChunkIndex:     ci,
-				SlotIndex:      si,
-				StartTimestamp: start,
-				EndTimestamp:   end,
-				SegmentIndex:   si + 1,
+				ChunkIndex:        ci,
+				SlotIndex:         si,
+				StartTimestamp:    start,
+				EndTimestamp:      end,
+				APIStartTimestamp: apiStart,
+				SegmentIndex:      si + 1,
 			})
 		}
 	}
@@ -2372,19 +2380,21 @@ func (w *Worker) processLongMedia(
 	for _, slot := range allSlots {
 		s := slot
 		future := workflow.ExecuteActivity(batchCtx, w.ConvertBatchActivity, &ConvertBatchActivityParam{
-			CacheName:      chunkCacheNames[s.ChunkIndex],
-			KBUID:          kbUID,
-			FileUID:        fileUID,
-			WorkflowRunID:  workflowRunID,
-			BatchIndex:     s.ChunkIndex*1000 + s.SlotIndex,
-			ChunkTimeout:   profile.ChunkTimeout,
-			UseTimeRange:   true,
-			StartTimestamp: s.StartTimestamp,
-			EndTimestamp:   s.EndTimestamp,
-			SegmentIndex:   s.SegmentIndex,
-			FileType:       cr.effectiveFileType,
-			SpeakerContext: speakerContext,
-			VisualOnly:     useHybridTwoPass,
+			CacheName:         chunkCacheNames[s.ChunkIndex],
+			KBUID:             kbUID,
+			FileUID:           fileUID,
+			WorkflowRunID:     workflowRunID,
+			BatchIndex:        s.ChunkIndex*1000 + s.SlotIndex,
+			ChunkTimeout:      profile.ChunkTimeout,
+			UseTimeRange:      true,
+			StartTimestamp:    s.StartTimestamp,
+			EndTimestamp:      s.EndTimestamp,
+			APIStartTimestamp: s.APIStartTimestamp,
+			SegmentIndex:      s.SegmentIndex,
+			FileType:          cr.effectiveFileType,
+			SpeakerContext:    speakerContext,
+			VisualOnly:        useHybridTwoPass,
+			GCSURI:            chunkGCSURIs[s.ChunkIndex],
 		})
 		batchSel.AddFuture(future, func(f workflow.Future) {
 			var result ConvertBatchActivityResult

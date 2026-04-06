@@ -279,6 +279,7 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 	// Mock for StandardizeFileTypeActivity - server-side copy for AI-native files
 	mockStorage := mock.NewStorageMock(mc)
 	mockStorage.CopyObjectMock.Return(nil)
+	mockStorage.DeleteFileMock.Optional().Return(nil)
 	mockStorage.ListTextChunksByFileUIDMock.Optional().Return([]string{}, nil)
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	// Mock for creating converted file record

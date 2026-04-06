@@ -1520,6 +1520,11 @@ type CacheFileContextActivityResult struct {
 	// must be stored as primitive types.
 	AudioDurationSeconds int32 // From Gemini CachedContentUsageMetadata
 	VideoDurationSeconds int32 // From Gemini CachedContentUsageMetadata
+
+	// GCSURI is the gs:// URI of the uploaded file on GCS (VertexAI only).
+	// Propagated to batch processing so ConvertVideoRange can reference the
+	// file directly with VideoMetadata offsets.
+	GCSURI string
 }
 
 // CacheFileContextActivity creates a cached context for the input file
@@ -1604,6 +1609,7 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 		ExpireTime:           cacheOutput.ExpireTime,
 		CachedContextEnabled: true,
 		UsageMetadata:        cacheOutput.UsageMetadata,
+		GCSURI:               cacheOutput.GCSURI,
 	}
 
 	if cacheMeta, ok := cacheOutput.UsageMetadata.(*genai.CachedContentUsageMetadata); ok && cacheMeta != nil {

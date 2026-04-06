@@ -44,13 +44,23 @@ var inlineTimestampPattern = regexp.MustCompile(
 		`\]`,
 )
 
+const defaultEndTolerance = 15 * time.Second
+
 // clipToTimeRange enforces both start and end boundaries on a media transcript.
-// Lines whose inline timestamps fall before startTime (minus tolerance) or
-// after endTime (plus tolerance) are removed. Non-timestamped preamble lines
-// before the first in-range timestamp are also stripped when startTime > 0.
+// Lines whose inline timestamps fall before startTime (minus startTolerance) or
+// after endTime (plus a fixed end tolerance) are removed. Non-timestamped
+// preamble lines before the first in-range timestamp are also stripped when
+// startTime > 0.
+//
+// startTolerance controls how aggressively the start boundary clips:
+//   - 15s (default) keeps lines within 15s before startTime — suitable for
+//     segments whose API window matches the logical window.
+//   - 0 clips everything strictly before startTime — suitable for segments
+//     whose API window was widened by SegmentOverlapLookback so the model
+//     produces accurate timestamps for boundary audio.
+//
 // Returns the clipped content and the total number of lines removed.
-func clipToTimeRange(markdown string, startTime, endTime time.Duration) (string, int) {
-	const tolerance = 15 * time.Second
+func clipToTimeRange(markdown string, startTime, endTime time.Duration, startTolerance time.Duration) (string, int) {
 	lines := strings.Split(markdown, "\n")
 
 	startIdx := 0
@@ -68,7 +78,7 @@ func clipToTimeRange(markdown string, startTime, endTime time.Duration) (string,
 			if err != nil {
 				continue
 			}
-			if ts < startTime-tolerance {
+			if ts < startTime-startTolerance {
 				lastBeforeStart = i
 			} else {
 				break
@@ -89,7 +99,7 @@ func clipToTimeRange(markdown string, startTime, endTime time.Duration) (string,
 		if err != nil {
 			continue
 		}
-		if ts > endTime+tolerance {
+		if ts > endTime+defaultEndTolerance {
 			endIdx = i
 			break
 		}
@@ -443,7 +453,25 @@ func (w *Worker) convertChunkRobust(ctx context.Context, cacheName string, start
 // ([Audio: HH:MM:SS], [Sound: HH:MM:SS], etc.) are the ground truth for
 // position mapping. After the AI call, output is truncated to the requested
 // time range to guard against models that ignore the boundary instruction.
-func (w *Worker) convertTimeRange(ctx context.Context, cacheName string, startTime, endTime time.Duration, segmentIndex int, prompt string, acc *usageAccumulator, chunkTimeout time.Duration, fileType artifactpb.File_Type, visualOnly bool) (string, error) {
+func (w *Worker) convertTimeRange(ctx context.Context, cacheName string, startTime, endTime, apiStartTime time.Duration, segmentIndex int, prompt string, acc *usageAccumulator, chunkTimeout time.Duration, fileType artifactpb.File_Type, visualOnly bool, gcsURI string) (string, error) {
+	hasLookback := apiStartTime < startTime
+	usingVideoRange := gcsURI != "" && isVideoFileType(fileType)
+
+	// When using ConvertVideoRange (VideoMetadata), the model physically
+	// only sees [apiStartTime, endTime]. If the prompt claims the range
+	// starts at startTime (later than apiStartTime), the model maps the
+	// earlier content it hears to startTime, shifting all timestamps
+	// forward by the lookback duration. Using apiStartTime in the prompt
+	// lets the model assign accurate absolute timestamps; clipToTimeRange
+	// then removes the lookback window from the output.
+	//
+	// For the cache path the model sees the full file, so we reference the
+	// logical ownership range to focus its attention.
+	promptStart := startTime
+	if usingVideoRange && hasLookback {
+		promptStart = apiStartTime
+	}
+
 	var timeRangePrompt string
 	if visualOnly {
 		timeRangePrompt = fmt.Sprintf(
@@ -452,7 +480,7 @@ func (w *Worker) convertTimeRange(ctx context.Context, cacheName string, startTi
 				"- Do NOT transcribe speech, dialogue, or sound events.\n"+
 				"- Use absolute timestamps from the original media (do NOT reset to 00:00:00).\n"+
 				"- Do NOT include content from outside this time range.\n\n%s",
-			formatTimestamp(startTime), formatTimestamp(endTime), prompt,
+			formatTimestamp(promptStart), formatTimestamp(endTime), prompt,
 		)
 	} else {
 		timeRangePrompt = fmt.Sprintf(
@@ -460,20 +488,36 @@ func (w *Worker) convertTimeRange(ctx context.Context, cacheName string, startTi
 				"- Transcribe ALL speech, describe visual content, and note on-screen text.\n"+
 				"- Use absolute timestamps from the original media (do NOT reset to 00:00:00).\n"+
 				"- Do NOT include content from outside this time range.\n\n%s",
-			formatTimestamp(startTime), formatTimestamp(endTime), prompt,
+			formatTimestamp(promptStart), formatTimestamp(endTime), prompt,
 		)
 	}
 
 	w.log.Info("Converting time range",
 		zap.String("start", formatTimestamp(startTime)),
 		zap.String("end", formatTimestamp(endTime)),
-		zap.Int("segmentIndex", segmentIndex))
+		zap.String("apiStart", formatTimestamp(apiStartTime)),
+		zap.String("promptStart", formatTimestamp(promptStart)),
+		zap.Bool("hasLookback", hasLookback),
+		zap.Int("segmentIndex", segmentIndex),
+		zap.Bool("usingVideoRange", usingVideoRange))
 
 	if chunkTimeout <= 0 {
 		chunkTimeout = ChunkConversionTimeout
 	}
 	chunkCtx, chunkCancel := context.WithTimeout(ctx, chunkTimeout)
-	result, err := w.getAIClientForFileType(fileType).ConvertToMarkdownWithCache(chunkCtx, cacheName, timeRangePrompt)
+
+	var result *ai.ConversionResult
+	var err error
+	if usingVideoRange {
+		mimeType := videoMIMETypeForFileType(fileType)
+		result, err = w.getAIClientForFileType(fileType).ConvertVideoRange(
+			chunkCtx, gcsURI, mimeType, apiStartTime, endTime, timeRangePrompt,
+		)
+	} else {
+		result, err = w.getAIClientForFileType(fileType).ConvertToMarkdownWithCache(
+			chunkCtx, cacheName, timeRangePrompt,
+		)
+	}
 	chunkCancel()
 	if err != nil {
 		return "", err
@@ -487,15 +531,22 @@ func (w *Worker) convertTimeRange(ctx context.Context, cacheName string, startTi
 	markdown = pageTagPattern.ReplaceAllString(markdown, "")
 	markdown = strings.TrimSpace(markdown)
 
-	// Clip content outside the requested [startTime, endTime] window.
-	// This guards against models that ignore the time-range instruction and
-	// transcribe the entire file.
-	clipped, n := clipToTimeRange(markdown, startTime, endTime)
+	// When the API window was widened (hasLookback), use zero start tolerance
+	// so the model's accurately-timestamped boundary context is clipped
+	// deterministically at the logical start. Without lookback, keep the
+	// default tolerance for backward compatibility.
+	startTol := defaultEndTolerance
+	if hasLookback {
+		startTol = 0
+	}
+
+	clipped, n := clipToTimeRange(markdown, startTime, endTime, startTol)
 	if n > 0 {
 		w.log.Warn("Model returned content outside requested time range, clipped",
 			zap.Int("segmentIndex", segmentIndex),
 			zap.String("requestedStart", formatTimestamp(startTime)),
 			zap.String("requestedEnd", formatTimestamp(endTime)),
+			zap.String("apiStart", formatTimestamp(apiStartTime)),
 			zap.Int("linesRemoved", n))
 		markdown = clipped
 	}
@@ -507,12 +558,12 @@ func (w *Worker) convertTimeRange(ctx context.Context, cacheName string, startTi
 // backoff for transient errors (rate-limit, API glitches, etc.).
 // Cache-expired errors propagate immediately (require workflow-level cache recreation).
 // Non-transient errors also propagate immediately.
-func (w *Worker) convertTimeRangeRobust(ctx context.Context, cacheName string, startTime, endTime time.Duration, segmentIndex int, prompt string, acc *usageAccumulator, chunkTimeout time.Duration, fileType artifactpb.File_Type, visualOnly bool) (string, error) {
+func (w *Worker) convertTimeRangeRobust(ctx context.Context, cacheName string, startTime, endTime, apiStartTime time.Duration, segmentIndex int, prompt string, acc *usageAccumulator, chunkTimeout time.Duration, fileType artifactpb.File_Type, visualOnly bool, gcsURI string) (string, error) {
 	var lastErr error
 	delay := chunkRetryInitialDelay
 
 	for attempt := 1; attempt <= chunkRetryMaxAttempts; attempt++ {
-		markdown, err := w.convertTimeRange(ctx, cacheName, startTime, endTime, segmentIndex, prompt, acc, chunkTimeout, fileType, visualOnly)
+		markdown, err := w.convertTimeRange(ctx, cacheName, startTime, endTime, apiStartTime, segmentIndex, prompt, acc, chunkTimeout, fileType, visualOnly, gcsURI)
 		if err == nil {
 			return markdown, nil
 		}
@@ -834,10 +885,11 @@ type ConvertBatchActivityParam struct {
 	// Time-range mode fields (mutually exclusive with page range).
 	// UseTimeRange must be set explicitly because StartTimestamp=0 is valid
 	// for the first segment (00:00:00).
-	UseTimeRange   bool
-	StartTimestamp time.Duration // e.g., 0 for the first segment
-	EndTimestamp   time.Duration // e.g., 5*time.Minute
-	SegmentIndex   int           // Sequential segment number (1-based)
+	UseTimeRange      bool
+	StartTimestamp    time.Duration // Logical ownership start — content before this is discarded
+	EndTimestamp      time.Duration // Logical ownership end
+	APIStartTimestamp time.Duration // Actual API window start; may be earlier than StartTimestamp by SegmentOverlapLookback to give the model boundary context
+	SegmentIndex      int           // Sequential segment number (1-based)
 
 	FileType artifactpb.File_Type
 
@@ -850,6 +902,13 @@ type ConvertBatchActivityParam struct {
 	// variant (no speech/sound transcription). Used when a separate audio pass
 	// handles speech transcription.
 	VisualOnly bool
+
+	// GCSURI is the gs:// URI of the video file on GCS. When non-empty and
+	// the file is video, ConvertVideoRange is used instead of
+	// ConvertToMarkdownWithCache. This restricts the model's view to the
+	// exact [StartTimestamp, EndTimestamp] window at the API level, preventing
+	// cross-segment hallucination.
+	GCSURI string
 }
 
 // ConvertBatchActivityResult defines output from ConvertBatchActivity.
@@ -896,9 +955,13 @@ func (w *Worker) ConvertBatchActivity(ctx context.Context, param *ConvertBatchAc
 			zap.Int("segmentIndex", param.SegmentIndex))
 		logger.Info("ConvertBatchActivity started (time-range mode)")
 
+		apiStart := param.APIStartTimestamp
+		if apiStart >= param.StartTimestamp {
+			apiStart = param.StartTimestamp
+		}
 		markdown, err := w.convertTimeRangeRobust(ctx, param.CacheName,
-			param.StartTimestamp, param.EndTimestamp, param.SegmentIndex,
-			prompt, acc, chunkTimeout, param.FileType, param.VisualOnly)
+			param.StartTimestamp, param.EndTimestamp, apiStart, param.SegmentIndex,
+			prompt, acc, chunkTimeout, param.FileType, param.VisualOnly, param.GCSURI)
 		if err != nil {
 			if isCacheExpired(err) {
 				return nil, temporal.NewNonRetryableApplicationError(
@@ -1041,7 +1104,7 @@ func (w *Worker) SaveAssembledContentActivity(ctx context.Context, param *SaveAs
 				overlapEnd := ci.Offset + ci.OverlapDuration
 				start := idx - ci.PathCount
 				for k := start; k < idx && k < len(batches); k++ {
-					clipped, n := clipToTimeRange(batches[k], overlapEnd, 1<<62)
+					clipped, n := clipToTimeRange(batches[k], overlapEnd, 1<<62, defaultEndTolerance)
 					if n > 0 {
 						batches[k] = clipped
 					}

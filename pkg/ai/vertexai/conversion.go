@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"google.golang.org/genai"
@@ -142,6 +143,55 @@ func (c *Client) ConvertToMarkdownWithCache(ctx context.Context, cacheName, prom
 		Markdown:      markdown,
 		PositionData:  nil,
 		Length:        nil,
+		Client:        "vertexai",
+		Model:         c.model,
+		UsageMetadata: resp.UsageMetadata,
+	}, nil
+}
+
+// ConvertVideoRange implements ai.Client.
+// Uses FileData with VideoMetadata to restrict the model's view to a specific
+// time range. The model physically cannot see frames outside [startOffset, endOffset].
+func (c *Client) ConvertVideoRange(ctx context.Context, gsURI string, mimeType string, startOffset, endOffset time.Duration, prompt string) (*ai.ConversionResult, error) {
+	if gsURI == "" {
+		return nil, errorsx.AddMessage(errorsx.ErrInvalidArgument, "GCS URI is required")
+	}
+
+	promptContent := []*genai.Content{
+		{
+			Role: genai.RoleUser,
+			Parts: []*genai.Part{
+				{
+					FileData: &genai.FileData{FileURI: gsURI, MIMEType: mimeType},
+					VideoMetadata: &genai.VideoMetadata{
+						StartOffset: startOffset,
+						EndOffset:   endOffset,
+					},
+				},
+				{Text: prompt},
+			},
+		},
+	}
+
+	resp, err := c.client.Models.GenerateContent(ctx, c.model, promptContent, &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: getSystemInstruction()},
+			},
+		},
+		AudioTimestamp: true,
+	})
+	if err != nil {
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("ConvertVideoRange failed: %w", err),
+			"Unable to process video segment. Please try again.",
+		)
+	}
+
+	markdown := extractMarkdownFromResponse(resp)
+
+	return &ai.ConversionResult{
+		Markdown:      markdown,
 		Client:        "vertexai",
 		Model:         c.model,
 		UsageMetadata: resp.UsageMetadata,

@@ -23,8 +23,8 @@ func TestTextChunkReference_JSONMarshalPascalCase(t *testing.T) {
 	c.Check(jsonStr, qt.Contains, "PageRange", qt.Commentf("Should use PascalCase"))
 	c.Check(jsonStr, qt.Not(qt.Contains), "page_range", qt.Commentf("Should NOT use snake_case"))
 
-	// Verify exact format
-	c.Check(jsonStr, qt.Equals, `{"PageRange":[1,5]}`)
+	// TimeRange is always present because omitempty doesn't work on arrays.
+	c.Check(jsonStr, qt.Equals, `{"PageRange":[1,5],"TimeRange":[0,0]}`)
 }
 
 // TestTextChunkReference_JSONUnmarshalPascalCase verifies that TextChunkReference
@@ -116,10 +116,10 @@ func TestTextChunkReference_EmptyValue(t *testing.T) {
 	jsonBytes, err := json.Marshal(ref)
 	c.Assert(err, qt.IsNil)
 
-	// PageRange is an array [2]uint32, so zero value is [0,0] which gets marshaled
-	// The omitempty tag doesn't work with arrays (only slices and pointers)
+	// Both fields are arrays, so zero values [0,0] are always marshaled
+	// (omitempty doesn't work with arrays, only slices and pointers).
 	jsonStr := string(jsonBytes)
-	c.Check(jsonStr, qt.Equals, `{"PageRange":[0,0]}`)
+	c.Check(jsonStr, qt.Equals, `{"PageRange":[0,0],"TimeRange":[0,0]}`)
 }
 
 // TestTextChunkReference_RoundTrip tests full marshal/unmarshal cycle

@@ -83,6 +83,14 @@ func (c *Client) ConvertAudioDirect(_ context.Context, _ string, _ string, _ str
 	)
 }
 
+// ConvertVideoRange is not supported by OpenAI client
+func (c *Client) ConvertVideoRange(_ context.Context, _ string, _ string, _, _ time.Duration, _ string) (*ai.ConversionResult, error) {
+	return nil, errorsx.AddMessage(
+		fmt.Errorf("video range processing not supported"),
+		"Video range processing is not supported by OpenAI client. Please configure VertexAI.",
+	)
+}
+
 // UploadToGCS is not supported by OpenAI client
 func (c *Client) UploadToGCS(_ context.Context, _ []byte, _ string, _ string) (string, error) {
 	return "", fmt.Errorf("UploadToGCS not supported by OpenAI client")

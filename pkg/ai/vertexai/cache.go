@@ -172,7 +172,8 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 
 	// Prepare all file parts - either inline text or GCS FileData
 	parts := make([]*genai.Part, 0, len(files))
-	uploadedPaths := make([]string, 0, len(files)) // only tracks paths WE uploaded (for cleanup)
+	objectPaths := make([]string, 0, len(files)) // MinIO-relative paths for cleanup
+	gsURIs := make([]string, 0, len(files))      // full gs:// URIs for the result
 
 	for _, file := range files {
 		// For text-based file types, pass content inline instead of uploading to GCS.
@@ -196,7 +197,7 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 		objectPath := path.Join("vertexai-cache", fileUID.String(), file.FileDisplayName)
 
 		if err := c.storage.UploadFile(ctx, "", objectPath, file.Content, mimeType); err != nil {
-			for _, p := range uploadedPaths {
+			for _, p := range objectPaths {
 				_ = c.storage.DeleteFile(ctx, "", p)
 			}
 			return nil, errorsx.AddMessage(
@@ -207,7 +208,8 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 
 		bucketName := c.storage.GetBucket()
 		gsURI := fmt.Sprintf("gs://%s/%s", bucketName, objectPath)
-		uploadedPaths = append(uploadedPaths, objectPath)
+		objectPaths = append(objectPaths, objectPath)
+		gsURIs = append(gsURIs, gsURI)
 
 		parts = append(parts, &genai.Part{
 			FileData: &genai.FileData{
@@ -242,7 +244,7 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 	// Create the cache
 	cached, err := c.client.Caches.Create(ctx, model, config)
 	if err != nil {
-		for _, objPath := range uploadedPaths {
+		for _, objPath := range objectPaths {
 			_ = c.storage.DeleteFile(ctx, "", objPath)
 		}
 		return nil, errorsx.AddMessage(
@@ -257,7 +259,7 @@ func (c *Client) createBatchCache(ctx context.Context, model string, files []ai.
 		CreateTime:    cached.CreateTime,
 		ExpireTime:    cached.ExpireTime,
 		UsageMetadata: cached.UsageMetadata,
-		GCSFileURIs:   uploadedPaths,
+		GCSFileURIs:   gsURIs,
 	}, nil
 }
 
@@ -280,12 +282,17 @@ func (c *Client) deleteCache(ctx context.Context, cacheName string) error {
 
 // convertToCacheResult converts CacheOutput to ai.CacheResult
 func convertToCacheResult(output *CacheOutput) *ai.CacheResult {
+	var gcsURI string
+	if len(output.GCSFileURIs) == 1 {
+		gcsURI = output.GCSFileURIs[0]
+	}
 	return &ai.CacheResult{
 		CacheName:     output.CacheName,
 		Model:         output.Model,
 		CreateTime:    output.CreateTime,
 		ExpireTime:    output.ExpireTime,
 		UsageMetadata: output.UsageMetadata,
+		GCSURI:        gcsURI,
 	}
 }
 
