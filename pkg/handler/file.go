@@ -2144,6 +2144,20 @@ func (ph *PublicHandler) UpdateFile(ctx context.Context, req *artifactpb.UpdateF
 			zap.String("old_id", kbFile.ID),
 			zap.String("new_id", updatedFile.ID),
 			zap.Strings("aliases", updatedFile.Aliases))
+
+		// Keep the underlying object's display_name in sync so all
+		// surfaces (file page, breadcrumb, download filename) reflect
+		// the rename regardless of which API path triggered it.
+		if updatedFile.ObjectUID != nil {
+			_, err := ph.service.Repository().UpdateObjectByUpdateMap(ctx, types.ObjectUIDType(*updatedFile.ObjectUID), map[string]any{
+				"display_name": updatedFile.DisplayName,
+			})
+			if err != nil {
+				logger.Warn("Failed to sync object display_name after file rename",
+					zap.String("fileUID", updatedFile.UID.String()),
+					zap.Error(err))
+			}
+		}
 	}
 
 	// If tags were updated, sync them to Milvus embeddings
