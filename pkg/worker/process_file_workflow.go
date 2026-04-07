@@ -721,13 +721,19 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			}
 		}
 
-		// Step 2b: Clean up old converted files and stale patches (for reprocessing)
-		logger.Info("Cleaning up old converted files before standardization", "fileCount", len(filesToProcessFull))
+		// Step 2b: Clean up old content/summary converted files and stale patches (for reprocessing).
+		// Standard file types (DOCUMENT/IMAGE/AUDIO/VIDEO) are preserved so that
+		// VIEW_STANDARD_FILE_TYPE previews remain available during reprocessing.
+		logger.Info("Cleaning up old content/summary converted files before standardization", "fileCount", len(filesToProcessFull))
 		for _, fm := range filesToProcessFull {
 			if err := workflow.ExecuteActivity(ctx, w.DeleteOldConvertedFilesActivity, &DeleteOldConvertedFilesActivityParam{
 				FileUID:    fm.fileUID,
 				ClearPatch: true,
 				KBUID:      param.KBUID,
+				OnlyTypes: []artifactpb.ConvertedFileType{
+					artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT,
+					artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_SUMMARY,
+				},
 			}).Get(ctx, nil); err != nil {
 				logger.Error("Failed to cleanup old converted files before standardization",
 					"fileUID", fm.fileUID.String(),

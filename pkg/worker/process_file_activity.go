@@ -394,10 +394,10 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 	w.log.Info("DeleteOldConvertedFilesActivity: Found converted files to delete",
 		zap.Int("count", len(allConvertedFiles)))
 
-	// Delete old converted files (content, summary, PDF, etc.)
-	// In full reprocessing this deletes everything (OnlyTypes is empty).
-	// In patch-only mode OnlyTypes is set to content+summary so the
-	// standardized preview file (PDF/PNG/OGG/MP4) is preserved.
+	// Delete old converted files filtered by OnlyTypes (if set).
+	// Both full reprocessing and patch-only mode set OnlyTypes to
+	// content+summary so the standardized preview file (PDF/PNG/OGG/MP4)
+	// remains available for VIEW_STANDARD_FILE_TYPE during processing.
 	for _, file := range allConvertedFiles {
 		w.log.Info("DeleteOldConvertedFilesActivity: Deleting old converted file",
 			zap.String("oldConvertedFileUID", file.UID.String()),
@@ -1183,6 +1183,14 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 
 	// Check if file needs conversion
 	needsConversion, targetFormat, _ := filetype.NeedFileTypeConversion(param.FileType)
+
+	// During reprocessing the standard file type (PDF/PNG/OGG/MP4) is preserved
+	// by DeleteOldConvertedFilesActivity. Detect and reuse it to avoid redundant
+	// re-conversion and to keep VIEW_STANDARD_FILE_TYPE available throughout.
+	if existing := w.findExistingStandardFile(ctx, param, needsConversion, targetFormat); existing != nil {
+		return existing, nil
+	}
+
 	if !needsConversion {
 		w.log.Info("StandardizeFileTypeActivity: File type is AI-native, no standardization needed",
 			zap.String("fileType", param.FileType.String()))
@@ -1474,6 +1482,63 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 		PositionData:         nil,
 		IsTextBased:          isTextBased,
 	}, nil
+}
+
+// findExistingStandardFile checks whether a standard file type record already
+// exists for this file (from a prior processing run). If found it returns a
+// result that lets StandardizeFileTypeActivity skip re-conversion entirely.
+// The isTextBased classification is intentionally NOT re-run here: the DB
+// already holds the accurate content-based value from first processing, and
+// re-classifying with a nil-content heuristic could downgrade it.
+func (w *Worker) findExistingStandardFile(
+	ctx context.Context,
+	param *StandardizeFileTypeActivityParam,
+	needsConversion bool,
+	targetFormat string,
+) *StandardizeFileTypeActivityResult {
+	// Derive the target ConvertedFileType through the canonical chain:
+	// for AI-native types, GetConvertedFileTypeInfo resolves directly;
+	// for types needing conversion, FormatToFileType → GetConvertedFileTypeInfo.
+	var targetType artifactpb.ConvertedFileType
+	if !needsConversion {
+		targetType, _, _ = filetype.GetConvertedFileTypeInfo(param.FileType)
+	} else {
+		targetType, _, _ = filetype.GetConvertedFileTypeInfo(filetype.FormatToFileType(targetFormat))
+	}
+
+	if targetType == artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_UNSPECIFIED {
+		return nil
+	}
+
+	existing, err := w.repository.GetConvertedFileByFileUIDAndType(ctx, param.FileUID, targetType)
+	if err != nil || existing == nil {
+		return nil
+	}
+
+	w.log.Info("StandardizeFileTypeActivity: Reusing existing standard file",
+		zap.String("fileUID", param.FileUID.String()),
+		zap.String("convertedFileUID", existing.UID.String()),
+		zap.String("storagePath", existing.StoragePath))
+
+	convertedType := param.FileType
+	converted := false
+	convertedDest := param.Destination
+	convertedBucket := param.Bucket
+	if needsConversion {
+		convertedType = filetype.FormatToFileType(targetFormat)
+		converted = true
+		convertedDest = existing.StoragePath
+		convertedBucket = config.Config.Minio.BucketName
+	}
+
+	return &StandardizeFileTypeActivityResult{
+		ConvertedDestination: convertedDest,
+		ConvertedBucket:      convertedBucket,
+		ConvertedType:        convertedType,
+		OriginalType:         param.FileType,
+		Converted:            converted,
+		ConvertedFileUID:     existing.UID,
+	}
 }
 
 // classifyAndUpdateFile persists the is_text_based classification on the file record.
