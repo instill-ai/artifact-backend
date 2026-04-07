@@ -770,6 +770,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		filtering.DeclareStandardFunctions(),
 		filtering.DeclareIdent("uid", filtering.TypeString),
 		filtering.DeclareIdent("id", filtering.TypeString),
+		filtering.DeclareIdent("q", filtering.TypeString),
 		filtering.DeclareIdent("process_status", filtering.TypeString),
 		// tags is a repeated string field (PostgreSQL VARCHAR[] array).
 		// Use the `:` (has) operator: tags:"value" → '?' = ANY(tags)
