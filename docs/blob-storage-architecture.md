@@ -75,7 +75,7 @@ The blob plugin acts as a "dumb proxy" - it doesn't need to re-verify permission
 
 ## File Deletion Flow
 
-File deletion is a two-phase process: immediate soft-delete followed by asynchronous cleanup via Temporal workflows.
+File deletion is a three-phase process: immediate soft-delete, termination of any in-flight processing workflow, then asynchronous cleanup via Temporal workflows.
 
 ```mermaid
 sequenceDiagram
@@ -93,6 +93,7 @@ sequenceDiagram
     ArtifactBackend->>ArtifactBackend: CheckNamespacePermission (ACL)
     ArtifactBackend->>PostgreSQL: Soft-delete file<br/>(set delete_time)
     PostgreSQL-->>ArtifactBackend: Updated
+    ArtifactBackend->>Temporal: Terminate process-file-{fileUID}<br/>(if running)
     ArtifactBackend->>Temporal: Start CleanupFileWorkflow
     ArtifactBackend-->>APIGateway: 200 OK
     APIGateway-->>Client: 200 OK
@@ -108,6 +109,14 @@ sequenceDiagram
         Temporal->>PostgreSQL: Hard-delete records<br/>(file, chunk, embedding, converted_file)
     end
 ```
+
+### Processing Workflow Termination
+
+When `CleanupFile` is called, it first terminates any running `process-file-{fileUID}` workflow before starting the cleanup workflow. This prevents:
+
+- **Wasted compute**: The processing workflow would continue chunking, embedding, and summarizing a deleted file.
+- **Silent DB failures**: Processing activities use `WHERE delete_time IS NULL` in their updates. After soft-delete, these updates silently find 0 rows, leaving `process_status` stuck at `PROCESSING`.
+- **Conflicting operations**: Cleanup and processing workflows operating on the same file's resources concurrently.
 
 ### Cleanup Activities
 

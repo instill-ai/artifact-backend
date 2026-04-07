@@ -739,8 +739,28 @@ func (w *Worker) ProcessFileDualMode(ctx context.Context, prodKBUID, stagingKBUI
 	return nil
 }
 
-// CleanupFile orchestrates the file cleanup workflow
+// terminateProcessingWorkflow terminates a running process-file workflow for the
+// given file UID. This is called before cleanup to prevent wasted compute on
+// deleted files and to avoid the processing workflow's final DB updates silently
+// failing (the file is soft-deleted, so WHERE delete_time IS NULL finds 0 rows).
+func (w *Worker) terminateProcessingWorkflow(ctx context.Context, fileUID types.FileUIDType) {
+	workflowID := fmt.Sprintf("process-file-%s", fileUID.String())
+	desc, err := w.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		return
+	}
+	if desc.WorkflowExecutionInfo.Status == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		w.log.Info("Terminating processing workflow for file cleanup",
+			zap.String("workflowID", workflowID))
+		_ = w.temporalClient.TerminateWorkflow(ctx, workflowID, "", "file deleted")
+	}
+}
+
+// CleanupFile orchestrates the file cleanup workflow. It first terminates any
+// running processing workflow for the file to prevent conflicting operations.
 func (w *Worker) CleanupFile(ctx context.Context, fileUID types.FileUIDType, userUID, requesterUID types.RequesterUIDType, workflowID string, includeOriginalFile bool) error {
+	w.terminateProcessingWorkflow(ctx, fileUID)
+
 	workflow := NewCleanupFileWorkflow(w.temporalClient, w)
 	return workflow.Execute(ctx, CleanupFileWorkflowParam{
 		FileUID:             fileUID,
