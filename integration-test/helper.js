@@ -571,30 +571,22 @@ export function validateFile(file, isPrivate) {
     return false;
   }
 
-  // Note: ownerUid field removed in AIP refactoring - use owner object instead
-
   // Validate ownerName field (required)
   if (!("ownerName" in file)) {
     console.log("File has no ownerName field");
     return false;
   }
 
-  // Validate owner object (optional but if present, must be valid)
-  if ("owner" in file && file.owner !== null && file.owner !== undefined) {
-    if (!file.owner.user && !file.owner.organization) {
-      console.log("File owner is neither user nor organization");
-      return false;
-    }
+  // Validate denormalized owner display fields (replaced embedded owner object)
+  if ("ownerDisplayName" in file && typeof file.ownerDisplayName !== 'string') {
+    console.log("File ownerDisplayName is not a string");
+    return false;
   }
 
-  // Note: creatorUid field removed in AIP refactoring - use creator object instead
-
-  // Validate creator object (optional, but if present must be valid User)
-  if ("creator" in file && file.creator !== null && file.creator !== undefined) {
-    if (!isValidCreator(file.creator)) {
-      console.log("File creator is not a valid User object");
-      return false;
-    }
+  // Validate denormalized creator display fields (replaced embedded creator object)
+  if ("creatorDisplayName" in file && typeof file.creatorDisplayName !== 'string') {
+    console.log("File creatorDisplayName is not a string");
+    return false;
   }
 
   // Validate knowledgeBaseIds field (many-to-many relationship, should be array if present)
@@ -740,22 +732,16 @@ export function validateFileGRPC(file, isPrivate) {
     }
   }
 
-  // Validate owner object (optional but if present, must be valid)
-  if ("owner" in file && file.owner !== null && file.owner !== undefined) {
-    if (!file.owner.user && !file.owner.organization) {
-      console.log("File owner is neither user nor organization");
-      return false;
-    }
+  // Validate denormalized owner display fields (replaced embedded owner object)
+  if ("ownerDisplayName" in file && typeof file.ownerDisplayName !== 'string') {
+    console.log("File ownerDisplayName is not a string");
+    return false;
   }
 
-  // Note: creatorUid field removed in AIP refactoring - use creator object instead
-
-  // Validate creator object (optional, but if present must be valid User)
-  if ("creator" in file && file.creator !== null && file.creator !== undefined) {
-    if (!isValidCreator(file.creator)) {
-      console.log("File creator is not a valid User object");
-      return false;
-    }
+  // Validate denormalized creator display fields (replaced embedded creator object)
+  if ("creatorDisplayName" in file && typeof file.creatorDisplayName !== 'string') {
+    console.log("File creatorDisplayName is not a string");
+    return false;
   }
 
   // Validate knowledgeBases field (optional, should be array if present)

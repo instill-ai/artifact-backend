@@ -91,36 +91,74 @@ func convertKBToCatalogPB(kb *repository.KnowledgeBaseModel, ns *resource.Namesp
 	return knowledgeBase
 }
 
+// ownerDisplayInfo extracts display name and avatar from a mgmt Owner (User or Organization).
+func ownerDisplayInfo(owner *mgmtpb.Owner) (displayName string, avatar *string) {
+	if owner == nil {
+		return "", nil
+	}
+	switch o := owner.GetOwner().(type) {
+	case *mgmtpb.Owner_User:
+		if u := o.User; u != nil {
+			displayName = u.GetProfile().GetDisplayName()
+			if a := u.GetProfile().GetAvatar(); a != "" {
+				avatar = &a
+			}
+		}
+	case *mgmtpb.Owner_Organization:
+		if org := o.Organization; org != nil {
+			displayName = org.GetProfile().GetDisplayName()
+			if a := org.GetProfile().GetAvatar(); a != "" {
+				avatar = &a
+			}
+		}
+	}
+	return displayName, avatar
+}
+
+// userDisplayInfo extracts display name and avatar from a mgmt User.
+func userDisplayInfo(user *mgmtpb.User) (displayName string, avatar *string) {
+	if user == nil {
+		return "", nil
+	}
+	displayName = user.GetProfile().GetDisplayName()
+	if a := user.GetProfile().GetAvatar(); a != "" {
+		avatar = &a
+	}
+	return displayName, avatar
+}
+
 // convertKBFileToPB converts database FileModel to protobuf File.
 // The `name` field is computed dynamically following other backends' patterns.
 // The objectID parameter is the hash-based object ID (e.g., "obj-abc123") for AIP-122 compliant resource references.
 func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *repository.KnowledgeBaseModel, owner *mgmtpb.Owner, creator *mgmtpb.User, objectID string) *artifactpb.File {
-	// ownerName is the full namespace reference (e.g., "users/admin" or "organizations/org-id")
 	ownerName := ns.Name()
-	// namespaceID is just the ID part (e.g., "admin")
 	namespaceID := ns.NsID
-	// Use ID if set, otherwise fallback to UID
 	fileID := kbf.ID
 	if fileID == "" {
 		fileID = kbf.UID.String()
 	}
 
+	ownerDN, ownerAv := ownerDisplayInfo(owner)
+	creatorDN, creatorAv := userDisplayInfo(creator)
+
 	file := &artifactpb.File{
-		Id:               fileID,
-		Slug:             kbf.Slug,                                                                             // URL-friendly slug without prefix
-		Name:             fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kb.ID, fileID), // Computed: namespaces/{namespace}/knowledge-bases/{kb}/files/{file}
-		DisplayName:      kbf.DisplayName,
-		Description:      kbf.Description,
-		Type:             convertFileType(kbf.FileType),
-		CreateTime:       timestamppb.New(*kbf.CreateTime),
-		UpdateTime:       timestamppb.New(*kbf.UpdateTime),
-		OwnerName:        ownerName,
-		Owner:            owner,
-		Creator:          creator,
-		KnowledgeBases: []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)}, // File associated with this KB
-		Size:             kbf.Size,
-		ProcessStatus:    convertFileProcessStatus(kbf.ProcessStatus),
-		Aliases:          kbf.Aliases,
+		Id:                 fileID,
+		Slug:               kbf.Slug,
+		Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kb.ID, fileID),
+		DisplayName:        kbf.DisplayName,
+		Description:        kbf.Description,
+		Type:               convertFileType(kbf.FileType),
+		CreateTime:         timestamppb.New(*kbf.CreateTime),
+		UpdateTime:         timestamppb.New(*kbf.UpdateTime),
+		OwnerName:          ownerName,
+		OwnerDisplayName:   ownerDN,
+		OwnerAvatar:        ownerAv,
+		CreatorDisplayName: creatorDN,
+		CreatorAvatar:      creatorAv,
+		KnowledgeBases:     []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)},
+		Size:               kbf.Size,
+		ProcessStatus:      convertFileProcessStatus(kbf.ProcessStatus),
+		Aliases:            kbf.Aliases,
 	}
 
 	// Handle optional fields

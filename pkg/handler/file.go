@@ -638,9 +638,11 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			zap.Bool("hasDualProcessing", dualTarget != nil && dualTarget.IsNeeded))
 	}
 
-	// Fetch owner and creator objects
+	// Fetch owner and creator for denormalized display fields
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
 	creator, _ := ph.service.FetchUserByUID(ctx, res.CreatorUID.String())
+	ownerDN, ownerAv := ownerDisplayInfo(owner)
+	creatorDN, creatorAv := userDisplayInfo(creator)
 
 	// Get object ID for AIP-122 compliant resource name
 	objectResourceName := ""
@@ -656,9 +658,11 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			Id:                 res.ID,
 			Slug:               res.Slug,
 			OwnerName:          ns.Name(),
-			Owner:              owner,
-			Creator:            creator,
-			KnowledgeBases:     []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)}, // Initial KB association
+			OwnerDisplayName:   ownerDN,
+			OwnerAvatar:        ownerAv,
+			CreatorDisplayName: creatorDN,
+			CreatorAvatar:      creatorAv,
+			KnowledgeBases:     []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)},
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, kb.ID, res.ID),
 			DisplayName:        res.DisplayName,
 			Type:               req.File.Type,
@@ -847,8 +851,9 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		)
 	}
 
-	// Fetch owner once (same for all files in this KB)
+	// Fetch owner once (same for all files in this KB) and extract denormalized display fields
 	owner, _ := ph.service.FetchOwnerByNamespace(ctx, ns)
+	ownerDN, ownerAv := ownerDisplayInfo(owner)
 
 	// Fetch all file-KB associations for all files in one go if kbID is empty
 	var fileKBAssociations map[types.FileUIDType][]string
@@ -920,8 +925,9 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			downloadURL = response.GetDownloadUrl()
 		}
 
-		// Fetch creator for this file (owner is the same for all files in this KB)
+		// Fetch creator for denormalized display fields (owner is the same for all files in this KB)
 		creator, _ := ph.service.FetchUserByUID(ctx, kbFile.CreatorUID.String())
+		creatorDN, creatorAv := userDisplayInfo(creator)
 
 		// Use ID if set, otherwise fallback to UID (for backward compatibility)
 		fileID := kbFile.ID
@@ -973,8 +979,10 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			Id:                 fileID,
 			Slug:               kbFile.Slug,
 			OwnerName:          ns.Name(),
-			Owner:              owner,
-			Creator:            creator,
+			OwnerDisplayName:   ownerDN,
+			OwnerAvatar:        ownerAv,
+			CreatorDisplayName: creatorDN,
+			CreatorAvatar:      creatorAv,
 			KnowledgeBases:     knowledgeBaseNames,
 			Name:               fmt.Sprintf("namespaces/%s/knowledge-bases/%s/files/%s", namespaceID, fileKBID, fileID),
 			DisplayName:        kbFile.DisplayName,

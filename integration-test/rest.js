@@ -541,7 +541,8 @@ export function TEST_08_E2EKnowledgeBase(data) {
         [`E2E: File has valid structure (${s.originalName})`]: () => file && helper.validateFile(file, false),
         // Note: ownerUid and creatorUid removed in AIP refactoring
         [`E2E: File ownerName matches namespace (${s.originalName})`]: () => file && file.ownerName === `users/${data.expectedOwner.id}`,
-        [`E2E: File has valid creator object (${s.originalName})`]: () => file && helper.isValidCreator(file.creator, data.expectedOwner),
+        [`E2E: File has ownerDisplayName (${s.originalName})`]: () => file && typeof file.ownerDisplayName === 'string' && file.ownerDisplayName.length > 0,
+        [`E2E: File has creatorDisplayName (${s.originalName})`]: () => file && typeof file.creatorDisplayName === 'string' && file.creatorDisplayName.length > 0,
       });
       // Note: uid removed in AIP refactoring - use id for identification
       if (file && file.id) {
@@ -635,7 +636,8 @@ export function TEST_08_E2EKnowledgeBase(data) {
               fileData.totalChunks > 0 && fileData.totalTokens > 0,
             // Owner/Creator validations on file list (ownerUid and creatorUid removed in AIP refactoring)
             [`E2E: Listed file ownerName matches namespace (${f.type})`]: () => fileData && fileData.ownerName === `users/${data.expectedOwner.id}`,
-            [`E2E: Listed file has valid creator (${f.type})`]: () => fileData && helper.isValidCreator(fileData.creator, data.expectedOwner),
+            [`E2E: Listed file has ownerDisplayName (${f.type})`]: () => fileData && typeof fileData.ownerDisplayName === 'string' && fileData.ownerDisplayName.length > 0,
+            [`E2E: Listed file has creatorDisplayName (${f.type})`]: () => fileData && typeof fileData.creatorDisplayName === 'string' && fileData.creatorDisplayName.length > 0,
           });
         } catch (e) {
           console.log(`E2E: Error verifying metadata for ${f.filename} (${f.type}): ${e}`);
@@ -1640,15 +1642,14 @@ export function TEST_23_OwnerCreatorFields(data) {
     let fileJson; try { fileJson = fileRes.json(); } catch (e) { fileJson = {}; }
     const file = fileJson.file || {};
 
-    // Validate file owner/creator fields (ownerUid and creatorUid removed in AIP refactoring)
+    // Validate file denormalized display fields (embedded owner/creator objects removed for data leakage prevention)
     check(fileRes, {
       "File: Response status is 200": (r) => r.status === 200,
       "File: ownerName matches namespace path": () => file && file.ownerName === `users/${data.expectedOwner.id}`,
-      "File: owner object exists and is valid": () => file && file.owner && file.owner.user,
-      "File: owner.user.id matches expected user": () => file && file.owner && file.owner.user && file.owner.user.id === data.expectedOwner.id,
-      "File: creator object exists and is valid": () => file && helper.isValidCreator(file.creator, data.expectedOwner),
-      "File: creator.id matches expected user": () => file && file.creator && file.creator.id === data.expectedOwner.id,
-      // Note: uid field removed in AIP refactoring - no longer checking creator.uid
+      "File: ownerDisplayName is populated": () => file && typeof file.ownerDisplayName === 'string' && file.ownerDisplayName.length > 0,
+      "File: creatorDisplayName is populated": () => file && typeof file.creatorDisplayName === 'string' && file.creatorDisplayName.length > 0,
+      "File: no embedded owner object (data leakage fix)": () => file && !file.owner,
+      "File: no embedded creator object (data leakage fix)": () => file && !file.creator,
       "File: knowledgeBases is array (or undefined)": () => file && (!file.knowledgeBases || Array.isArray(file.knowledgeBases)),
     });
 
@@ -1706,10 +1707,9 @@ export function TEST_23_OwnerCreatorFields(data) {
 
       check(getFileRes, {
         "Get File: Response status is 200": (r) => r.status === 200,
-        // Note: ownerUid and creatorUid removed in AIP refactoring
         "Get File: ownerName is preserved": () => fetchedFile && fetchedFile.ownerName === `users/${data.expectedOwner.id}`,
-        "Get File: owner object is populated": () => fetchedFile && fetchedFile.owner && fetchedFile.owner.user,
-        "Get File: creator object is populated": () => fetchedFile && fetchedFile.creator && fetchedFile.creator.id === data.expectedOwner.id,
+        "Get File: ownerDisplayName is preserved": () => fetchedFile && typeof fetchedFile.ownerDisplayName === 'string' && fetchedFile.ownerDisplayName.length > 0,
+        "Get File: creatorDisplayName is preserved": () => fetchedFile && typeof fetchedFile.creatorDisplayName === 'string' && fetchedFile.creatorDisplayName.length > 0,
       });
 
       // Verify owner/creator fields persist when listing files
@@ -1726,11 +1726,9 @@ export function TEST_23_OwnerCreatorFields(data) {
       check(listFilesRes, {
         "List Files: Response status is 200": (r) => r.status === 200,
         "List Files: Our file is in the list": () => listedFile !== undefined,
-        // Note: ownerUid and creatorUid removed in AIP refactoring
         "List Files: ownerName is preserved": () => listedFile && listedFile.ownerName === `users/${data.expectedOwner.id}`,
-        "List Files: owner object is populated": () => listedFile && listedFile.owner && listedFile.owner.user,
-        "List Files: owner.user.id matches": () => listedFile && listedFile.owner && listedFile.owner.user && listedFile.owner.user.id === data.expectedOwner.id,
-        "List Files: creator object is populated": () => listedFile && helper.isValidCreator(listedFile.creator, data.expectedOwner),
+        "List Files: ownerDisplayName is preserved": () => listedFile && typeof listedFile.ownerDisplayName === 'string' && listedFile.ownerDisplayName.length > 0,
+        "List Files: creatorDisplayName is preserved": () => listedFile && typeof listedFile.creatorDisplayName === 'string' && listedFile.creatorDisplayName.length > 0,
       });
     }
 
