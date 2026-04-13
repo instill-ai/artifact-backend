@@ -9,6 +9,7 @@ import (
 	"time"
 	mm_time "time"
 
+	"github.com/gofrs/uuid"
 	"github.com/gojuno/minimock/v3"
 	mm_repository "github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/repository/object"
@@ -184,6 +185,13 @@ type RepositoryMock struct {
 	beforeDeleteEmbeddingsWithFileUIDCounter uint64
 	DeleteEmbeddingsWithFileUIDMock          mRepositoryMockDeleteEmbeddingsWithFileUID
 
+	funcDeleteEntitiesByFileUID          func(ctx context.Context, fileUID types.FileUIDType) (err error)
+	funcDeleteEntitiesByFileUIDOrigin    string
+	inspectFuncDeleteEntitiesByFileUID   func(ctx context.Context, fileUID types.FileUIDType)
+	afterDeleteEntitiesByFileUIDCounter  uint64
+	beforeDeleteEntitiesByFileUIDCounter uint64
+	DeleteEntitiesByFileUIDMock          mRepositoryMockDeleteEntitiesByFileUID
+
 	funcDeleteFile          func(ctx context.Context, fileUID string) (err error)
 	funcDeleteFileOrigin    string
 	inspectFuncDeleteFile   func(ctx context.Context, fileUID string)
@@ -260,6 +268,13 @@ type RepositoryMock struct {
 	afterDropCollectionCounter  uint64
 	beforeDropCollectionCounter uint64
 	DropCollectionMock          mRepositoryMockDropCollection
+
+	funcEntityHop          func(ctx context.Context, fileUIDs []types.FileUIDType) (fa1 []types.FileUIDType, err error)
+	funcEntityHopOrigin    string
+	inspectFuncEntityHop   func(ctx context.Context, fileUIDs []types.FileUIDType)
+	afterEntityHopCounter  uint64
+	beforeEntityHopCounter uint64
+	EntityHopMock          mRepositoryMockEntityHop
 
 	funcFlushCollection          func(ctx context.Context, collectionID string) (err error)
 	funcFlushCollectionOrigin    string
@@ -731,6 +746,13 @@ type RepositoryMock struct {
 	beforeIsKBUpdatingCounter uint64
 	IsKBUpdatingMock          mRepositoryMockIsKBUpdating
 
+	funcLinkEntityFile          func(ctx context.Context, entityUID uuid.UUID, fileUID types.FileUIDType) (err error)
+	funcLinkEntityFileOrigin    string
+	inspectFuncLinkEntityFile   func(ctx context.Context, entityUID uuid.UUID, fileUID types.FileUIDType)
+	afterLinkEntityFileCounter  uint64
+	beforeLinkEntityFileCounter uint64
+	LinkEntityFileMock          mRepositoryMockLinkEntityFile
+
 	funcListAllKnowledgeBasesAdmin          func(ctx context.Context) (ka1 []mm_repository.KnowledgeBaseModel, err error)
 	funcListAllKnowledgeBasesAdminOrigin    string
 	inspectFuncListAllKnowledgeBasesAdmin   func(ctx context.Context)
@@ -1039,6 +1061,13 @@ type RepositoryMock struct {
 	beforeUpdateTextChunkDestinationsCounter uint64
 	UpdateTextChunkDestinationsMock          mRepositoryMockUpdateTextChunkDestinations
 
+	funcUpsertEntities          func(ctx context.Context, kbUID types.KBUIDType, entities []mm_repository.EntityRecord) (ua1 []uuid.UUID, err error)
+	funcUpsertEntitiesOrigin    string
+	inspectFuncUpsertEntities   func(ctx context.Context, kbUID types.KBUIDType, entities []mm_repository.EntityRecord)
+	afterUpsertEntitiesCounter  uint64
+	beforeUpsertEntitiesCounter uint64
+	UpsertEntitiesMock          mRepositoryMockUpsertEntities
+
 	funcUpsertRepositoryTag          func(ctx context.Context, tp1 *types.Tag) (tp2 *types.Tag, err error)
 	funcUpsertRepositoryTagOrigin    string
 	inspectFuncUpsertRepositoryTag   func(ctx context.Context, tp1 *types.Tag)
@@ -1124,6 +1153,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.DeleteEmbeddingsWithFileUIDMock = mRepositoryMockDeleteEmbeddingsWithFileUID{mock: m}
 	m.DeleteEmbeddingsWithFileUIDMock.callArgs = []*RepositoryMockDeleteEmbeddingsWithFileUIDParams{}
 
+	m.DeleteEntitiesByFileUIDMock = mRepositoryMockDeleteEntitiesByFileUID{mock: m}
+	m.DeleteEntitiesByFileUIDMock.callArgs = []*RepositoryMockDeleteEntitiesByFileUIDParams{}
+
 	m.DeleteFileMock = mRepositoryMockDeleteFile{mock: m}
 	m.DeleteFileMock.callArgs = []*RepositoryMockDeleteFileParams{}
 
@@ -1156,6 +1188,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.DropCollectionMock = mRepositoryMockDropCollection{mock: m}
 	m.DropCollectionMock.callArgs = []*RepositoryMockDropCollectionParams{}
+
+	m.EntityHopMock = mRepositoryMockEntityHop{mock: m}
+	m.EntityHopMock.callArgs = []*RepositoryMockEntityHopParams{}
 
 	m.FlushCollectionMock = mRepositoryMockFlushCollection{mock: m}
 	m.FlushCollectionMock.callArgs = []*RepositoryMockFlushCollectionParams{}
@@ -1349,6 +1384,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.IsKBUpdatingMock = mRepositoryMockIsKBUpdating{mock: m}
 	m.IsKBUpdatingMock.callArgs = []*RepositoryMockIsKBUpdatingParams{}
 
+	m.LinkEntityFileMock = mRepositoryMockLinkEntityFile{mock: m}
+	m.LinkEntityFileMock.callArgs = []*RepositoryMockLinkEntityFileParams{}
+
 	m.ListAllKnowledgeBasesAdminMock = mRepositoryMockListAllKnowledgeBasesAdmin{mock: m}
 	m.ListAllKnowledgeBasesAdminMock.callArgs = []*RepositoryMockListAllKnowledgeBasesAdminParams{}
 
@@ -1480,6 +1518,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.UpdateTextChunkDestinationsMock = mRepositoryMockUpdateTextChunkDestinations{mock: m}
 	m.UpdateTextChunkDestinationsMock.callArgs = []*RepositoryMockUpdateTextChunkDestinationsParams{}
+
+	m.UpsertEntitiesMock = mRepositoryMockUpsertEntities{mock: m}
+	m.UpsertEntitiesMock.callArgs = []*RepositoryMockUpsertEntitiesParams{}
 
 	m.UpsertRepositoryTagMock = mRepositoryMockUpsertRepositoryTag{mock: m}
 	m.UpsertRepositoryTagMock.callArgs = []*RepositoryMockUpsertRepositoryTagParams{}
@@ -10020,6 +10061,348 @@ func (m *RepositoryMock) MinimockDeleteEmbeddingsWithFileUIDInspect() {
 	}
 }
 
+type mRepositoryMockDeleteEntitiesByFileUID struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockDeleteEntitiesByFileUIDExpectation
+	expectations       []*RepositoryMockDeleteEntitiesByFileUIDExpectation
+
+	callArgs []*RepositoryMockDeleteEntitiesByFileUIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockDeleteEntitiesByFileUIDExpectation specifies expectation struct of the Repository.DeleteEntitiesByFileUID
+type RepositoryMockDeleteEntitiesByFileUIDExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockDeleteEntitiesByFileUIDParams
+	paramPtrs          *RepositoryMockDeleteEntitiesByFileUIDParamPtrs
+	expectationOrigins RepositoryMockDeleteEntitiesByFileUIDExpectationOrigins
+	results            *RepositoryMockDeleteEntitiesByFileUIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockDeleteEntitiesByFileUIDParams contains parameters of the Repository.DeleteEntitiesByFileUID
+type RepositoryMockDeleteEntitiesByFileUIDParams struct {
+	ctx     context.Context
+	fileUID types.FileUIDType
+}
+
+// RepositoryMockDeleteEntitiesByFileUIDParamPtrs contains pointers to parameters of the Repository.DeleteEntitiesByFileUID
+type RepositoryMockDeleteEntitiesByFileUIDParamPtrs struct {
+	ctx     *context.Context
+	fileUID *types.FileUIDType
+}
+
+// RepositoryMockDeleteEntitiesByFileUIDResults contains results of the Repository.DeleteEntitiesByFileUID
+type RepositoryMockDeleteEntitiesByFileUIDResults struct {
+	err error
+}
+
+// RepositoryMockDeleteEntitiesByFileUIDOrigins contains origins of expectations of the Repository.DeleteEntitiesByFileUID
+type RepositoryMockDeleteEntitiesByFileUIDExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originFileUID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) Optional() *mRepositoryMockDeleteEntitiesByFileUID {
+	mmDeleteEntitiesByFileUID.optional = true
+	return mmDeleteEntitiesByFileUID
+}
+
+// Expect sets up expected params for Repository.DeleteEntitiesByFileUID
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) Expect(ctx context.Context, fileUID types.FileUIDType) *mRepositoryMockDeleteEntitiesByFileUID {
+	if mmDeleteEntitiesByFileUID.mock.funcDeleteEntitiesByFileUID != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("RepositoryMock.DeleteEntitiesByFileUID mock is already set by Set")
+	}
+
+	if mmDeleteEntitiesByFileUID.defaultExpectation == nil {
+		mmDeleteEntitiesByFileUID.defaultExpectation = &RepositoryMockDeleteEntitiesByFileUIDExpectation{}
+	}
+
+	if mmDeleteEntitiesByFileUID.defaultExpectation.paramPtrs != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("RepositoryMock.DeleteEntitiesByFileUID mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteEntitiesByFileUID.defaultExpectation.params = &RepositoryMockDeleteEntitiesByFileUIDParams{ctx, fileUID}
+	mmDeleteEntitiesByFileUID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteEntitiesByFileUID.expectations {
+		if minimock.Equal(e.params, mmDeleteEntitiesByFileUID.defaultExpectation.params) {
+			mmDeleteEntitiesByFileUID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteEntitiesByFileUID.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteEntitiesByFileUID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.DeleteEntitiesByFileUID
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) ExpectCtxParam1(ctx context.Context) *mRepositoryMockDeleteEntitiesByFileUID {
+	if mmDeleteEntitiesByFileUID.mock.funcDeleteEntitiesByFileUID != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("RepositoryMock.DeleteEntitiesByFileUID mock is already set by Set")
+	}
+
+	if mmDeleteEntitiesByFileUID.defaultExpectation == nil {
+		mmDeleteEntitiesByFileUID.defaultExpectation = &RepositoryMockDeleteEntitiesByFileUIDExpectation{}
+	}
+
+	if mmDeleteEntitiesByFileUID.defaultExpectation.params != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("RepositoryMock.DeleteEntitiesByFileUID mock is already set by Expect")
+	}
+
+	if mmDeleteEntitiesByFileUID.defaultExpectation.paramPtrs == nil {
+		mmDeleteEntitiesByFileUID.defaultExpectation.paramPtrs = &RepositoryMockDeleteEntitiesByFileUIDParamPtrs{}
+	}
+	mmDeleteEntitiesByFileUID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteEntitiesByFileUID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDeleteEntitiesByFileUID
+}
+
+// ExpectFileUIDParam2 sets up expected param fileUID for Repository.DeleteEntitiesByFileUID
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) ExpectFileUIDParam2(fileUID types.FileUIDType) *mRepositoryMockDeleteEntitiesByFileUID {
+	if mmDeleteEntitiesByFileUID.mock.funcDeleteEntitiesByFileUID != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("RepositoryMock.DeleteEntitiesByFileUID mock is already set by Set")
+	}
+
+	if mmDeleteEntitiesByFileUID.defaultExpectation == nil {
+		mmDeleteEntitiesByFileUID.defaultExpectation = &RepositoryMockDeleteEntitiesByFileUIDExpectation{}
+	}
+
+	if mmDeleteEntitiesByFileUID.defaultExpectation.params != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("RepositoryMock.DeleteEntitiesByFileUID mock is already set by Expect")
+	}
+
+	if mmDeleteEntitiesByFileUID.defaultExpectation.paramPtrs == nil {
+		mmDeleteEntitiesByFileUID.defaultExpectation.paramPtrs = &RepositoryMockDeleteEntitiesByFileUIDParamPtrs{}
+	}
+	mmDeleteEntitiesByFileUID.defaultExpectation.paramPtrs.fileUID = &fileUID
+	mmDeleteEntitiesByFileUID.defaultExpectation.expectationOrigins.originFileUID = minimock.CallerInfo(1)
+
+	return mmDeleteEntitiesByFileUID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.DeleteEntitiesByFileUID
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) Inspect(f func(ctx context.Context, fileUID types.FileUIDType)) *mRepositoryMockDeleteEntitiesByFileUID {
+	if mmDeleteEntitiesByFileUID.mock.inspectFuncDeleteEntitiesByFileUID != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("Inspect function is already set for RepositoryMock.DeleteEntitiesByFileUID")
+	}
+
+	mmDeleteEntitiesByFileUID.mock.inspectFuncDeleteEntitiesByFileUID = f
+
+	return mmDeleteEntitiesByFileUID
+}
+
+// Return sets up results that will be returned by Repository.DeleteEntitiesByFileUID
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) Return(err error) *RepositoryMock {
+	if mmDeleteEntitiesByFileUID.mock.funcDeleteEntitiesByFileUID != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("RepositoryMock.DeleteEntitiesByFileUID mock is already set by Set")
+	}
+
+	if mmDeleteEntitiesByFileUID.defaultExpectation == nil {
+		mmDeleteEntitiesByFileUID.defaultExpectation = &RepositoryMockDeleteEntitiesByFileUIDExpectation{mock: mmDeleteEntitiesByFileUID.mock}
+	}
+	mmDeleteEntitiesByFileUID.defaultExpectation.results = &RepositoryMockDeleteEntitiesByFileUIDResults{err}
+	mmDeleteEntitiesByFileUID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteEntitiesByFileUID.mock
+}
+
+// Set uses given function f to mock the Repository.DeleteEntitiesByFileUID method
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) Set(f func(ctx context.Context, fileUID types.FileUIDType) (err error)) *RepositoryMock {
+	if mmDeleteEntitiesByFileUID.defaultExpectation != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("Default expectation is already set for the Repository.DeleteEntitiesByFileUID method")
+	}
+
+	if len(mmDeleteEntitiesByFileUID.expectations) > 0 {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("Some expectations are already set for the Repository.DeleteEntitiesByFileUID method")
+	}
+
+	mmDeleteEntitiesByFileUID.mock.funcDeleteEntitiesByFileUID = f
+	mmDeleteEntitiesByFileUID.mock.funcDeleteEntitiesByFileUIDOrigin = minimock.CallerInfo(1)
+	return mmDeleteEntitiesByFileUID.mock
+}
+
+// When sets expectation for the Repository.DeleteEntitiesByFileUID which will trigger the result defined by the following
+// Then helper
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) When(ctx context.Context, fileUID types.FileUIDType) *RepositoryMockDeleteEntitiesByFileUIDExpectation {
+	if mmDeleteEntitiesByFileUID.mock.funcDeleteEntitiesByFileUID != nil {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("RepositoryMock.DeleteEntitiesByFileUID mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockDeleteEntitiesByFileUIDExpectation{
+		mock:               mmDeleteEntitiesByFileUID.mock,
+		params:             &RepositoryMockDeleteEntitiesByFileUIDParams{ctx, fileUID},
+		expectationOrigins: RepositoryMockDeleteEntitiesByFileUIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDeleteEntitiesByFileUID.expectations = append(mmDeleteEntitiesByFileUID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.DeleteEntitiesByFileUID return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockDeleteEntitiesByFileUIDExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockDeleteEntitiesByFileUIDResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.DeleteEntitiesByFileUID should be invoked
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) Times(n uint64) *mRepositoryMockDeleteEntitiesByFileUID {
+	if n == 0 {
+		mmDeleteEntitiesByFileUID.mock.t.Fatalf("Times of RepositoryMock.DeleteEntitiesByFileUID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteEntitiesByFileUID.expectedInvocations, n)
+	mmDeleteEntitiesByFileUID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteEntitiesByFileUID
+}
+
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) invocationsDone() bool {
+	if len(mmDeleteEntitiesByFileUID.expectations) == 0 && mmDeleteEntitiesByFileUID.defaultExpectation == nil && mmDeleteEntitiesByFileUID.mock.funcDeleteEntitiesByFileUID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteEntitiesByFileUID.mock.afterDeleteEntitiesByFileUIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteEntitiesByFileUID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteEntitiesByFileUID implements mm_repository.Repository
+func (mmDeleteEntitiesByFileUID *RepositoryMock) DeleteEntitiesByFileUID(ctx context.Context, fileUID types.FileUIDType) (err error) {
+	mm_atomic.AddUint64(&mmDeleteEntitiesByFileUID.beforeDeleteEntitiesByFileUIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteEntitiesByFileUID.afterDeleteEntitiesByFileUIDCounter, 1)
+
+	mmDeleteEntitiesByFileUID.t.Helper()
+
+	if mmDeleteEntitiesByFileUID.inspectFuncDeleteEntitiesByFileUID != nil {
+		mmDeleteEntitiesByFileUID.inspectFuncDeleteEntitiesByFileUID(ctx, fileUID)
+	}
+
+	mm_params := RepositoryMockDeleteEntitiesByFileUIDParams{ctx, fileUID}
+
+	// Record call args
+	mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.mutex.Lock()
+	mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.callArgs = append(mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.callArgs, &mm_params)
+	mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.mutex.Unlock()
+
+	for _, e := range mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockDeleteEntitiesByFileUIDParams{ctx, fileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteEntitiesByFileUID.t.Errorf("RepositoryMock.DeleteEntitiesByFileUID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmDeleteEntitiesByFileUID.t.Errorf("RepositoryMock.DeleteEntitiesByFileUID got unexpected parameter fileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.defaultExpectation.expectationOrigins.originFileUID, *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteEntitiesByFileUID.t.Errorf("RepositoryMock.DeleteEntitiesByFileUID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteEntitiesByFileUID.DeleteEntitiesByFileUIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteEntitiesByFileUID.t.Fatal("No results are set for the RepositoryMock.DeleteEntitiesByFileUID")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteEntitiesByFileUID.funcDeleteEntitiesByFileUID != nil {
+		return mmDeleteEntitiesByFileUID.funcDeleteEntitiesByFileUID(ctx, fileUID)
+	}
+	mmDeleteEntitiesByFileUID.t.Fatalf("Unexpected call to RepositoryMock.DeleteEntitiesByFileUID. %v %v", ctx, fileUID)
+	return
+}
+
+// DeleteEntitiesByFileUIDAfterCounter returns a count of finished RepositoryMock.DeleteEntitiesByFileUID invocations
+func (mmDeleteEntitiesByFileUID *RepositoryMock) DeleteEntitiesByFileUIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteEntitiesByFileUID.afterDeleteEntitiesByFileUIDCounter)
+}
+
+// DeleteEntitiesByFileUIDBeforeCounter returns a count of RepositoryMock.DeleteEntitiesByFileUID invocations
+func (mmDeleteEntitiesByFileUID *RepositoryMock) DeleteEntitiesByFileUIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteEntitiesByFileUID.beforeDeleteEntitiesByFileUIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.DeleteEntitiesByFileUID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteEntitiesByFileUID *mRepositoryMockDeleteEntitiesByFileUID) Calls() []*RepositoryMockDeleteEntitiesByFileUIDParams {
+	mmDeleteEntitiesByFileUID.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockDeleteEntitiesByFileUIDParams, len(mmDeleteEntitiesByFileUID.callArgs))
+	copy(argCopy, mmDeleteEntitiesByFileUID.callArgs)
+
+	mmDeleteEntitiesByFileUID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteEntitiesByFileUIDDone returns true if the count of the DeleteEntitiesByFileUID invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockDeleteEntitiesByFileUIDDone() bool {
+	if m.DeleteEntitiesByFileUIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteEntitiesByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteEntitiesByFileUIDMock.invocationsDone()
+}
+
+// MinimockDeleteEntitiesByFileUIDInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockDeleteEntitiesByFileUIDInspect() {
+	for _, e := range m.DeleteEntitiesByFileUIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteEntitiesByFileUID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteEntitiesByFileUIDCounter := mm_atomic.LoadUint64(&m.afterDeleteEntitiesByFileUIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteEntitiesByFileUIDMock.defaultExpectation != nil && afterDeleteEntitiesByFileUIDCounter < 1 {
+		if m.DeleteEntitiesByFileUIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteEntitiesByFileUID at\n%s", m.DeleteEntitiesByFileUIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.DeleteEntitiesByFileUID at\n%s with params: %#v", m.DeleteEntitiesByFileUIDMock.defaultExpectation.expectationOrigins.origin, *m.DeleteEntitiesByFileUIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteEntitiesByFileUID != nil && afterDeleteEntitiesByFileUIDCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.DeleteEntitiesByFileUID at\n%s", m.funcDeleteEntitiesByFileUIDOrigin)
+	}
+
+	if !m.DeleteEntitiesByFileUIDMock.invocationsDone() && afterDeleteEntitiesByFileUIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.DeleteEntitiesByFileUID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteEntitiesByFileUIDMock.expectedInvocations), m.DeleteEntitiesByFileUIDMock.expectedInvocationsOrigin, afterDeleteEntitiesByFileUIDCounter)
+	}
+}
+
 type mRepositoryMockDeleteFile struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -13966,6 +14349,349 @@ func (m *RepositoryMock) MinimockDropCollectionInspect() {
 	if !m.DropCollectionMock.invocationsDone() && afterDropCollectionCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.DropCollection at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.DropCollectionMock.expectedInvocations), m.DropCollectionMock.expectedInvocationsOrigin, afterDropCollectionCounter)
+	}
+}
+
+type mRepositoryMockEntityHop struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockEntityHopExpectation
+	expectations       []*RepositoryMockEntityHopExpectation
+
+	callArgs []*RepositoryMockEntityHopParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockEntityHopExpectation specifies expectation struct of the Repository.EntityHop
+type RepositoryMockEntityHopExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockEntityHopParams
+	paramPtrs          *RepositoryMockEntityHopParamPtrs
+	expectationOrigins RepositoryMockEntityHopExpectationOrigins
+	results            *RepositoryMockEntityHopResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockEntityHopParams contains parameters of the Repository.EntityHop
+type RepositoryMockEntityHopParams struct {
+	ctx      context.Context
+	fileUIDs []types.FileUIDType
+}
+
+// RepositoryMockEntityHopParamPtrs contains pointers to parameters of the Repository.EntityHop
+type RepositoryMockEntityHopParamPtrs struct {
+	ctx      *context.Context
+	fileUIDs *[]types.FileUIDType
+}
+
+// RepositoryMockEntityHopResults contains results of the Repository.EntityHop
+type RepositoryMockEntityHopResults struct {
+	fa1 []types.FileUIDType
+	err error
+}
+
+// RepositoryMockEntityHopOrigins contains origins of expectations of the Repository.EntityHop
+type RepositoryMockEntityHopExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originFileUIDs string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmEntityHop *mRepositoryMockEntityHop) Optional() *mRepositoryMockEntityHop {
+	mmEntityHop.optional = true
+	return mmEntityHop
+}
+
+// Expect sets up expected params for Repository.EntityHop
+func (mmEntityHop *mRepositoryMockEntityHop) Expect(ctx context.Context, fileUIDs []types.FileUIDType) *mRepositoryMockEntityHop {
+	if mmEntityHop.mock.funcEntityHop != nil {
+		mmEntityHop.mock.t.Fatalf("RepositoryMock.EntityHop mock is already set by Set")
+	}
+
+	if mmEntityHop.defaultExpectation == nil {
+		mmEntityHop.defaultExpectation = &RepositoryMockEntityHopExpectation{}
+	}
+
+	if mmEntityHop.defaultExpectation.paramPtrs != nil {
+		mmEntityHop.mock.t.Fatalf("RepositoryMock.EntityHop mock is already set by ExpectParams functions")
+	}
+
+	mmEntityHop.defaultExpectation.params = &RepositoryMockEntityHopParams{ctx, fileUIDs}
+	mmEntityHop.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmEntityHop.expectations {
+		if minimock.Equal(e.params, mmEntityHop.defaultExpectation.params) {
+			mmEntityHop.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmEntityHop.defaultExpectation.params)
+		}
+	}
+
+	return mmEntityHop
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.EntityHop
+func (mmEntityHop *mRepositoryMockEntityHop) ExpectCtxParam1(ctx context.Context) *mRepositoryMockEntityHop {
+	if mmEntityHop.mock.funcEntityHop != nil {
+		mmEntityHop.mock.t.Fatalf("RepositoryMock.EntityHop mock is already set by Set")
+	}
+
+	if mmEntityHop.defaultExpectation == nil {
+		mmEntityHop.defaultExpectation = &RepositoryMockEntityHopExpectation{}
+	}
+
+	if mmEntityHop.defaultExpectation.params != nil {
+		mmEntityHop.mock.t.Fatalf("RepositoryMock.EntityHop mock is already set by Expect")
+	}
+
+	if mmEntityHop.defaultExpectation.paramPtrs == nil {
+		mmEntityHop.defaultExpectation.paramPtrs = &RepositoryMockEntityHopParamPtrs{}
+	}
+	mmEntityHop.defaultExpectation.paramPtrs.ctx = &ctx
+	mmEntityHop.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmEntityHop
+}
+
+// ExpectFileUIDsParam2 sets up expected param fileUIDs for Repository.EntityHop
+func (mmEntityHop *mRepositoryMockEntityHop) ExpectFileUIDsParam2(fileUIDs []types.FileUIDType) *mRepositoryMockEntityHop {
+	if mmEntityHop.mock.funcEntityHop != nil {
+		mmEntityHop.mock.t.Fatalf("RepositoryMock.EntityHop mock is already set by Set")
+	}
+
+	if mmEntityHop.defaultExpectation == nil {
+		mmEntityHop.defaultExpectation = &RepositoryMockEntityHopExpectation{}
+	}
+
+	if mmEntityHop.defaultExpectation.params != nil {
+		mmEntityHop.mock.t.Fatalf("RepositoryMock.EntityHop mock is already set by Expect")
+	}
+
+	if mmEntityHop.defaultExpectation.paramPtrs == nil {
+		mmEntityHop.defaultExpectation.paramPtrs = &RepositoryMockEntityHopParamPtrs{}
+	}
+	mmEntityHop.defaultExpectation.paramPtrs.fileUIDs = &fileUIDs
+	mmEntityHop.defaultExpectation.expectationOrigins.originFileUIDs = minimock.CallerInfo(1)
+
+	return mmEntityHop
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.EntityHop
+func (mmEntityHop *mRepositoryMockEntityHop) Inspect(f func(ctx context.Context, fileUIDs []types.FileUIDType)) *mRepositoryMockEntityHop {
+	if mmEntityHop.mock.inspectFuncEntityHop != nil {
+		mmEntityHop.mock.t.Fatalf("Inspect function is already set for RepositoryMock.EntityHop")
+	}
+
+	mmEntityHop.mock.inspectFuncEntityHop = f
+
+	return mmEntityHop
+}
+
+// Return sets up results that will be returned by Repository.EntityHop
+func (mmEntityHop *mRepositoryMockEntityHop) Return(fa1 []types.FileUIDType, err error) *RepositoryMock {
+	if mmEntityHop.mock.funcEntityHop != nil {
+		mmEntityHop.mock.t.Fatalf("RepositoryMock.EntityHop mock is already set by Set")
+	}
+
+	if mmEntityHop.defaultExpectation == nil {
+		mmEntityHop.defaultExpectation = &RepositoryMockEntityHopExpectation{mock: mmEntityHop.mock}
+	}
+	mmEntityHop.defaultExpectation.results = &RepositoryMockEntityHopResults{fa1, err}
+	mmEntityHop.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmEntityHop.mock
+}
+
+// Set uses given function f to mock the Repository.EntityHop method
+func (mmEntityHop *mRepositoryMockEntityHop) Set(f func(ctx context.Context, fileUIDs []types.FileUIDType) (fa1 []types.FileUIDType, err error)) *RepositoryMock {
+	if mmEntityHop.defaultExpectation != nil {
+		mmEntityHop.mock.t.Fatalf("Default expectation is already set for the Repository.EntityHop method")
+	}
+
+	if len(mmEntityHop.expectations) > 0 {
+		mmEntityHop.mock.t.Fatalf("Some expectations are already set for the Repository.EntityHop method")
+	}
+
+	mmEntityHop.mock.funcEntityHop = f
+	mmEntityHop.mock.funcEntityHopOrigin = minimock.CallerInfo(1)
+	return mmEntityHop.mock
+}
+
+// When sets expectation for the Repository.EntityHop which will trigger the result defined by the following
+// Then helper
+func (mmEntityHop *mRepositoryMockEntityHop) When(ctx context.Context, fileUIDs []types.FileUIDType) *RepositoryMockEntityHopExpectation {
+	if mmEntityHop.mock.funcEntityHop != nil {
+		mmEntityHop.mock.t.Fatalf("RepositoryMock.EntityHop mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockEntityHopExpectation{
+		mock:               mmEntityHop.mock,
+		params:             &RepositoryMockEntityHopParams{ctx, fileUIDs},
+		expectationOrigins: RepositoryMockEntityHopExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmEntityHop.expectations = append(mmEntityHop.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.EntityHop return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockEntityHopExpectation) Then(fa1 []types.FileUIDType, err error) *RepositoryMock {
+	e.results = &RepositoryMockEntityHopResults{fa1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.EntityHop should be invoked
+func (mmEntityHop *mRepositoryMockEntityHop) Times(n uint64) *mRepositoryMockEntityHop {
+	if n == 0 {
+		mmEntityHop.mock.t.Fatalf("Times of RepositoryMock.EntityHop mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmEntityHop.expectedInvocations, n)
+	mmEntityHop.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmEntityHop
+}
+
+func (mmEntityHop *mRepositoryMockEntityHop) invocationsDone() bool {
+	if len(mmEntityHop.expectations) == 0 && mmEntityHop.defaultExpectation == nil && mmEntityHop.mock.funcEntityHop == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmEntityHop.mock.afterEntityHopCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmEntityHop.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// EntityHop implements mm_repository.Repository
+func (mmEntityHop *RepositoryMock) EntityHop(ctx context.Context, fileUIDs []types.FileUIDType) (fa1 []types.FileUIDType, err error) {
+	mm_atomic.AddUint64(&mmEntityHop.beforeEntityHopCounter, 1)
+	defer mm_atomic.AddUint64(&mmEntityHop.afterEntityHopCounter, 1)
+
+	mmEntityHop.t.Helper()
+
+	if mmEntityHop.inspectFuncEntityHop != nil {
+		mmEntityHop.inspectFuncEntityHop(ctx, fileUIDs)
+	}
+
+	mm_params := RepositoryMockEntityHopParams{ctx, fileUIDs}
+
+	// Record call args
+	mmEntityHop.EntityHopMock.mutex.Lock()
+	mmEntityHop.EntityHopMock.callArgs = append(mmEntityHop.EntityHopMock.callArgs, &mm_params)
+	mmEntityHop.EntityHopMock.mutex.Unlock()
+
+	for _, e := range mmEntityHop.EntityHopMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.fa1, e.results.err
+		}
+	}
+
+	if mmEntityHop.EntityHopMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmEntityHop.EntityHopMock.defaultExpectation.Counter, 1)
+		mm_want := mmEntityHop.EntityHopMock.defaultExpectation.params
+		mm_want_ptrs := mmEntityHop.EntityHopMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockEntityHopParams{ctx, fileUIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmEntityHop.t.Errorf("RepositoryMock.EntityHop got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEntityHop.EntityHopMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.fileUIDs != nil && !minimock.Equal(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs) {
+				mmEntityHop.t.Errorf("RepositoryMock.EntityHop got unexpected parameter fileUIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmEntityHop.EntityHopMock.defaultExpectation.expectationOrigins.originFileUIDs, *mm_want_ptrs.fileUIDs, mm_got.fileUIDs, minimock.Diff(*mm_want_ptrs.fileUIDs, mm_got.fileUIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmEntityHop.t.Errorf("RepositoryMock.EntityHop got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmEntityHop.EntityHopMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmEntityHop.EntityHopMock.defaultExpectation.results
+		if mm_results == nil {
+			mmEntityHop.t.Fatal("No results are set for the RepositoryMock.EntityHop")
+		}
+		return (*mm_results).fa1, (*mm_results).err
+	}
+	if mmEntityHop.funcEntityHop != nil {
+		return mmEntityHop.funcEntityHop(ctx, fileUIDs)
+	}
+	mmEntityHop.t.Fatalf("Unexpected call to RepositoryMock.EntityHop. %v %v", ctx, fileUIDs)
+	return
+}
+
+// EntityHopAfterCounter returns a count of finished RepositoryMock.EntityHop invocations
+func (mmEntityHop *RepositoryMock) EntityHopAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmEntityHop.afterEntityHopCounter)
+}
+
+// EntityHopBeforeCounter returns a count of RepositoryMock.EntityHop invocations
+func (mmEntityHop *RepositoryMock) EntityHopBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmEntityHop.beforeEntityHopCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.EntityHop.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmEntityHop *mRepositoryMockEntityHop) Calls() []*RepositoryMockEntityHopParams {
+	mmEntityHop.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockEntityHopParams, len(mmEntityHop.callArgs))
+	copy(argCopy, mmEntityHop.callArgs)
+
+	mmEntityHop.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockEntityHopDone returns true if the count of the EntityHop invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockEntityHopDone() bool {
+	if m.EntityHopMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.EntityHopMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.EntityHopMock.invocationsDone()
+}
+
+// MinimockEntityHopInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockEntityHopInspect() {
+	for _, e := range m.EntityHopMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.EntityHop at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterEntityHopCounter := mm_atomic.LoadUint64(&m.afterEntityHopCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.EntityHopMock.defaultExpectation != nil && afterEntityHopCounter < 1 {
+		if m.EntityHopMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.EntityHop at\n%s", m.EntityHopMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.EntityHop at\n%s with params: %#v", m.EntityHopMock.defaultExpectation.expectationOrigins.origin, *m.EntityHopMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcEntityHop != nil && afterEntityHopCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.EntityHop at\n%s", m.funcEntityHopOrigin)
+	}
+
+	if !m.EntityHopMock.invocationsDone() && afterEntityHopCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.EntityHop at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.EntityHopMock.expectedInvocations), m.EntityHopMock.expectedInvocationsOrigin, afterEntityHopCounter)
 	}
 }
 
@@ -36560,6 +37286,379 @@ func (m *RepositoryMock) MinimockIsKBUpdatingInspect() {
 	}
 }
 
+type mRepositoryMockLinkEntityFile struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockLinkEntityFileExpectation
+	expectations       []*RepositoryMockLinkEntityFileExpectation
+
+	callArgs []*RepositoryMockLinkEntityFileParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockLinkEntityFileExpectation specifies expectation struct of the Repository.LinkEntityFile
+type RepositoryMockLinkEntityFileExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockLinkEntityFileParams
+	paramPtrs          *RepositoryMockLinkEntityFileParamPtrs
+	expectationOrigins RepositoryMockLinkEntityFileExpectationOrigins
+	results            *RepositoryMockLinkEntityFileResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockLinkEntityFileParams contains parameters of the Repository.LinkEntityFile
+type RepositoryMockLinkEntityFileParams struct {
+	ctx       context.Context
+	entityUID uuid.UUID
+	fileUID   types.FileUIDType
+}
+
+// RepositoryMockLinkEntityFileParamPtrs contains pointers to parameters of the Repository.LinkEntityFile
+type RepositoryMockLinkEntityFileParamPtrs struct {
+	ctx       *context.Context
+	entityUID *uuid.UUID
+	fileUID   *types.FileUIDType
+}
+
+// RepositoryMockLinkEntityFileResults contains results of the Repository.LinkEntityFile
+type RepositoryMockLinkEntityFileResults struct {
+	err error
+}
+
+// RepositoryMockLinkEntityFileOrigins contains origins of expectations of the Repository.LinkEntityFile
+type RepositoryMockLinkEntityFileExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originEntityUID string
+	originFileUID   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) Optional() *mRepositoryMockLinkEntityFile {
+	mmLinkEntityFile.optional = true
+	return mmLinkEntityFile
+}
+
+// Expect sets up expected params for Repository.LinkEntityFile
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) Expect(ctx context.Context, entityUID uuid.UUID, fileUID types.FileUIDType) *mRepositoryMockLinkEntityFile {
+	if mmLinkEntityFile.mock.funcLinkEntityFile != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by Set")
+	}
+
+	if mmLinkEntityFile.defaultExpectation == nil {
+		mmLinkEntityFile.defaultExpectation = &RepositoryMockLinkEntityFileExpectation{}
+	}
+
+	if mmLinkEntityFile.defaultExpectation.paramPtrs != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by ExpectParams functions")
+	}
+
+	mmLinkEntityFile.defaultExpectation.params = &RepositoryMockLinkEntityFileParams{ctx, entityUID, fileUID}
+	mmLinkEntityFile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmLinkEntityFile.expectations {
+		if minimock.Equal(e.params, mmLinkEntityFile.defaultExpectation.params) {
+			mmLinkEntityFile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmLinkEntityFile.defaultExpectation.params)
+		}
+	}
+
+	return mmLinkEntityFile
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.LinkEntityFile
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) ExpectCtxParam1(ctx context.Context) *mRepositoryMockLinkEntityFile {
+	if mmLinkEntityFile.mock.funcLinkEntityFile != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by Set")
+	}
+
+	if mmLinkEntityFile.defaultExpectation == nil {
+		mmLinkEntityFile.defaultExpectation = &RepositoryMockLinkEntityFileExpectation{}
+	}
+
+	if mmLinkEntityFile.defaultExpectation.params != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by Expect")
+	}
+
+	if mmLinkEntityFile.defaultExpectation.paramPtrs == nil {
+		mmLinkEntityFile.defaultExpectation.paramPtrs = &RepositoryMockLinkEntityFileParamPtrs{}
+	}
+	mmLinkEntityFile.defaultExpectation.paramPtrs.ctx = &ctx
+	mmLinkEntityFile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmLinkEntityFile
+}
+
+// ExpectEntityUIDParam2 sets up expected param entityUID for Repository.LinkEntityFile
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) ExpectEntityUIDParam2(entityUID uuid.UUID) *mRepositoryMockLinkEntityFile {
+	if mmLinkEntityFile.mock.funcLinkEntityFile != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by Set")
+	}
+
+	if mmLinkEntityFile.defaultExpectation == nil {
+		mmLinkEntityFile.defaultExpectation = &RepositoryMockLinkEntityFileExpectation{}
+	}
+
+	if mmLinkEntityFile.defaultExpectation.params != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by Expect")
+	}
+
+	if mmLinkEntityFile.defaultExpectation.paramPtrs == nil {
+		mmLinkEntityFile.defaultExpectation.paramPtrs = &RepositoryMockLinkEntityFileParamPtrs{}
+	}
+	mmLinkEntityFile.defaultExpectation.paramPtrs.entityUID = &entityUID
+	mmLinkEntityFile.defaultExpectation.expectationOrigins.originEntityUID = minimock.CallerInfo(1)
+
+	return mmLinkEntityFile
+}
+
+// ExpectFileUIDParam3 sets up expected param fileUID for Repository.LinkEntityFile
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) ExpectFileUIDParam3(fileUID types.FileUIDType) *mRepositoryMockLinkEntityFile {
+	if mmLinkEntityFile.mock.funcLinkEntityFile != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by Set")
+	}
+
+	if mmLinkEntityFile.defaultExpectation == nil {
+		mmLinkEntityFile.defaultExpectation = &RepositoryMockLinkEntityFileExpectation{}
+	}
+
+	if mmLinkEntityFile.defaultExpectation.params != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by Expect")
+	}
+
+	if mmLinkEntityFile.defaultExpectation.paramPtrs == nil {
+		mmLinkEntityFile.defaultExpectation.paramPtrs = &RepositoryMockLinkEntityFileParamPtrs{}
+	}
+	mmLinkEntityFile.defaultExpectation.paramPtrs.fileUID = &fileUID
+	mmLinkEntityFile.defaultExpectation.expectationOrigins.originFileUID = minimock.CallerInfo(1)
+
+	return mmLinkEntityFile
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.LinkEntityFile
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) Inspect(f func(ctx context.Context, entityUID uuid.UUID, fileUID types.FileUIDType)) *mRepositoryMockLinkEntityFile {
+	if mmLinkEntityFile.mock.inspectFuncLinkEntityFile != nil {
+		mmLinkEntityFile.mock.t.Fatalf("Inspect function is already set for RepositoryMock.LinkEntityFile")
+	}
+
+	mmLinkEntityFile.mock.inspectFuncLinkEntityFile = f
+
+	return mmLinkEntityFile
+}
+
+// Return sets up results that will be returned by Repository.LinkEntityFile
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) Return(err error) *RepositoryMock {
+	if mmLinkEntityFile.mock.funcLinkEntityFile != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by Set")
+	}
+
+	if mmLinkEntityFile.defaultExpectation == nil {
+		mmLinkEntityFile.defaultExpectation = &RepositoryMockLinkEntityFileExpectation{mock: mmLinkEntityFile.mock}
+	}
+	mmLinkEntityFile.defaultExpectation.results = &RepositoryMockLinkEntityFileResults{err}
+	mmLinkEntityFile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmLinkEntityFile.mock
+}
+
+// Set uses given function f to mock the Repository.LinkEntityFile method
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) Set(f func(ctx context.Context, entityUID uuid.UUID, fileUID types.FileUIDType) (err error)) *RepositoryMock {
+	if mmLinkEntityFile.defaultExpectation != nil {
+		mmLinkEntityFile.mock.t.Fatalf("Default expectation is already set for the Repository.LinkEntityFile method")
+	}
+
+	if len(mmLinkEntityFile.expectations) > 0 {
+		mmLinkEntityFile.mock.t.Fatalf("Some expectations are already set for the Repository.LinkEntityFile method")
+	}
+
+	mmLinkEntityFile.mock.funcLinkEntityFile = f
+	mmLinkEntityFile.mock.funcLinkEntityFileOrigin = minimock.CallerInfo(1)
+	return mmLinkEntityFile.mock
+}
+
+// When sets expectation for the Repository.LinkEntityFile which will trigger the result defined by the following
+// Then helper
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) When(ctx context.Context, entityUID uuid.UUID, fileUID types.FileUIDType) *RepositoryMockLinkEntityFileExpectation {
+	if mmLinkEntityFile.mock.funcLinkEntityFile != nil {
+		mmLinkEntityFile.mock.t.Fatalf("RepositoryMock.LinkEntityFile mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockLinkEntityFileExpectation{
+		mock:               mmLinkEntityFile.mock,
+		params:             &RepositoryMockLinkEntityFileParams{ctx, entityUID, fileUID},
+		expectationOrigins: RepositoryMockLinkEntityFileExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmLinkEntityFile.expectations = append(mmLinkEntityFile.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.LinkEntityFile return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockLinkEntityFileExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockLinkEntityFileResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.LinkEntityFile should be invoked
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) Times(n uint64) *mRepositoryMockLinkEntityFile {
+	if n == 0 {
+		mmLinkEntityFile.mock.t.Fatalf("Times of RepositoryMock.LinkEntityFile mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmLinkEntityFile.expectedInvocations, n)
+	mmLinkEntityFile.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmLinkEntityFile
+}
+
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) invocationsDone() bool {
+	if len(mmLinkEntityFile.expectations) == 0 && mmLinkEntityFile.defaultExpectation == nil && mmLinkEntityFile.mock.funcLinkEntityFile == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmLinkEntityFile.mock.afterLinkEntityFileCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmLinkEntityFile.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// LinkEntityFile implements mm_repository.Repository
+func (mmLinkEntityFile *RepositoryMock) LinkEntityFile(ctx context.Context, entityUID uuid.UUID, fileUID types.FileUIDType) (err error) {
+	mm_atomic.AddUint64(&mmLinkEntityFile.beforeLinkEntityFileCounter, 1)
+	defer mm_atomic.AddUint64(&mmLinkEntityFile.afterLinkEntityFileCounter, 1)
+
+	mmLinkEntityFile.t.Helper()
+
+	if mmLinkEntityFile.inspectFuncLinkEntityFile != nil {
+		mmLinkEntityFile.inspectFuncLinkEntityFile(ctx, entityUID, fileUID)
+	}
+
+	mm_params := RepositoryMockLinkEntityFileParams{ctx, entityUID, fileUID}
+
+	// Record call args
+	mmLinkEntityFile.LinkEntityFileMock.mutex.Lock()
+	mmLinkEntityFile.LinkEntityFileMock.callArgs = append(mmLinkEntityFile.LinkEntityFileMock.callArgs, &mm_params)
+	mmLinkEntityFile.LinkEntityFileMock.mutex.Unlock()
+
+	for _, e := range mmLinkEntityFile.LinkEntityFileMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmLinkEntityFile.LinkEntityFileMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmLinkEntityFile.LinkEntityFileMock.defaultExpectation.Counter, 1)
+		mm_want := mmLinkEntityFile.LinkEntityFileMock.defaultExpectation.params
+		mm_want_ptrs := mmLinkEntityFile.LinkEntityFileMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockLinkEntityFileParams{ctx, entityUID, fileUID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmLinkEntityFile.t.Errorf("RepositoryMock.LinkEntityFile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmLinkEntityFile.LinkEntityFileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.entityUID != nil && !minimock.Equal(*mm_want_ptrs.entityUID, mm_got.entityUID) {
+				mmLinkEntityFile.t.Errorf("RepositoryMock.LinkEntityFile got unexpected parameter entityUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmLinkEntityFile.LinkEntityFileMock.defaultExpectation.expectationOrigins.originEntityUID, *mm_want_ptrs.entityUID, mm_got.entityUID, minimock.Diff(*mm_want_ptrs.entityUID, mm_got.entityUID))
+			}
+
+			if mm_want_ptrs.fileUID != nil && !minimock.Equal(*mm_want_ptrs.fileUID, mm_got.fileUID) {
+				mmLinkEntityFile.t.Errorf("RepositoryMock.LinkEntityFile got unexpected parameter fileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmLinkEntityFile.LinkEntityFileMock.defaultExpectation.expectationOrigins.originFileUID, *mm_want_ptrs.fileUID, mm_got.fileUID, minimock.Diff(*mm_want_ptrs.fileUID, mm_got.fileUID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmLinkEntityFile.t.Errorf("RepositoryMock.LinkEntityFile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmLinkEntityFile.LinkEntityFileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmLinkEntityFile.LinkEntityFileMock.defaultExpectation.results
+		if mm_results == nil {
+			mmLinkEntityFile.t.Fatal("No results are set for the RepositoryMock.LinkEntityFile")
+		}
+		return (*mm_results).err
+	}
+	if mmLinkEntityFile.funcLinkEntityFile != nil {
+		return mmLinkEntityFile.funcLinkEntityFile(ctx, entityUID, fileUID)
+	}
+	mmLinkEntityFile.t.Fatalf("Unexpected call to RepositoryMock.LinkEntityFile. %v %v %v", ctx, entityUID, fileUID)
+	return
+}
+
+// LinkEntityFileAfterCounter returns a count of finished RepositoryMock.LinkEntityFile invocations
+func (mmLinkEntityFile *RepositoryMock) LinkEntityFileAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmLinkEntityFile.afterLinkEntityFileCounter)
+}
+
+// LinkEntityFileBeforeCounter returns a count of RepositoryMock.LinkEntityFile invocations
+func (mmLinkEntityFile *RepositoryMock) LinkEntityFileBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmLinkEntityFile.beforeLinkEntityFileCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.LinkEntityFile.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmLinkEntityFile *mRepositoryMockLinkEntityFile) Calls() []*RepositoryMockLinkEntityFileParams {
+	mmLinkEntityFile.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockLinkEntityFileParams, len(mmLinkEntityFile.callArgs))
+	copy(argCopy, mmLinkEntityFile.callArgs)
+
+	mmLinkEntityFile.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockLinkEntityFileDone returns true if the count of the LinkEntityFile invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockLinkEntityFileDone() bool {
+	if m.LinkEntityFileMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.LinkEntityFileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.LinkEntityFileMock.invocationsDone()
+}
+
+// MinimockLinkEntityFileInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockLinkEntityFileInspect() {
+	for _, e := range m.LinkEntityFileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.LinkEntityFile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterLinkEntityFileCounter := mm_atomic.LoadUint64(&m.afterLinkEntityFileCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.LinkEntityFileMock.defaultExpectation != nil && afterLinkEntityFileCounter < 1 {
+		if m.LinkEntityFileMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.LinkEntityFile at\n%s", m.LinkEntityFileMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.LinkEntityFile at\n%s with params: %#v", m.LinkEntityFileMock.defaultExpectation.expectationOrigins.origin, *m.LinkEntityFileMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcLinkEntityFile != nil && afterLinkEntityFileCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.LinkEntityFile at\n%s", m.funcLinkEntityFileOrigin)
+	}
+
+	if !m.LinkEntityFileMock.invocationsDone() && afterLinkEntityFileCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.LinkEntityFile at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.LinkEntityFileMock.expectedInvocations), m.LinkEntityFileMock.expectedInvocationsOrigin, afterLinkEntityFileCounter)
+	}
+}
+
 type mRepositoryMockListAllKnowledgeBasesAdmin struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -53089,6 +54188,380 @@ func (m *RepositoryMock) MinimockUpdateTextChunkDestinationsInspect() {
 	}
 }
 
+type mRepositoryMockUpsertEntities struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockUpsertEntitiesExpectation
+	expectations       []*RepositoryMockUpsertEntitiesExpectation
+
+	callArgs []*RepositoryMockUpsertEntitiesParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockUpsertEntitiesExpectation specifies expectation struct of the Repository.UpsertEntities
+type RepositoryMockUpsertEntitiesExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockUpsertEntitiesParams
+	paramPtrs          *RepositoryMockUpsertEntitiesParamPtrs
+	expectationOrigins RepositoryMockUpsertEntitiesExpectationOrigins
+	results            *RepositoryMockUpsertEntitiesResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockUpsertEntitiesParams contains parameters of the Repository.UpsertEntities
+type RepositoryMockUpsertEntitiesParams struct {
+	ctx      context.Context
+	kbUID    types.KBUIDType
+	entities []mm_repository.EntityRecord
+}
+
+// RepositoryMockUpsertEntitiesParamPtrs contains pointers to parameters of the Repository.UpsertEntities
+type RepositoryMockUpsertEntitiesParamPtrs struct {
+	ctx      *context.Context
+	kbUID    *types.KBUIDType
+	entities *[]mm_repository.EntityRecord
+}
+
+// RepositoryMockUpsertEntitiesResults contains results of the Repository.UpsertEntities
+type RepositoryMockUpsertEntitiesResults struct {
+	ua1 []uuid.UUID
+	err error
+}
+
+// RepositoryMockUpsertEntitiesOrigins contains origins of expectations of the Repository.UpsertEntities
+type RepositoryMockUpsertEntitiesExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originKbUID    string
+	originEntities string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) Optional() *mRepositoryMockUpsertEntities {
+	mmUpsertEntities.optional = true
+	return mmUpsertEntities
+}
+
+// Expect sets up expected params for Repository.UpsertEntities
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) Expect(ctx context.Context, kbUID types.KBUIDType, entities []mm_repository.EntityRecord) *mRepositoryMockUpsertEntities {
+	if mmUpsertEntities.mock.funcUpsertEntities != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by Set")
+	}
+
+	if mmUpsertEntities.defaultExpectation == nil {
+		mmUpsertEntities.defaultExpectation = &RepositoryMockUpsertEntitiesExpectation{}
+	}
+
+	if mmUpsertEntities.defaultExpectation.paramPtrs != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by ExpectParams functions")
+	}
+
+	mmUpsertEntities.defaultExpectation.params = &RepositoryMockUpsertEntitiesParams{ctx, kbUID, entities}
+	mmUpsertEntities.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpsertEntities.expectations {
+		if minimock.Equal(e.params, mmUpsertEntities.defaultExpectation.params) {
+			mmUpsertEntities.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpsertEntities.defaultExpectation.params)
+		}
+	}
+
+	return mmUpsertEntities
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.UpsertEntities
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) ExpectCtxParam1(ctx context.Context) *mRepositoryMockUpsertEntities {
+	if mmUpsertEntities.mock.funcUpsertEntities != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by Set")
+	}
+
+	if mmUpsertEntities.defaultExpectation == nil {
+		mmUpsertEntities.defaultExpectation = &RepositoryMockUpsertEntitiesExpectation{}
+	}
+
+	if mmUpsertEntities.defaultExpectation.params != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by Expect")
+	}
+
+	if mmUpsertEntities.defaultExpectation.paramPtrs == nil {
+		mmUpsertEntities.defaultExpectation.paramPtrs = &RepositoryMockUpsertEntitiesParamPtrs{}
+	}
+	mmUpsertEntities.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpsertEntities.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpsertEntities
+}
+
+// ExpectKbUIDParam2 sets up expected param kbUID for Repository.UpsertEntities
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) ExpectKbUIDParam2(kbUID types.KBUIDType) *mRepositoryMockUpsertEntities {
+	if mmUpsertEntities.mock.funcUpsertEntities != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by Set")
+	}
+
+	if mmUpsertEntities.defaultExpectation == nil {
+		mmUpsertEntities.defaultExpectation = &RepositoryMockUpsertEntitiesExpectation{}
+	}
+
+	if mmUpsertEntities.defaultExpectation.params != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by Expect")
+	}
+
+	if mmUpsertEntities.defaultExpectation.paramPtrs == nil {
+		mmUpsertEntities.defaultExpectation.paramPtrs = &RepositoryMockUpsertEntitiesParamPtrs{}
+	}
+	mmUpsertEntities.defaultExpectation.paramPtrs.kbUID = &kbUID
+	mmUpsertEntities.defaultExpectation.expectationOrigins.originKbUID = minimock.CallerInfo(1)
+
+	return mmUpsertEntities
+}
+
+// ExpectEntitiesParam3 sets up expected param entities for Repository.UpsertEntities
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) ExpectEntitiesParam3(entities []mm_repository.EntityRecord) *mRepositoryMockUpsertEntities {
+	if mmUpsertEntities.mock.funcUpsertEntities != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by Set")
+	}
+
+	if mmUpsertEntities.defaultExpectation == nil {
+		mmUpsertEntities.defaultExpectation = &RepositoryMockUpsertEntitiesExpectation{}
+	}
+
+	if mmUpsertEntities.defaultExpectation.params != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by Expect")
+	}
+
+	if mmUpsertEntities.defaultExpectation.paramPtrs == nil {
+		mmUpsertEntities.defaultExpectation.paramPtrs = &RepositoryMockUpsertEntitiesParamPtrs{}
+	}
+	mmUpsertEntities.defaultExpectation.paramPtrs.entities = &entities
+	mmUpsertEntities.defaultExpectation.expectationOrigins.originEntities = minimock.CallerInfo(1)
+
+	return mmUpsertEntities
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.UpsertEntities
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) Inspect(f func(ctx context.Context, kbUID types.KBUIDType, entities []mm_repository.EntityRecord)) *mRepositoryMockUpsertEntities {
+	if mmUpsertEntities.mock.inspectFuncUpsertEntities != nil {
+		mmUpsertEntities.mock.t.Fatalf("Inspect function is already set for RepositoryMock.UpsertEntities")
+	}
+
+	mmUpsertEntities.mock.inspectFuncUpsertEntities = f
+
+	return mmUpsertEntities
+}
+
+// Return sets up results that will be returned by Repository.UpsertEntities
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) Return(ua1 []uuid.UUID, err error) *RepositoryMock {
+	if mmUpsertEntities.mock.funcUpsertEntities != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by Set")
+	}
+
+	if mmUpsertEntities.defaultExpectation == nil {
+		mmUpsertEntities.defaultExpectation = &RepositoryMockUpsertEntitiesExpectation{mock: mmUpsertEntities.mock}
+	}
+	mmUpsertEntities.defaultExpectation.results = &RepositoryMockUpsertEntitiesResults{ua1, err}
+	mmUpsertEntities.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpsertEntities.mock
+}
+
+// Set uses given function f to mock the Repository.UpsertEntities method
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) Set(f func(ctx context.Context, kbUID types.KBUIDType, entities []mm_repository.EntityRecord) (ua1 []uuid.UUID, err error)) *RepositoryMock {
+	if mmUpsertEntities.defaultExpectation != nil {
+		mmUpsertEntities.mock.t.Fatalf("Default expectation is already set for the Repository.UpsertEntities method")
+	}
+
+	if len(mmUpsertEntities.expectations) > 0 {
+		mmUpsertEntities.mock.t.Fatalf("Some expectations are already set for the Repository.UpsertEntities method")
+	}
+
+	mmUpsertEntities.mock.funcUpsertEntities = f
+	mmUpsertEntities.mock.funcUpsertEntitiesOrigin = minimock.CallerInfo(1)
+	return mmUpsertEntities.mock
+}
+
+// When sets expectation for the Repository.UpsertEntities which will trigger the result defined by the following
+// Then helper
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) When(ctx context.Context, kbUID types.KBUIDType, entities []mm_repository.EntityRecord) *RepositoryMockUpsertEntitiesExpectation {
+	if mmUpsertEntities.mock.funcUpsertEntities != nil {
+		mmUpsertEntities.mock.t.Fatalf("RepositoryMock.UpsertEntities mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockUpsertEntitiesExpectation{
+		mock:               mmUpsertEntities.mock,
+		params:             &RepositoryMockUpsertEntitiesParams{ctx, kbUID, entities},
+		expectationOrigins: RepositoryMockUpsertEntitiesExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpsertEntities.expectations = append(mmUpsertEntities.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.UpsertEntities return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockUpsertEntitiesExpectation) Then(ua1 []uuid.UUID, err error) *RepositoryMock {
+	e.results = &RepositoryMockUpsertEntitiesResults{ua1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.UpsertEntities should be invoked
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) Times(n uint64) *mRepositoryMockUpsertEntities {
+	if n == 0 {
+		mmUpsertEntities.mock.t.Fatalf("Times of RepositoryMock.UpsertEntities mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpsertEntities.expectedInvocations, n)
+	mmUpsertEntities.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpsertEntities
+}
+
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) invocationsDone() bool {
+	if len(mmUpsertEntities.expectations) == 0 && mmUpsertEntities.defaultExpectation == nil && mmUpsertEntities.mock.funcUpsertEntities == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpsertEntities.mock.afterUpsertEntitiesCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpsertEntities.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpsertEntities implements mm_repository.Repository
+func (mmUpsertEntities *RepositoryMock) UpsertEntities(ctx context.Context, kbUID types.KBUIDType, entities []mm_repository.EntityRecord) (ua1 []uuid.UUID, err error) {
+	mm_atomic.AddUint64(&mmUpsertEntities.beforeUpsertEntitiesCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpsertEntities.afterUpsertEntitiesCounter, 1)
+
+	mmUpsertEntities.t.Helper()
+
+	if mmUpsertEntities.inspectFuncUpsertEntities != nil {
+		mmUpsertEntities.inspectFuncUpsertEntities(ctx, kbUID, entities)
+	}
+
+	mm_params := RepositoryMockUpsertEntitiesParams{ctx, kbUID, entities}
+
+	// Record call args
+	mmUpsertEntities.UpsertEntitiesMock.mutex.Lock()
+	mmUpsertEntities.UpsertEntitiesMock.callArgs = append(mmUpsertEntities.UpsertEntitiesMock.callArgs, &mm_params)
+	mmUpsertEntities.UpsertEntitiesMock.mutex.Unlock()
+
+	for _, e := range mmUpsertEntities.UpsertEntitiesMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ua1, e.results.err
+		}
+	}
+
+	if mmUpsertEntities.UpsertEntitiesMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpsertEntities.UpsertEntitiesMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpsertEntities.UpsertEntitiesMock.defaultExpectation.params
+		mm_want_ptrs := mmUpsertEntities.UpsertEntitiesMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockUpsertEntitiesParams{ctx, kbUID, entities}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpsertEntities.t.Errorf("RepositoryMock.UpsertEntities got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpsertEntities.UpsertEntitiesMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.kbUID != nil && !minimock.Equal(*mm_want_ptrs.kbUID, mm_got.kbUID) {
+				mmUpsertEntities.t.Errorf("RepositoryMock.UpsertEntities got unexpected parameter kbUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpsertEntities.UpsertEntitiesMock.defaultExpectation.expectationOrigins.originKbUID, *mm_want_ptrs.kbUID, mm_got.kbUID, minimock.Diff(*mm_want_ptrs.kbUID, mm_got.kbUID))
+			}
+
+			if mm_want_ptrs.entities != nil && !minimock.Equal(*mm_want_ptrs.entities, mm_got.entities) {
+				mmUpsertEntities.t.Errorf("RepositoryMock.UpsertEntities got unexpected parameter entities, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpsertEntities.UpsertEntitiesMock.defaultExpectation.expectationOrigins.originEntities, *mm_want_ptrs.entities, mm_got.entities, minimock.Diff(*mm_want_ptrs.entities, mm_got.entities))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpsertEntities.t.Errorf("RepositoryMock.UpsertEntities got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpsertEntities.UpsertEntitiesMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpsertEntities.UpsertEntitiesMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpsertEntities.t.Fatal("No results are set for the RepositoryMock.UpsertEntities")
+		}
+		return (*mm_results).ua1, (*mm_results).err
+	}
+	if mmUpsertEntities.funcUpsertEntities != nil {
+		return mmUpsertEntities.funcUpsertEntities(ctx, kbUID, entities)
+	}
+	mmUpsertEntities.t.Fatalf("Unexpected call to RepositoryMock.UpsertEntities. %v %v %v", ctx, kbUID, entities)
+	return
+}
+
+// UpsertEntitiesAfterCounter returns a count of finished RepositoryMock.UpsertEntities invocations
+func (mmUpsertEntities *RepositoryMock) UpsertEntitiesAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpsertEntities.afterUpsertEntitiesCounter)
+}
+
+// UpsertEntitiesBeforeCounter returns a count of RepositoryMock.UpsertEntities invocations
+func (mmUpsertEntities *RepositoryMock) UpsertEntitiesBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpsertEntities.beforeUpsertEntitiesCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.UpsertEntities.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpsertEntities *mRepositoryMockUpsertEntities) Calls() []*RepositoryMockUpsertEntitiesParams {
+	mmUpsertEntities.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockUpsertEntitiesParams, len(mmUpsertEntities.callArgs))
+	copy(argCopy, mmUpsertEntities.callArgs)
+
+	mmUpsertEntities.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpsertEntitiesDone returns true if the count of the UpsertEntities invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockUpsertEntitiesDone() bool {
+	if m.UpsertEntitiesMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpsertEntitiesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpsertEntitiesMock.invocationsDone()
+}
+
+// MinimockUpsertEntitiesInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockUpsertEntitiesInspect() {
+	for _, e := range m.UpsertEntitiesMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.UpsertEntities at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpsertEntitiesCounter := mm_atomic.LoadUint64(&m.afterUpsertEntitiesCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpsertEntitiesMock.defaultExpectation != nil && afterUpsertEntitiesCounter < 1 {
+		if m.UpsertEntitiesMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.UpsertEntities at\n%s", m.UpsertEntitiesMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.UpsertEntities at\n%s with params: %#v", m.UpsertEntitiesMock.defaultExpectation.expectationOrigins.origin, *m.UpsertEntitiesMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpsertEntities != nil && afterUpsertEntitiesCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.UpsertEntities at\n%s", m.funcUpsertEntitiesOrigin)
+	}
+
+	if !m.UpsertEntitiesMock.invocationsDone() && afterUpsertEntitiesCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.UpsertEntities at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpsertEntitiesMock.expectedInvocations), m.UpsertEntitiesMock.expectedInvocationsOrigin, afterUpsertEntitiesCounter)
+	}
+}
+
 type mRepositoryMockUpsertRepositoryTag struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -53482,6 +54955,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockDeleteEmbeddingsWithFileUIDInspect()
 
+			m.MinimockDeleteEntitiesByFileUIDInspect()
+
 			m.MinimockDeleteFileInspect()
 
 			m.MinimockDeleteFileAndDecreaseUsageInspect()
@@ -53503,6 +54978,8 @@ func (m *RepositoryMock) MinimockFinish() {
 			m.MinimockDeleteSystemInspect()
 
 			m.MinimockDropCollectionInspect()
+
+			m.MinimockEntityHopInspect()
 
 			m.MinimockFlushCollectionInspect()
 
@@ -53634,6 +55111,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockIsKBUpdatingInspect()
 
+			m.MinimockLinkEntityFileInspect()
+
 			m.MinimockListAllKnowledgeBasesAdminInspect()
 
 			m.MinimockListAllObjectsInspect()
@@ -53722,6 +55201,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockUpdateTextChunkDestinationsInspect()
 
+			m.MinimockUpsertEntitiesInspect()
+
 			m.MinimockUpsertRepositoryTagInspect()
 		}
 	})
@@ -53769,6 +55250,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockDeleteConvertedFileDone() &&
 		m.MinimockDeleteEmbeddingsByKBFileUIDDone() &&
 		m.MinimockDeleteEmbeddingsWithFileUIDDone() &&
+		m.MinimockDeleteEntitiesByFileUIDDone() &&
 		m.MinimockDeleteFileDone() &&
 		m.MinimockDeleteFileAndDecreaseUsageDone() &&
 		m.MinimockDeleteGCSFileCacheDone() &&
@@ -53780,6 +55262,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockDeleteRepositoryTagDone() &&
 		m.MinimockDeleteSystemDone() &&
 		m.MinimockDropCollectionDone() &&
+		m.MinimockEntityHopDone() &&
 		m.MinimockFlushCollectionDone() &&
 		m.MinimockGetActiveCollectionUIDDone() &&
 		m.MinimockGetAllConvertedFilesByFileUIDDone() &&
@@ -53845,6 +55328,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockInsertVectorsInCollectionDone() &&
 		m.MinimockIsCollectionInUseDone() &&
 		m.MinimockIsKBUpdatingDone() &&
+		m.MinimockLinkEntityFileDone() &&
 		m.MinimockListAllKnowledgeBasesAdminDone() &&
 		m.MinimockListAllObjectsDone() &&
 		m.MinimockListEmbeddingsByKBFileUIDDone() &&
@@ -53889,5 +55373,6 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockUpdateSystemByUpdateMapDone() &&
 		m.MinimockUpdateTextChunkDone() &&
 		m.MinimockUpdateTextChunkDestinationsDone() &&
+		m.MinimockUpsertEntitiesDone() &&
 		m.MinimockUpsertRepositoryTagDone()
 }
