@@ -269,6 +269,64 @@ func ConvertFileTypePipe(ctx context.Context, pipelineClient pipelinepb.Pipeline
 	return convertedContent, nil
 }
 
+// ConvertDocumentToXLSXPipe converts an XLS document to XLSX format via the
+// indexing-convert-xls-to-xlsx preset pipeline (LibreOffice under the hood).
+func ConvertDocumentToXLSXPipe(ctx context.Context, pipelineClient pipelinepb.PipelinePublicServiceClient, content []byte, sourceType artifactpb.File_Type, mimeType string, requesterUID string) ([]byte, error) {
+	ctx = withServiceHeader(ctx, requesterUID)
+
+	base64Content := base64.StdEncoding.EncodeToString(content)
+	dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Content)
+
+	pipelineID, err := getPipelineIDBySlug(ctx, pipelineClient, ConvertXLSToXLSXPipeline, requesterUID)
+	if err != nil {
+		return nil, fmt.Errorf("looking up XLS-to-XLSX pipeline ID: %w", err)
+	}
+
+	convertName := fmt.Sprintf("namespaces/%s/pipelines/%s/releases/%s",
+		ConvertXLSToXLSXPipeline.Namespace, pipelineID, ConvertXLSToXLSXPipeline.Version)
+
+	req := &pipelinepb.TriggerPipelineReleaseRequest{
+		Name: convertName,
+		Inputs: []*structpb.Struct{
+			{
+				Fields: map[string]*structpb.Value{
+					"document": structpb.NewStringValue(dataURI),
+				},
+			},
+		},
+	}
+
+	resp, err := pipelineClient.TriggerPipelineRelease(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("triggering XLS-to-XLSX conversion pipeline: %w", err)
+	}
+
+	if resp == nil || len(resp.Outputs) == 0 {
+		err := fmt.Errorf("response is nil or has no outputs")
+		return nil, enhanceErrorWithPipelineMetadata(err, resp, &ConvertXLSToXLSXPipeline)
+	}
+
+	fields := resp.Outputs[0].GetFields()
+	if fields == nil {
+		err := fmt.Errorf("fields in the output are nil")
+		return nil, enhanceErrorWithPipelineMetadata(err, resp, &ConvertXLSToXLSXPipeline)
+	}
+
+	outputValue := fields["document"]
+	if outputValue == nil {
+		err := fmt.Errorf("output field 'document' not found in response")
+		return nil, enhanceErrorWithPipelineMetadata(err, resp, &ConvertXLSToXLSXPipeline)
+	}
+
+	outputResult := outputValue.GetStringValue()
+	if outputResult == "" {
+		err := fmt.Errorf("output field 'document' is empty")
+		return nil, enhanceErrorWithPipelineMetadata(err, resp, &ConvertXLSToXLSXPipeline)
+	}
+
+	return fetchFromBlobURLOrDataURI(ctx, outputResult)
+}
+
 // getInputVariableName returns the pipeline input variable name based on file type
 func getInputVariableName(fileType artifactpb.File_Type) string {
 	switch fileType {

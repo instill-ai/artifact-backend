@@ -515,8 +515,8 @@ func TestBatchProfile_DocumentDefaults(t *testing.T) {
 
 	for _, ft := range docTypes {
 		p := batchProfile(ft)
-		c.Assert(p.PagesPerBatch, qt.Equals, 10, qt.Commentf("type=%s", ft))
-		c.Assert(p.PagesPerChunk, qt.Equals, 10, qt.Commentf("type=%s", ft))
+		c.Assert(p.PagesPerBatch, qt.Equals, 3, qt.Commentf("type=%s", ft))
+		c.Assert(p.PagesPerChunk, qt.Equals, 3, qt.Commentf("type=%s", ft))
 		c.Assert(p.ChunkTimeout, qt.Equals, ChunkConversionTimeout, qt.Commentf("type=%s", ft))
 		c.Assert(p.ActivityTimeout, qt.Equals, 15*time.Minute, qt.Commentf("type=%s", ft))
 		c.Assert(p.DirectMaxPages, qt.Equals, 10, qt.Commentf("type=%s", ft))

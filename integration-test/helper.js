@@ -986,9 +986,13 @@ export function verifyConvertedFileType(kbUID, fileUID, expectedExtension) {
  * @returns {string|null} Expected extension or null if not standardizable
  */
 export function getStandardFileExtension(fileType) {
+  // Spreadsheets - standardize to XLSX (not PDF)
+  const spreadsheetTypes = ["TYPE_XLS", "TYPE_XLSX"];
+  if (spreadsheetTypes.includes(fileType)) return 'xlsx';
+
   // Documents - all convert to PDF (only PDF is Gemini-native)
   const documentTypes = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX",
-    "TYPE_XLS", "TYPE_XLSX", "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
+    "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
   if (documentTypes.includes(fileType)) return 'pdf';
 
   // Images - Gemini-native formats (PNG, JPEG, WEBP, HEIC, HEIF) keep original extension

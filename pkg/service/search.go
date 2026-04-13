@@ -110,14 +110,16 @@ func (s *service) SearchChunks(ctx context.Context, ownerUID types.OwnerUIDType,
 	// Single KB query - no dual-mode routing needed
 	// CRITICAL: Use active_collection_uid (not kb.UID) to query the correct Milvus collection
 	sp := repository.SearchVectorParam{
-		CollectionID: constant.KBCollectionName(kb.ActiveCollectionUID),
-		Vectors:      textVector,
-		TopK:         topK,
-		FileUIDs:     fileUIDs,
-		ContentType:  string(fileType),
-		ChunkType:    string(chunkType),
-		Tags:         req.GetTags(),
-		QueryText:    req.TextPrompt, // Pass query text for hybrid search (BM25 + dense)
+		CollectionID:   constant.KBCollectionName(kb.ActiveCollectionUID),
+		Vectors:        textVector,
+		TopK:           topK,
+		FileUIDs:       fileUIDs,
+		ContentType:    string(fileType),
+		ChunkType:      string(chunkType),
+		Tags:           req.GetTags(),
+		QueryText:      req.TextPrompt,
+		GroupByFileUID: req.GetGroupByFile(),
+		GroupSize:      int(req.GetGroupSize()),
 	}
 
 	// Check file UID metadata availability

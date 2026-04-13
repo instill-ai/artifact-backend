@@ -54,6 +54,14 @@ type SearchVectorParam struct {
 	Tags         []string // Tags to filter by (OR logic when multiple tags provided)
 	QueryText    string   // Original query text for BM25 sparse vector generation (hybrid search)
 
+	// GroupByFileUID enables file-level result diversity. On the dense-only
+	// path Milvus native grouping is used; on the hybrid path a post-hoc
+	// best-per-file selection achieves the same effect.
+	GroupByFileUID bool
+	// GroupSize is the max chunks returned per file when GroupByFileUID is
+	// true. Zero defaults to 1.
+	GroupSize int
+
 	// The filename filter was implemented back when the filename in a knowledge base was
 	// unique, which isn't the case anymore. Using this filter might yield
 	// unexpected results if there are several files with the same name in the
@@ -650,9 +658,10 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 		logger.Debug("Using native Milvus BM25 with text query",
 			zap.String("query_text", p.QueryText[:min(50, len(p.QueryText))]))
 
-		// Execute hybrid search with RRF reranker
+		// Execute hybrid search with weighted reranker: 70% dense cosine, 30% BM25.
+		// WeightedRanker normalizes scores to [0,1] range, enabling absolute quality gating.
 		hybridOpt := milvusclient.NewHybridSearchOption(collectionName, topK, denseRequest, sparseRequest).
-			WithReranker(milvusclient.NewRRFReranker()).
+			WithReranker(milvusclient.NewWeightedReranker([]float64{0.7, 0.3})).
 			WithOutputFields(outputFields...)
 
 		results, err = m.c.HybridSearch(ctx, hybridOpt)
@@ -677,6 +686,19 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 
 		if filterExpr != "" {
 			searchOpt.WithFilter(filterExpr)
+		}
+
+		if p.GroupByFileUID && hasFileUID {
+			groupSize := p.GroupSize
+			if groupSize <= 0 {
+				groupSize = 1
+			}
+			searchOpt.WithGroupByField(kbCollectionFieldFileUID).
+				WithGroupSize(groupSize).
+				WithStrictGroupSize(false)
+			logger.Debug("Dense search with native grouping",
+				zap.String("group_field", kbCollectionFieldFileUID),
+				zap.Int("group_size", groupSize))
 		}
 
 		results, err = m.c.Search(ctx, searchOpt)
@@ -807,7 +829,37 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 		embeddings = append(embeddings, tempVectors)
 	}
 
+	// Post-hoc grouping for hybrid search path, which doesn't support
+	// native Milvus grouping. Results are already sorted by descending
+	// score, so keeping the first occurrence per file preserves rank order.
+	if p.GroupByFileUID && useHybridSearch && hasFileUID {
+		groupSize := p.GroupSize
+		if groupSize <= 0 {
+			groupSize = 1
+		}
+		for i, batch := range embeddings {
+			embeddings[i] = groupByFile(batch, groupSize)
+		}
+		logger.Debug("Applied post-hoc file grouping on hybrid results",
+			zap.Int("group_size", groupSize))
+	}
+
 	return embeddings, nil
+}
+
+// groupByFile keeps up to groupSize highest-scored chunks per file_uid.
+// Input must be sorted by descending score (Milvus default).
+func groupByFile(results []SimilarVectorEmbedding, groupSize int) []SimilarVectorEmbedding {
+	fileCounts := make(map[string]int)
+	out := make([]SimilarVectorEmbedding, 0, len(results))
+	for _, r := range results {
+		key := r.FileUID.String()
+		if fileCounts[key] < groupSize {
+			out = append(out, r)
+			fileCounts[key]++
+		}
+	}
+	return out
 }
 
 func (m *milvusClient) DropCollection(ctx context.Context, collectionName string) error {

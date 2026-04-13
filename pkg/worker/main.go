@@ -272,6 +272,23 @@ func isImageFileType(ft artifactpb.File_Type) bool {
 	}
 }
 
+// isGeminiNativeFileType returns true for file types that Gemini can process
+// directly from raw bytes. Non-native types (e.g., XLSX after skipping PDF
+// conversion) require content generation first, then summary from markdown.
+func isGeminiNativeFileType(ft artifactpb.File_Type) bool {
+	switch ft {
+	case artifactpb.File_TYPE_PDF,
+		artifactpb.File_TYPE_TEXT,
+		artifactpb.File_TYPE_MARKDOWN,
+		artifactpb.File_TYPE_CSV,
+		artifactpb.File_TYPE_HTML,
+		artifactpb.File_TYPE_JSON:
+		return true
+	default:
+		return isImageFileType(ft) || isAudioFileType(ft) || isVideoFileType(ft)
+	}
+}
+
 // getContentPromptForFileType returns the modality-appropriate content prompt.
 // Resolution order: per-modality override → default override → CE fallback.
 func (w *Worker) getContentPromptForFileType(ft artifactpb.File_Type) string {
@@ -337,8 +354,8 @@ func batchProfile(ft artifactpb.File_Type) BatchProfile {
 		}
 	}
 	return BatchProfile{
-		PagesPerBatch:        10,
-		PagesPerChunk:        10,
+		PagesPerBatch:        3,
+		PagesPerChunk:        3,
 		DirectMaxPages:       10,
 		ChunkTimeout:         ChunkConversionTimeout,
 		ActivityTimeout:      15 * time.Minute,

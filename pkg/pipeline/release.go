@@ -125,12 +125,21 @@ var (
 		Version:     "v1.0.0",
 	}
 
+	// ConvertXLSToXLSXPipeline converts legacy XLS files to modern XLSX format
+	// via LibreOffice so they can be parsed structurally with excelize.
+	ConvertXLSToXLSXPipeline = Release{
+		Namespace:   DefaultNamespaceID,
+		DisplayName: "Indexing Convert Xls To Xlsx",
+		Version:     "v1.0.0",
+	}
+
 	// PresetPipelinesList contains the preset pipelines used in knowledge bases.
 	PresetPipelinesList = Releases{
 		ConvertFileTypePipeline,
 		GenerateContentPipeline,
 		GenerateSummaryPipeline,
 		EmbedPipeline,
+		ConvertXLSToXLSXPipeline,
 	}
 
 	// DefaultConversionPipelines contains the default pipeline used for document conversion.

@@ -62,14 +62,18 @@ The workflow fetches each file's current status and metadata (file type, storage
 
 Converts files to a canonical format via the `indexing-convert-file-type` pipeline:
 
-| Input Type | Output Format |
-|---|---|
-| Documents (DOCX, PPTX, HTML, CSV, etc.) | PDF |
-| Images (JPG, TIFF, BMP, etc.) | PNG |
-| Audio (MP3, WAV, AAC, M4A, etc.) | OGG |
-| Video (AVI, MOV, MKV, FLV, etc.) | MP4 |
+| Input Type | Output Format | Pipeline |
+|---|---|---|
+| Documents (DOCX, PPTX, HTML, CSV, etc.) | PDF | `indexing-convert-file-type` |
+| Spreadsheets (XLS) | XLSX | `indexing-convert-xls-to-xlsx` |
+| Spreadsheets (XLSX) | No conversion (processed directly) | — |
+| Images (JPG, TIFF, BMP, etc.) | PNG | `indexing-convert-file-type` |
+| Audio (MP3, WAV, AAC, M4A, etc.) | OGG | `indexing-convert-file-type` |
+| Video (AVI, MOV, MKV, FLV, etc.) | MP4 | `indexing-convert-file-type` |
 
 The standardized file is always re-generated to ensure it reflects the latest conversion logic.
+
+**Spreadsheet handling:** XLSX files bypass PDF conversion entirely. Instead, they are parsed directly by `excelize` in `convertSpreadsheetToMarkdown`, producing structured markdown with `[Sheet: SheetName]` markers and proper table formatting. XLS files are first converted to XLSX via LibreOffice (using the `indexing-convert-xls-to-xlsx` preset pipeline), then follow the same direct parsing path. This preserves tabular structure, cell values, and sheet names that would be lost in a PDF round-trip.
 
 #### PDF Text-Based Classification
 
@@ -331,6 +335,31 @@ ReadExistingContentActivity → ApplyPatchToContentActivity → DeleteOldConvert
 
 If `ReadExistingContentActivity` fails (e.g., the content record was deleted or MinIO is unavailable), the file is automatically reclassified as needing full processing and joins the standard pipeline.
 
+## Entity Extraction and Augmented Chunks
+
+The summary generation step (`ProcessSummaryActivity`) produces structured output with two sections from a **single Gemini call**:
+
+1. **Prose summary** → stored as `TYPE_SUMMARY` chunk (existing behavior)
+2. **Entity list** → stored as `TYPE_AUGMENTED` chunk AND as `kb_entity` / `kb_entity_file` records
+
+### Entity Graph Tables
+
+| Table | Purpose |
+|---|---|
+| `kb_entity` | Canonical entities within a KB (unique by `kb_uid` + `name`) |
+| `kb_entity_file` | Junction table linking entities to files |
+
+### How Entities Enable Multi-Hop Search
+
+1. Phase 1: Direct Milvus search returns top files
+2. Entity hop: SQL query finds other files sharing entities with top results
+3. Phase 2: Filtered Milvus search on entity-linked files
+4. Results merged and deduplicated
+
+### Augmented Chunk Content
+
+The `TYPE_AUGMENTED` chunk contains comma-separated entity names (e.g., "Peter Thiel, monopoly theory, PayPal"). This is embedded and BM25-indexed in Milvus, enabling keyword and semantic search to match files by their conceptual content rather than just raw text.
+
 ## Key Constants
 
 | Constant | Value | Purpose |
@@ -341,3 +370,5 @@ If `ReadExistingContentActivity` fails (e.g., the content record was deleted or 
 | `ChunkOverlap` | 30 sec | Overlap between adjacent physical chunks for boundary continuity |
 | `DefaultCacheTTL` | 2 hours | Gemini context cache time-to-live |
 | `RateLimitCooldown` | 60 sec | Pause before batch rounds to let API quota recover |
+| `mediaChunkTarget` | 4000 chars | Target chunk size for video/audio transcript splitting |
+| `markdownChunkTarget` | 4000 chars | Target chunk size for markdown/text heading-based splitting |

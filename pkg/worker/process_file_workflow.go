@@ -1112,12 +1112,17 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			var summaryFuture workflow.Future
 			var summaryFutureChan workflow.Channel
 
-			if kbModelFamily == "gemini" {
-				// Gemini route: Start summary in parallel (processes raw file independently)
-				logger.Info("Starting content and summary in parallel (Gemini)",
-					"fileUID", cr.fileUID.String())
+			// Gemini can summarize from raw bytes for native file types (PDF, images, media, text).
+			// For non-native types (e.g., XLSX processed with excelize) or non-Gemini models,
+			// summary must wait for content generation to finish (sequential path).
+			geminiParallel := kbModelFamily == "gemini" && isGeminiNativeFileType(cr.effectiveFileType)
 
-				// Use the same dynamic timeout for summary activity
+			if geminiParallel {
+				// Gemini-native route: Start summary in parallel (processes raw file independently)
+				logger.Info("Starting content and summary in parallel (Gemini-native)",
+					"fileUID", cr.fileUID.String(),
+					"fileType", cr.effectiveFileType.String())
+
 				summaryFuture = workflow.ExecuteActivity(aiActivityCtx, w.ProcessSummaryActivity, &ProcessSummaryActivityParam{
 					FileUID:         cr.fileUID,
 					KBUID:           kbUID,
@@ -1127,14 +1132,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					FileType:        cr.effectiveFileType,
 					Metadata:        cr.fileMetadata.metadata.ExternalMetadata,
 					CacheName:       fileCacheName,
-					// ContentMarkdown left empty - Gemini reads raw file
 				})
-				summaryFutureChan = nil // No channel for Gemini
+				summaryFutureChan = nil
 			} else {
-				// OpenAI route: Summary depends on content generation output
-				// Execute content → summary sequentially using goroutine
-				logger.Info("Sequential content → summary (OpenAI)",
-					"fileUID", cr.fileUID.String())
+				// Sequential route: Summary depends on content generation output
+				logger.Info("Sequential content → summary (non-Gemini-native or OpenAI)",
+					"fileUID", cr.fileUID.String(),
+					"fileType", cr.effectiveFileType.String())
 
 				// Capture variables for closure
 				fileUID := cr.fileUID
@@ -1201,9 +1205,9 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			workflowFutures[i] = fileWorkflowFutures{
 				fileUID:            cr.fileUID,
 				contentFuture:      contentFuture,
-				summaryFuture:      summaryFuture,     // nil for OpenAI (will receive from channel later)
-				summaryFutureChan:  summaryFutureChan, // Only set for OpenAI
-				isOpenAISequential: kbModelFamily != "gemini",
+				summaryFuture:      summaryFuture,     // nil for sequential path (will receive from channel later)
+				summaryFutureChan:  summaryFutureChan, // Only set for sequential path
+				isOpenAISequential: !geminiParallel,
 				conversionData:     cr,
 			}
 		}
@@ -1824,6 +1828,50 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				totalChunkCount += len(summaryChunks.Chunks)
 			}
 
+			// If entity tags were extracted, create an augmented chunk and save entities.
+			if len(summaryResult.EntityTags) > 0 {
+				// Build comma-separated entity text for embedding + BM25 indexing.
+				var entityNames []string
+				for _, e := range summaryResult.EntityTags {
+					entityNames = append(entityNames, e.Name)
+				}
+				augmentedText := strings.Join(entityNames, ", ")
+
+				var augmentedChunks ChunkContentActivityResult
+				if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{
+					FileUID:  fileUID,
+					KBUID:    kbUID,
+					Content:  augmentedText,
+					Metadata: wf.conversionData.fileMetadata.metadata.ExternalMetadata,
+					Type:     artifactpb.Chunk_TYPE_AUGMENTED,
+				}).Get(ctx, &augmentedChunks); err != nil {
+					logger.Warn("Failed to chunk augmented entities (non-fatal)",
+						"fileUID", fileUID.String(), "error", err)
+				} else if len(augmentedChunks.Chunks) > 0 {
+					if err := workflow.ExecuteActivity(ctx, w.SaveChunksActivity, &SaveChunksActivityParam{
+						KBUID:            kbUID,
+						FileUID:          fileUID,
+						Chunks:           augmentedChunks.Chunks,
+						ConvertedFileUID: summaryResult.ConvertedFileUID,
+					}).Get(ctx, nil); err != nil {
+						logger.Warn("Failed to save augmented chunks (non-fatal)",
+							"fileUID", fileUID.String(), "error", err)
+					} else {
+						totalChunkCount += len(augmentedChunks.Chunks)
+					}
+				}
+
+				// Save entities to kb_entity + kb_entity_file.
+				if err := workflow.ExecuteActivity(ctx, w.SaveEntitiesActivity, &SaveEntitiesActivityParam{
+					KBUID:    kbUID,
+					FileUID:  fileUID,
+					Entities: summaryResult.EntityTags,
+				}).Get(ctx, nil); err != nil {
+					logger.Warn("Failed to save entities (non-fatal)",
+						"fileUID", fileUID.String(), "error", err)
+				}
+			}
+
 			logger.Info("CHUNKING phase completed for file",
 				"fileUID", fileUID.String(),
 				"totalChunks", totalChunkCount)
@@ -2256,7 +2304,9 @@ func (w *Worker) processLongMedia(
 			if err := f.Get(ctx, &result); err != nil {
 				cacheErrs[i] = err
 			} else if !result.CachedContextEnabled {
-				cacheErrs[i] = fmt.Errorf("caching not available for chunk %d: AI client not configured or file type %s not supported for caching", i, cr.effectiveFileType.String())
+				logger.Warn("processLongMedia: Caching unavailable for chunk, proceeding without cache",
+					"chunkIndex", i,
+					"fileType", cr.effectiveFileType.String())
 			} else {
 				chunkCacheNames[i] = result.CacheName
 				chunkGCSURIs[i] = result.GCSURI

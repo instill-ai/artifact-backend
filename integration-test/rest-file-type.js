@@ -13,9 +13,14 @@ const http = helper.httpRetry;
  * non-native formats are converted to standard formats
  */
 function getExpectedFormatInfo(fileType) {
+  // Spreadsheet formats - XLSX stays as-is, XLS converts to XLSX (not PDF)
+  if (fileType === "TYPE_XLSX" || fileType === "TYPE_XLS") {
+    return { format: "XLSX", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
+  }
+
   // Document formats - all standardize to PDF
   const documentTypes = ["TYPE_PDF", "TYPE_DOC", "TYPE_DOCX", "TYPE_PPT", "TYPE_PPTX",
-    "TYPE_XLS", "TYPE_XLSX", "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
+    "TYPE_HTML", "TYPE_TEXT", "TYPE_MARKDOWN", "TYPE_CSV"];
   if (documentTypes.includes(fileType)) {
     return { format: "PDF", mimeType: "application/pdf" };
   }
@@ -412,14 +417,16 @@ export function TEST_TYPE_LARGE_PDF(data) {
       let fileData; try { fileData = fRes.json(); } catch (e) { fileData = {}; }
       const processedFile = fileData.file || {};
 
+      const lengthCoords = processedFile.length && processedFile.length.coordinates ? processedFile.length.coordinates : [];
+      const pageCount = lengthCoords.length > 0 ? lengthCoords[0] : 0;
       check(processedFile, {
         "Large PDF has processStatus COMPLETED": () => processedFile.processStatus === "FILE_PROCESS_STATUS_COMPLETED",
-        "Large PDF has totalPages > 0": () => (processedFile.totalPages || 0) > 0,
+        "Large PDF has length with page count > 0": () => pageCount > 0,
         "Large PDF has totalChunks > 0": () => (processedFile.totalChunks || 0) > 0,
         "Large PDF has totalTokens > 0": () => (processedFile.totalTokens || 0) > 0,
       });
 
-      console.log(`Large PDF processed: pages=${processedFile.totalPages}, chunks=${processedFile.totalChunks}, tokens=${processedFile.totalTokens}`);
+      console.log(`Large PDF processed: pages=${pageCount}, chunks=${processedFile.totalChunks}, tokens=${processedFile.totalTokens}`);
     } else {
       console.error(`Large PDF processing failed or timed out: status=${result.status}, completed=${result.completed}`);
     }
@@ -769,7 +776,8 @@ function runFileTest(data, opts) {
 
     // Get file standardized format (using VIEW_STANDARD_FILE_TYPE)
     // Standardized view behavior based on Gemini-native format support:
-    // - Documents → PDF (DOC, DOCX, PPT, PPTX, XLS, XLSX, HTML, TEXT, MARKDOWN, CSV)
+    // - Documents → PDF (DOC, DOCX, PPT, PPTX, HTML, TEXT, MARKDOWN, CSV)
+    // - Spreadsheets → XLSX (XLS converts to XLSX, XLSX stays as-is)
     // - Images:
     //   - Gemini-native (keep original): PNG, JPEG, WEBP, HEIC, HEIF
     //   - Convert to PNG: GIF, BMP, TIFF, AVIF

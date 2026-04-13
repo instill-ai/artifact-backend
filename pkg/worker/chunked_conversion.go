@@ -702,8 +702,8 @@ func countPresentPageTags(markdown string, start, end int) map[int]bool {
 	found := make(map[int]bool)
 	matches := pageTagPattern.FindAllStringSubmatch(markdown, -1)
 	for _, m := range matches {
-		if len(m) >= 2 {
-			if num, err := strconv.Atoi(m[1]); err == nil && num >= start && num <= end {
+		if len(m) >= 3 {
+			if num, err := strconv.Atoi(m[2]); err == nil && num >= start && num <= end {
 				found[num] = true
 			}
 		}
@@ -1351,7 +1351,21 @@ func (w *Worker) SplitMediaChunksActivity(ctx context.Context, param *SplitMedia
 		}
 
 		if out, err := exec.Command("ffmpeg", args...).CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("ffmpeg split chunk %d failed: %w\noutput: %s", i, err, string(out))
+			logger.Warn("SplitMediaChunksActivity: stream-copy failed, falling back to re-encode",
+				zap.Int("chunk", i), zap.Error(err), zap.String("output", string(out)))
+
+			args = []string{
+				"-ss", fmt.Sprintf("%.3f", start.Seconds()),
+				"-t", fmt.Sprintf("%.3f", segLen.Seconds()),
+				"-i", tmpInput.Name(),
+				"-c:v", "libx264", "-preset", "fast", "-crf", "23",
+				"-c:a", "aac", "-b:a", "192k",
+				"-movflags", "+faststart",
+				"-y", tmpChunkPath,
+			}
+			if out2, err2 := exec.Command("ffmpeg", args...).CombinedOutput(); err2 != nil {
+				return nil, fmt.Errorf("ffmpeg split chunk %d failed (re-encode fallback): %w\noutput: %s", i, err2, string(out2))
+			}
 		}
 
 		chunkData, err := os.ReadFile(tmpChunkPath)
@@ -1365,10 +1379,7 @@ func (w *Worker) SplitMediaChunksActivity(ctx context.Context, param *SplitMedia
 			return nil, fmt.Errorf("upload chunk %d to MinIO: %w", i, err)
 		}
 
-		endOffset := start + segLen
-		if endOffset > totalDuration {
-			endOffset = totalDuration
-		}
+		endOffset := min(start + segLen, totalDuration)
 
 		chunks = append(chunks, ChunkInfo{
 			Index:       i,

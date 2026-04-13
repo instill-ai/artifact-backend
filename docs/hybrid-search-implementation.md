@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully implemented **Dense Vector + Native Milvus BM25 Hybrid Search** in artifact-backend using Milvus Go SDK v2.6.1 with Milvus 2.5+ native BM25 support. The system combines semantic (dense vector) and keyword-based (BM25 sparse vector) search for improved retrieval accuracy.
+Successfully implemented **Dense Vector + Native Milvus BM25 Hybrid Search** in artifact-backend using Milvus Go SDK v2.6.3 with Milvus v2.6.14 native BM25 support. The system combines semantic (dense vector) and keyword-based (BM25 sparse vector) search for improved retrieval accuracy.
 
 ## Problem Solved
 
@@ -34,7 +34,7 @@ flowchart TB
         subgraph Search["HybridSearch"]
             DenseANN["Dense ANN<br/>(SCANN Index)"]
             SparseANN["Sparse ANN<br/>(Inverted Index)"]
-            RRF["RRF Reranker"]
+            WR["WeightedRanker<br/>(70% dense, 30% BM25)"]
         end
     end
 
@@ -44,9 +44,9 @@ flowchart TB
     TextField --> BM25Func
     BM25Func --> SparseField
     SparseField --> SparseANN
-    DenseANN --> RRF
-    SparseANN --> RRF
-    RRF --> Results["Merged Results<br/>Top K"]
+    DenseANN --> WR
+    SparseANN --> WR
+    WR --> Results["Merged Results<br/>Top K (scores in 0-1 range)"]
 ```
 
 ## Key Components
@@ -285,10 +285,61 @@ curl -X POST 'http://localhost:8080/v1alpha/namespaces/{ns}/searchChunks' \
 2. **Adaptive Strategy**: Adjust search strategy based on query characteristics
 3. **User Personalization**: Learn from user interactions and preferences
 
+## Reranker: WeightedRanker (Replaces RRF)
+
+The hybrid search uses `WeightedRanker(0.7, 0.3)` instead of RRF:
+
+- **70% dense cosine similarity** (normalized to [0,1])
+- **30% BM25 keyword score** (normalized via arctan to [0,1])
+- **Output scores**: [0,1] range, enabling absolute quality gating
+
+### Score Ranges
+
+| Quality | Score Range | Description |
+|---------|------------|-------------|
+| Strong match | 0.85-0.95 | Highly relevant content |
+| Moderate match | 0.55-0.70 | Partially relevant |
+| Noise | 0.35-0.50 | Irrelevant results |
+
+### Quality Gating
+
+Agent-backend-ee applies a `minAbsoluteScore = 0.50` floor: if the top result scores below this, all results are rejected as noise. A `minRelativeScore = 0.6` further filters weak results relative to the top match.
+
+## File-Level Grouping Search
+
+Grouping search ensures file diversity in results, preventing a single file from dominating.
+
+### How it works
+
+| Search path | Grouping strategy |
+|---|---|
+| Dense-only (`Search()`) | Native Milvus `WithGroupByField("file_uid")` + `WithGroupSize(n)` |
+| Hybrid (`HybridSearch()`) | Post-hoc: keep top `n` chunks per file after result extraction |
+
+Milvus `HybridSearch` does not support `WithGroupByField` (tracked in [milvus#35096](https://github.com/milvus-io/milvus/issues/35096)), so the hybrid path uses a server-side grouping function that preserves score ordering.
+
+### API
+
+```protobuf
+message SearchChunksRequest {
+  // ...existing fields...
+  bool group_by_file = 11;  // enable file-level grouping
+  int32 group_size = 12;    // max chunks per file (default: 1)
+}
+```
+
+### Usage in global search
+
+The global search (`SearchFileContent` in agent-backend-ee) enables `group_by_file=true, group_size=2` for Phase 1 direct search to ensure result diversity across files. Phase 2 entity-hop search does not use grouping since it already targets specific files.
+
 ## Key Takeaways
 
 - **Implementation Complete**: Fully functional hybrid search with native Milvus BM25
+- **Milvus v2.6.14**: Upgraded from v2.6.2 for GROUP BY bug fixes, OOM fixes, and filter performance
+- **Go SDK v2.6.3**: Upgraded from v2.6.1 for TruncateCollection API and nullable pointer support
 - **No Client-Side BM25**: Milvus handles all BM25 processing internally
+- **WeightedRanker**: Replaces RRF for [0,1] normalized scores enabling absolute quality gating
+- **Grouping Search**: File-level diversity via native grouping (dense) or post-hoc grouping (hybrid)
 - **Performance**: +20-30ms latency for +30% quality improvement (expected)
 - **Risk**: Low (automatic fallback, backward compatible)
 - **Monitoring**: Comprehensive logging and metrics

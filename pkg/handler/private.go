@@ -1158,6 +1158,58 @@ func (h *PrivateHandler) ResetKnowledgeBaseEmbeddingsAdmin(ctx context.Context, 
 	}, nil
 }
 
+// EntityHopAdmin finds files linked through shared KB entities.
+func (h *PrivateHandler) EntityHopAdmin(ctx context.Context, req *artifactpb.EntityHopAdminRequest) (*artifactpb.EntityHopAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	seedIDs := req.GetFileIds()
+	if len(seedIDs) == 0 {
+		return &artifactpb.EntityHopAdminResponse{}, nil
+	}
+
+	files, err := h.service.Repository().GetFilesByFileIDs(ctx, seedIDs, "uid")
+	if err != nil {
+		logger.Warn("EntityHopAdmin: failed to resolve file IDs", zap.Error(err))
+		return &artifactpb.EntityHopAdminResponse{}, nil
+	}
+	if len(files) == 0 {
+		return &artifactpb.EntityHopAdminResponse{}, nil
+	}
+
+	fileUIDs := make([]types.FileUIDType, len(files))
+	for i, f := range files {
+		fileUIDs[i] = f.UID
+	}
+
+	linkedUIDs, err := h.service.Repository().EntityHop(ctx, fileUIDs)
+	if err != nil {
+		logger.Warn("EntityHopAdmin: entity hop query failed", zap.Error(err))
+		return &artifactpb.EntityHopAdminResponse{}, nil
+	}
+	if len(linkedUIDs) == 0 {
+		return &artifactpb.EntityHopAdminResponse{}, nil
+	}
+
+	linkedFiles, err := h.service.Repository().GetFilesByFileUIDs(ctx, linkedUIDs)
+	if err != nil {
+		logger.Warn("EntityHopAdmin: failed to resolve linked UIDs", zap.Error(err))
+		return &artifactpb.EntityHopAdminResponse{}, nil
+	}
+
+	result := make([]string, 0, len(linkedFiles))
+	for _, f := range linkedFiles {
+		if f.ID != "" {
+			result = append(result, f.ID)
+		}
+	}
+
+	logger.Debug("EntityHopAdmin: completed",
+		zap.Int("seedFiles", len(seedIDs)),
+		zap.Int("linkedFiles", len(result)))
+
+	return &artifactpb.EntityHopAdminResponse{FileIds: result}, nil
+}
+
 // parseQFilter extracts the search text from an AIP-160 filter string of the
 // form q="<text>". Returns an empty string if no q= clause is found.
 func parseQFilter(filter string) string {

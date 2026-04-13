@@ -1,0 +1,2 @@
+-- No-op: cannot reliably restore previous status for re-processed files.
+-- Files that were already re-processed will retain their new chunks.

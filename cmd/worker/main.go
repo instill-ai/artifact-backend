@@ -287,6 +287,7 @@ func main() {
 	w.RegisterActivity(cw.DeleteOldTextChunksActivity) // Delete old text chunk records before creating new ones
 	w.RegisterActivity(cw.ChunkContentActivity)        // Split markdown content into semantic chunks
 	w.RegisterActivity(cw.SaveChunksActivity)          // Persist chunks to database and MinIO storage
+	w.RegisterActivity(cw.SaveEntitiesActivity)        // Upsert entity records and create entity-file links
 
 	// Embedding Phase - Vector embedding generation and storage
 	w.RegisterActivity(cw.EmbedAndSaveChunksActivity)      // Combined: query chunks, generate embeddings, save to DB/Milvus

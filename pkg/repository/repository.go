@@ -37,6 +37,8 @@ type Repository interface {
 	Cache
 	// System manages system-wide Knowledge Base configuration
 	System
+	// Entity manages KB entity extraction and cross-file linking
+	Entity
 	// GetMinIOStorage returns the MinIO storage instance (primary/default storage for all uploads)
 	GetMinIOStorage() object.Storage
 	// GetGCSStorage returns the GCS storage instance for on-demand use (returns nil if not configured)

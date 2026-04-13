@@ -1,0 +1,18 @@
+version: v1beta
+component:
+  document:
+    type: collection
+    task: TASK_CONCAT
+    input:
+      data:
+        - xlsx: ${variable.document:xlsx}
+    condition: ${variable.document} != nil
+variable:
+  document:
+    title: Document
+    description: XLS document to convert to XLSX
+    type: document
+output:
+  document:
+    title: Document file in XLSX
+    value: ${document.output.data.xlsx}

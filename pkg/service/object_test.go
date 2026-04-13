@@ -28,26 +28,31 @@ func TestConvertedFileCacheSuffix(t *testing.T) {
 func TestNeedFileTypeConversion_ConvertsOfficeFormats(t *testing.T) {
 	c := qt.New(t)
 
-	convertible := []artifactpb.File_Type{
+	convertToPDF := []artifactpb.File_Type{
 		artifactpb.File_TYPE_DOC,
 		artifactpb.File_TYPE_DOCX,
 		artifactpb.File_TYPE_PPT,
 		artifactpb.File_TYPE_PPTX,
-		artifactpb.File_TYPE_XLS,
-		artifactpb.File_TYPE_XLSX,
 	}
 
-	for _, ft := range convertible {
+	for _, ft := range convertToPDF {
 		needs, ext, _ := filetype.NeedFileTypeConversion(ft)
 		c.Check(needs, qt.IsTrue, qt.Commentf("expected %s to need conversion", ft))
 		c.Check(ext, qt.Equals, "pdf")
 	}
+
+	// XLS converts to XLSX (for structured parsing with excelize), not PDF
+	needs, ext, target := filetype.NeedFileTypeConversion(artifactpb.File_TYPE_XLS)
+	c.Check(needs, qt.IsTrue, qt.Commentf("expected XLS to need conversion"))
+	c.Check(ext, qt.Equals, "xlsx")
+	c.Check(target, qt.Equals, artifactpb.File_TYPE_XLSX)
 
 	nonConvertible := []artifactpb.File_Type{
 		artifactpb.File_TYPE_PDF,
 		artifactpb.File_TYPE_PNG,
 		artifactpb.File_TYPE_JPEG,
 		artifactpb.File_TYPE_TEXT,
+		artifactpb.File_TYPE_XLSX, // parsed directly by excelize
 	}
 
 	for _, ft := range nonConvertible {

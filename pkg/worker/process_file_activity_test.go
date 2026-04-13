@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -718,6 +720,142 @@ func TestConvertedFilePath_Consistency(t *testing.T) {
 		qt.Commentf("Base paths should be identical"))
 }
 
+func TestExtractTimeRange(t *testing.T) {
+	c := qt.New(t)
+
+	tests := []struct {
+		name string
+		text string
+		want *[2]uint64
+	}{
+		{
+			name: "video range MM:SS",
+			text: "Some transcript text\n[Video: 1:30 - 3:45]\nMore text",
+			want: &[2]uint64{90_000, 225_000},
+		},
+		{
+			name: "audio range starting at zero",
+			text: "[Audio: 0:00 - 1:23] speech here",
+			want: &[2]uint64{0, 83_000},
+		},
+		{
+			name: "single sound timestamp",
+			text: "[Sound: 10:00] ambient noise",
+			want: &[2]uint64{600_000, 600_000},
+		},
+		{
+			name: "HH:MM:SS format",
+			text: "[Video: 1:02:03 - 1:05:00]",
+			want: &[2]uint64{3_723_000, 3_900_000},
+		},
+		{
+			name: "multiple markers uses first start and last end",
+			text: "[Audio: 0:10 - 0:30]\nSome words\n[Audio: 1:00 - 1:45]",
+			want: &[2]uint64{10_000, 105_000},
+		},
+		{
+			name: "no markers returns nil",
+			text: "Plain document text with no timestamps at all.",
+			want: nil,
+		},
+		{
+			name: "empty string returns nil",
+			text: "",
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		c.Run(tt.name, func(c *qt.C) {
+			got := extractTimeRange(tt.text)
+			if tt.want == nil {
+				c.Assert(got, qt.IsNil)
+			} else {
+				c.Assert(got, qt.IsNotNil)
+				c.Assert(*got, qt.DeepEquals, *tt.want)
+			}
+		})
+	}
+}
+
+func TestPopulateTimeRanges(t *testing.T) {
+	c := qt.New(t)
+
+	c.Run("sets TimeRange on chunks with markers", func(c *qt.C) {
+		chunks := []types.Chunk{
+			{Text: "[Video: 0:00 - 1:30] scene one"},
+			{Text: "[Video: 1:30 - 3:00] scene two"},
+		}
+		populateTimeRanges(chunks)
+
+		c.Assert(chunks[0].Reference, qt.IsNotNil)
+		c.Assert(chunks[0].Reference.TimeRange, qt.DeepEquals, [2]uint64{0, 90_000})
+		c.Assert(chunks[1].Reference, qt.IsNotNil)
+		c.Assert(chunks[1].Reference.TimeRange, qt.DeepEquals, [2]uint64{90_000, 180_000})
+	})
+
+	c.Run("leaves chunks without markers unchanged", func(c *qt.C) {
+		chunks := []types.Chunk{
+			{Text: "Plain text with no timestamps"},
+		}
+		populateTimeRanges(chunks)
+		c.Assert(chunks[0].Reference, qt.IsNil)
+	})
+
+	c.Run("creates Reference if nil", func(c *qt.C) {
+		chunks := []types.Chunk{
+			{Text: "[Audio: 2:00] voice", Reference: nil},
+		}
+		populateTimeRanges(chunks)
+		c.Assert(chunks[0].Reference, qt.IsNotNil)
+		c.Assert(chunks[0].Reference.TimeRange, qt.DeepEquals, [2]uint64{120_000, 120_000})
+	})
+
+	c.Run("preserves existing PageRange when setting TimeRange", func(c *qt.C) {
+		chunks := []types.Chunk{
+			{
+				Text: "[Video: 0:30 - 1:00] first scene",
+				Reference: &types.ChunkReference{
+					PageRange: [2]uint32{1, 1},
+				},
+			},
+		}
+		populateTimeRanges(chunks)
+		c.Assert(chunks[0].Reference.PageRange, qt.DeepEquals, [2]uint32{1, 1})
+		c.Assert(chunks[0].Reference.TimeRange, qt.DeepEquals, [2]uint64{30_000, 60_000})
+	})
+}
+
+func TestChunkContentActivity_MediaTimeRange(t *testing.T) {
+	c := qt.New(t)
+
+	w := &Worker{log: zap.NewNop()}
+
+	content := "[Video: 0:00 - 1:30]\nScene one description.\n\n[Video: 1:30 - 3:45]\nScene two description."
+	contentRunes := []rune(content)
+
+	param := &ChunkContentActivityParam{
+		FileUID: uuid.Must(uuid.NewV4()),
+		Content: content,
+		Type:    artifactpb.Chunk_TYPE_CONTENT,
+		PositionData: &types.PositionData{
+			PageDelimiters: []uint32{uint32(len(contentRunes))},
+		},
+	}
+
+	result, err := w.ChunkContentActivity(context.Background(), param)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(result.Chunks) > 0, qt.IsTrue)
+
+	for _, chunk := range result.Chunks {
+		c.Assert(chunk.Reference, qt.IsNotNil, qt.Commentf("chunk %q must have a Reference", chunk.Text))
+		c.Assert(chunk.Reference.PageRange, qt.DeepEquals, [2]uint32{1, 1},
+			qt.Commentf("PageRange preserved for single-page media"))
+		c.Assert(chunk.Reference.TimeRange[1] > 0, qt.IsTrue,
+			qt.Commentf("TimeRange end must be non-zero for media chunk %q", chunk.Text))
+	}
+}
+
 // TestChunkContentActivity_TypeParameter verifies that
 // ChunkContentActivity correctly sets Type based on parameter
 func TestChunkContentActivity_TypeParameter(t *testing.T) {
@@ -773,4 +911,153 @@ func TestChunkContentActivity_TypeParameter(t *testing.T) {
 			c.Assert(typeStr, qt.Equals, tt.expectedTypeStr)
 		})
 	}
+}
+
+func TestInjectMediaPageDelimiters(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("nil when no timestamps", func(t *testing.T) {
+		pd := injectMediaPageDelimiters("Hello world, no timestamps here.", 4000)
+		c.Assert(pd, qt.IsNil)
+	})
+
+	t.Run("nil when single timestamp", func(t *testing.T) {
+		pd := injectMediaPageDelimiters("[Video: 00:00:00] Hello world", 4000)
+		c.Assert(pd, qt.IsNil)
+	})
+
+	t.Run("nil when empty content", func(t *testing.T) {
+		pd := injectMediaPageDelimiters("", 4000)
+		c.Assert(pd, qt.IsNil)
+	})
+
+	t.Run("creates delimiters for long transcript", func(t *testing.T) {
+		// Build a transcript with timestamps every ~500 chars.
+		var content string
+		for i := 0; i < 30; i++ {
+			ts := fmt.Sprintf("[Video: 00:%02d:00] ", i)
+			content += ts + strings.Repeat("x", 480) + "\n"
+		}
+		pd := injectMediaPageDelimiters(content, 4000)
+		c.Assert(pd, qt.IsNotNil)
+		c.Assert(len(pd.PageDelimiters) >= 3, qt.IsTrue, qt.Commentf("got %d delimiters", len(pd.PageDelimiters)))
+
+		// Final delimiter must equal content rune length.
+		contentRunes := []rune(content)
+		c.Assert(pd.PageDelimiters[len(pd.PageDelimiters)-1], qt.Equals, uint32(len(contentRunes)))
+	})
+
+	t.Run("respects target chunk size", func(t *testing.T) {
+		var content string
+		for i := 0; i < 20; i++ {
+			ts := fmt.Sprintf("[Audio: %02d:00] ", i)
+			content += ts + strings.Repeat("a", 200) + "\n"
+		}
+		// With a small target, more delimiters should be created.
+		pd := injectMediaPageDelimiters(content, 500)
+		c.Assert(pd, qt.IsNotNil)
+		c.Assert(len(pd.PageDelimiters) >= 5, qt.IsTrue)
+	})
+}
+
+func TestInjectMarkdownPageDelimiters(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("nil when content shorter than target", func(t *testing.T) {
+		pd := injectMarkdownPageDelimiters("# Short\nHello world", 4000)
+		c.Assert(pd, qt.IsNil)
+	})
+
+	t.Run("nil when no headings or paragraph breaks", func(t *testing.T) {
+		content := strings.Repeat("x", 5000)
+		pd := injectMarkdownPageDelimiters(content, 4000)
+		c.Assert(pd, qt.IsNil)
+	})
+
+	t.Run("creates delimiters at heading boundaries", func(t *testing.T) {
+		var content string
+		for i := 0; i < 15; i++ {
+			content += fmt.Sprintf("## Section %d\n%s\n", i, strings.Repeat("y", 800))
+		}
+		pd := injectMarkdownPageDelimiters(content, 4000)
+		c.Assert(pd, qt.IsNotNil)
+		c.Assert(len(pd.PageDelimiters) >= 2, qt.IsTrue)
+
+		contentRunes := []rune(content)
+		c.Assert(pd.PageDelimiters[len(pd.PageDelimiters)-1], qt.Equals, uint32(len(contentRunes)))
+	})
+
+	t.Run("uses paragraph breaks when no headings", func(t *testing.T) {
+		var content string
+		for i := 0; i < 20; i++ {
+			content += strings.Repeat("z", 500) + "\n\n"
+		}
+		pd := injectMarkdownPageDelimiters(content, 4000)
+		c.Assert(pd, qt.IsNotNil)
+		c.Assert(len(pd.PageDelimiters) >= 2, qt.IsTrue)
+	})
+
+	t.Run("deeply nested headings treated as boundaries", func(t *testing.T) {
+		var content string
+		for i := 0; i < 10; i++ {
+			content += fmt.Sprintf("#### Deep heading %d\n%s\n", i, strings.Repeat("w", 1000))
+		}
+		pd := injectMarkdownPageDelimiters(content, 4000)
+		c.Assert(pd, qt.IsNotNil)
+	})
+}
+
+func TestParseSummaryEntities(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("full structured output", func(t *testing.T) {
+		raw := `A lecture about monopoly theory and startup strategy.
+
+## Entities
+- Peter Thiel [person]
+- monopoly theory [concept]
+- PayPal [organization]
+- Zero to One [work]
+`
+		summary, entities := parseSummaryEntities(raw)
+		c.Assert(summary, qt.Equals, "A lecture about monopoly theory and startup strategy.")
+		c.Assert(len(entities), qt.Equals, 4)
+		c.Assert(entities[0].Name, qt.Equals, "Peter Thiel")
+		c.Assert(entities[0].Type, qt.Equals, "person")
+		c.Assert(entities[2].Name, qt.Equals, "PayPal")
+		c.Assert(entities[2].Type, qt.Equals, "organization")
+		c.Assert(entities[3].Name, qt.Equals, "Zero to One")
+		c.Assert(entities[3].Type, qt.Equals, "work")
+	})
+
+	t.Run("no entities section", func(t *testing.T) {
+		raw := "Just a plain summary with no entities."
+		summary, entities := parseSummaryEntities(raw)
+		c.Assert(summary, qt.Equals, "Just a plain summary with no entities.")
+		c.Assert(entities, qt.IsNil)
+	})
+
+	t.Run("empty entities section", func(t *testing.T) {
+		raw := "A summary.\n\n## Entities\n"
+		summary, entities := parseSummaryEntities(raw)
+		c.Assert(summary, qt.Equals, "A summary.")
+		c.Assert(len(entities), qt.Equals, 0)
+	})
+
+	t.Run("entity without type", func(t *testing.T) {
+		raw := "Summary text.\n\n## Entities\n- SomeEntity\n"
+		summary, entities := parseSummaryEntities(raw)
+		c.Assert(summary, qt.Equals, "Summary text.")
+		c.Assert(len(entities), qt.Equals, 1)
+		c.Assert(entities[0].Name, qt.Equals, "SomeEntity")
+		c.Assert(entities[0].Type, qt.Equals, "")
+	})
+
+	t.Run("malformed lines ignored", func(t *testing.T) {
+		raw := "Summary.\n\n## Entities\nNot a list item\n- Valid [concept]\n  indented line\n"
+		summary, entities := parseSummaryEntities(raw)
+		c.Assert(summary, qt.Equals, "Summary.")
+		c.Assert(len(entities), qt.Equals, 1)
+		c.Assert(entities[0].Name, qt.Equals, "Valid")
+	})
 }

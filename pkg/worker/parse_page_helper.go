@@ -2,16 +2,19 @@ package worker
 
 import (
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/instill-ai/artifact-backend/pkg/types"
 )
 
-// pageTagPattern matches the standard page delimiter format used by AI
-// Format: [Page: 1], [Page: 2], etc.
-// Multi-page documents from AI ALWAYS start with [Page: 1] as the first line and increment sequentially.
-var pageTagPattern = regexp.MustCompile(`(?m)^\[Page:\s*(\d+)\]\s*$`)
+// pageTagPattern matches section delimiter markers in content.
+// Supported formats:
+//   - [Page: 1], [Page: 2] — AI-generated page delimiters for documents
+//   - [Sheet: Revenue], [Sheet: Expenses] — excelize-generated sheet delimiters for spreadsheets
+//
+// The function parseMarkdownPages uses FindAllStringIndex (byte positions only)
+// and never reads the captured group values, so adding Sheet is fully backward-compatible.
+var pageTagPattern = regexp.MustCompile(`(?m)^\[(Page|Sheet):\s*([^\]]+?)\]\s*$`)
 
 // parseMarkdownPages parses AI-generated Markdown that contains page delimiter tags.
 // Returns the markdown WITH page tags preserved, a list of pages (without tags),
@@ -136,20 +139,24 @@ func deduplicatePageTags(markdown string) string {
 		return markdown
 	}
 
-	// Record the last occurrence index for each page number.
-	lastIdx := make(map[int]int)
+	// sectionKey builds a dedup key like "Page:1" or "Sheet:Revenue" from a submatch.
+	sectionKey := func(m []int) string {
+		return markdown[m[2]:m[3]] + ":" + markdown[m[4]:m[5]]
+	}
+
+	// Record the last occurrence index for each section key.
+	lastIdx := make(map[string]int)
 	for i, m := range matches {
-		pageNum, _ := strconv.Atoi(markdown[m[2]:m[3]])
-		lastIdx[pageNum] = i
+		lastIdx[sectionKey(m)] = i
 	}
 
 	// Collect match indices that are duplicates (not the last occurrence).
 	var toRemove []int
-	seen := make(map[int]int) // pageNum -> count
+	seen := make(map[string]int)
 	for i, m := range matches {
-		pageNum, _ := strconv.Atoi(markdown[m[2]:m[3]])
-		seen[pageNum]++
-		if lastIdx[pageNum] != i {
+		key := sectionKey(m)
+		seen[key]++
+		if lastIdx[key] != i {
 			toRemove = append(toRemove, i)
 		}
 	}

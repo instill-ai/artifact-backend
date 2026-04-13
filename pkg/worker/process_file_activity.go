@@ -12,8 +12,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"bytes"
 
 	"github.com/gofrs/uuid"
+	"github.com/xuri/excelize/v2"
 	"go.uber.org/zap"
 	"google.golang.org/genai"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -766,87 +768,89 @@ func (w *Worker) ChunkContentActivity(ctx context.Context, param *ChunkContentAc
 	// margin so chunks remain valid even with edge-case conversions.
 	const maxChunkChars = 60000
 
-	// Check if we have position data (passed from ProcessContent/ProcessSummary activities)
+	var chunks []types.Chunk
+
+	if param.PositionData == nil || len(param.PositionData.PageDelimiters) == 0 {
+		// Try to inject synthetic page delimiters for non-paginated content:
+		// media transcripts (timestamp markers) then markdown/text (headings).
+		if injected := injectMediaPageDelimiters(param.Content, mediaChunkTarget); injected != nil {
+			w.log.Info("ChunkContentActivity: Injected media timestamp-based page delimiters",
+				zap.Int("delimiterCount", len(injected.PageDelimiters)))
+			param.PositionData = injected
+		} else if injected := injectMarkdownPageDelimiters(param.Content, markdownChunkTarget); injected != nil {
+			w.log.Info("ChunkContentActivity: Injected markdown heading-based page delimiters",
+				zap.Int("delimiterCount", len(injected.PageDelimiters)))
+			param.PositionData = injected
+		}
+	}
+
 	if param.PositionData == nil || len(param.PositionData.PageDelimiters) == 0 {
 		w.log.Info("ChunkContentActivity: No page delimiters, splitting non-paginated content")
 
-		chunks := splitTextIntoChunks(param.Content, maxChunkChars, param.Type)
-		populateTimeRanges(chunks)
+		chunks = splitTextIntoChunks(param.Content, maxChunkChars, param.Type)
 
 		w.log.Info("ChunkContentActivity: Created chunks from non-paginated content",
 			zap.Int("contentLength", len(param.Content)),
 			zap.Int("chunkCount", len(chunks)))
-		return &ChunkContentActivityResult{
-			Chunks: chunks,
-		}, nil
-	}
+	} else {
+		contentRunes := []rune(param.Content)
+		lastDelimiter := param.PositionData.PageDelimiters[len(param.PositionData.PageDelimiters)-1]
 
-	contentRunes := []rune(param.Content)
-	lastDelimiter := param.PositionData.PageDelimiters[len(param.PositionData.PageDelimiters)-1]
+		contentLen := uint32(len(contentRunes))
+		if contentLen < lastDelimiter/2 || contentLen > lastDelimiter*2 {
+			w.log.Info("ChunkContentActivity: Content length mismatch with page delimiters, treating as single chunk",
+				zap.Uint32("contentLen", contentLen),
+				zap.Uint32("expectedLen", lastDelimiter))
 
-	// Check if content length matches page delimiters (i.e., it's the converted markdown, not summary)
-	// If content is much shorter/longer than expected, it's probably summary or other text
-	contentLen := uint32(len(contentRunes))
-	if contentLen < lastDelimiter/2 || contentLen > lastDelimiter*2 {
-		w.log.Info("ChunkContentActivity: Content length mismatch with page delimiters, treating as single chunk",
-			zap.Uint32("contentLen", contentLen),
-			zap.Uint32("expectedLen", lastDelimiter))
+			chunks = splitTextIntoChunks(param.Content, maxChunkChars, param.Type)
 
-		// Fall back to chunk-splitting for summaries or mismatched content while
-		// still respecting Milvus varchar length limits.
-		chunks := splitTextIntoChunks(param.Content, maxChunkChars, param.Type)
-		w.log.Info("ChunkContentActivity: Created fallback chunks",
-			zap.Int("contentLength", len(param.Content)),
-			zap.Int("chunkCount", len(chunks)))
-		return &ChunkContentActivityResult{
-			Chunks: chunks,
-		}, nil
-	}
+			w.log.Info("ChunkContentActivity: Created fallback chunks",
+				zap.Int("contentLength", len(param.Content)),
+				zap.Int("chunkCount", len(chunks)))
+		} else {
+			w.log.Info("ChunkContentActivity: Chunking by page delimiters",
+				zap.Int("pageCount", len(param.PositionData.PageDelimiters)))
 
-	// Chunk by pages using position data
-	w.log.Info("ChunkContentActivity: Chunking by page delimiters",
-		zap.Int("pageCount", len(param.PositionData.PageDelimiters)))
+			chunks = make([]types.Chunk, 0, len(param.PositionData.PageDelimiters))
+			var startPos uint32
 
-	chunks := make([]types.Chunk, 0, len(param.PositionData.PageDelimiters))
-	var startPos uint32
+			for pageNum, endPos := range param.PositionData.PageDelimiters {
+				if int(endPos) > len(contentRunes) {
+					endPos = uint32(len(contentRunes))
+				}
+				if startPos >= endPos {
+					continue
+				}
 
-	for pageNum, endPos := range param.PositionData.PageDelimiters {
-		// Handle edge cases
-		if int(endPos) > len(contentRunes) {
-			endPos = uint32(len(contentRunes))
-		}
-		if startPos >= endPos {
-			continue
-		}
+				pageText := string(contentRunes[startPos:endPos])
 
-		// Extract page text
-		pageText := string(contentRunes[startPos:endPos])
+				if len(strings.TrimSpace(pageText)) == 0 {
+					startPos = endPos
+					continue
+				}
 
-		// Skip empty pages
-		if len(strings.TrimSpace(pageText)) == 0 {
-			startPos = endPos
-			continue
-		}
+				pageChunks := splitTextIntoChunks(pageText, maxChunkChars, param.Type)
+				pageOffset := int(startPos)
+				for _, pageChunk := range pageChunks {
+					pageChunk.Start = pageOffset
+					pageChunk.End = pageOffset + len(pageChunk.Text)
+					pageChunk.Reference = &types.ChunkReference{
+						PageRange: [2]uint32{uint32(pageNum + 1), uint32(pageNum + 1)},
+					}
+					chunks = append(chunks, pageChunk)
+					pageOffset += len(pageChunk.Text)
+				}
 
-		// Create one or more chunks for this page, enforcing max chunk size.
-		pageChunks := splitTextIntoChunks(pageText, maxChunkChars, param.Type)
-		pageOffset := int(startPos)
-		for _, pageChunk := range pageChunks {
-			pageChunk.Start = pageOffset
-			pageChunk.End = pageOffset + len(pageChunk.Text)
-			pageChunk.Reference = &types.ChunkReference{
-				PageRange: [2]uint32{uint32(pageNum + 1), uint32(pageNum + 1)},
+				startPos = endPos
 			}
-			chunks = append(chunks, pageChunk)
-			pageOffset += len(pageChunk.Text)
-		}
 
-		startPos = endPos
+			w.log.Info("ChunkContentActivity: Page-based chunking successful",
+				zap.Int("chunkCount", len(chunks)),
+				zap.Int("pageCount", len(param.PositionData.PageDelimiters)))
+		}
 	}
 
-	w.log.Info("ChunkContentActivity: Page-based chunking successful",
-		zap.Int("chunkCount", len(chunks)),
-		zap.Int("pageCount", len(param.PositionData.PageDelimiters)))
+	populateTimeRanges(chunks)
 
 	return &ChunkContentActivityResult{
 		Chunks: chunks,
@@ -961,6 +965,134 @@ func parseMMSS(ts string) int {
 	m, _ := strconv.Atoi(parts[0])
 	s, _ := strconv.Atoi(parts[1])
 	return m*60 + s
+}
+
+// mediaChunkTarget is the target chunk size for non-paginated media
+// transcripts (video/audio). Industry best practice for semantic search is
+// 512-1024 tokens (~2000-4000 chars).
+const mediaChunkTarget = 4000
+
+// markdownChunkTarget is the target chunk size for non-paginated markdown
+// and plain text files.
+const markdownChunkTarget = 4000
+
+// injectMediaPageDelimiters scans content for [Audio:HH:MM:SS],
+// [Video:HH:MM:SS], or [Sound:HH:MM:SS] timestamp markers and produces
+// synthetic PageDelimiters at approximately targetChunkChars intervals,
+// snapping each boundary to the nearest timestamp marker. This lets media
+// transcripts reuse the existing page-delimited chunking path.
+//
+// Returns nil if the content has no timestamp markers.
+func injectMediaPageDelimiters(content string, targetChunkChars int) *types.PositionData {
+	contentRunes := []rune(content)
+	contentLen := uint32(len(contentRunes))
+	if contentLen == 0 {
+		return nil
+	}
+
+	type tsLoc struct {
+		runeOffset int // rune position of the timestamp line start
+	}
+
+	lines := strings.Split(content, "\n")
+	var markers []tsLoc
+	runePos := 0
+	for _, line := range lines {
+		lineRunes := len([]rune(line))
+		if inlineTimestampPattern.MatchString(line) {
+			markers = append(markers, tsLoc{runeOffset: runePos})
+		}
+		runePos += lineRunes + 1 // +1 for the newline
+	}
+
+	if len(markers) < 2 {
+		return nil
+	}
+
+	var delimiters []uint32
+	lastBoundary := 0
+
+	for _, m := range markers {
+		if m.runeOffset-lastBoundary >= targetChunkChars {
+			delimiters = append(delimiters, uint32(m.runeOffset))
+			lastBoundary = m.runeOffset
+		}
+	}
+
+	// Final delimiter at content end.
+	if len(delimiters) == 0 || delimiters[len(delimiters)-1] != contentLen {
+		delimiters = append(delimiters, contentLen)
+	}
+
+	if len(delimiters) < 2 {
+		return nil
+	}
+
+	return &types.PositionData{PageDelimiters: delimiters}
+}
+
+// injectMarkdownPageDelimiters scans content for markdown heading patterns
+// (# , ## , ### ) and paragraph breaks (\n\n), producing synthetic
+// PageDelimiters at approximately targetChunkChars intervals, snapping to the
+// nearest heading or paragraph boundary.
+//
+// Returns nil if the content is shorter than targetChunkChars.
+func injectMarkdownPageDelimiters(content string, targetChunkChars int) *types.PositionData {
+	contentRunes := []rune(content)
+	contentLen := uint32(len(contentRunes))
+	if int(contentLen) <= targetChunkChars {
+		return nil
+	}
+
+	type boundary struct {
+		runeOffset int
+	}
+
+	lines := strings.Split(content, "\n")
+	var boundaries []boundary
+	runePos := 0
+
+	for i, line := range lines {
+		lineRunes := len([]rune(line))
+		trimmed := strings.TrimSpace(line)
+
+		isHeading := strings.HasPrefix(trimmed, "# ") ||
+			strings.HasPrefix(trimmed, "## ") ||
+			strings.HasPrefix(trimmed, "### ") ||
+			strings.HasPrefix(trimmed, "#### ")
+
+		isParagraphBreak := trimmed == "" && i > 0 && strings.TrimSpace(lines[i-1]) != ""
+
+		if isHeading || isParagraphBreak {
+			boundaries = append(boundaries, boundary{runeOffset: runePos})
+		}
+
+		runePos += lineRunes + 1
+	}
+
+	if len(boundaries) == 0 {
+		return nil
+	}
+
+	var delimiters []uint32
+	lastBoundary := 0
+
+	for _, b := range boundaries {
+		if b.runeOffset-lastBoundary >= targetChunkChars {
+			delimiters = append(delimiters, uint32(b.runeOffset))
+			lastBoundary = b.runeOffset
+		}
+	}
+
+	if len(delimiters) == 0 || delimiters[len(delimiters)-1] != contentLen {
+		delimiters = append(delimiters, contentLen)
+	}
+
+	if len(delimiters) < 2 {
+		return nil
+	}
+
+	return &types.PositionData{PageDelimiters: delimiters}
 }
 
 // populateTimeRanges sets TimeRange on each chunk by scanning for timestamp
@@ -1351,19 +1483,29 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	w.log.Info("StandardizeFileTypeActivity: File content retrieved from MinIO",
 		zap.Int("contentSize", len(content)))
 
-	// Convert using indexing-convert-file-type pipeline (handles both data URI and blob URL outputs)
+	// Convert using the appropriate pipeline based on target format
 	mimeType := filetype.FileTypeToMimeType(param.FileType)
-	// Pass the requester UID for permission checks when uploading blobs to user's namespace
-	convertedContent, err := pipeline.ConvertFileTypePipe(authCtx, w.pipelineClient, content, param.FileType, mimeType, param.RequesterUID.String())
-	if err != nil {
-		w.log.Warn("StandardizeFileTypeActivity: Pipeline standardization failed",
-			zap.Error(err),
-			zap.String("pipeline", pipeline.ConvertFileTypePipeline.Name()))
-		return nil, activityErrorWithCauseFlat(
-			fmt.Sprintf("Failed to convert file: %s", errorsx.MessageOrErr(err)),
-			standardizeFileTypeActivityError,
-			err,
-		)
+	var convertedContent []byte
+	if targetFormat == "xlsx" {
+		convertedContent, err = pipeline.ConvertDocumentToXLSXPipe(authCtx, w.pipelineClient, content, param.FileType, mimeType, param.RequesterUID.String())
+		if err != nil {
+			w.log.Warn("StandardizeFileTypeActivity: XLS-to-XLSX pipeline failed",
+				zap.Error(err),
+				zap.String("pipeline", pipeline.ConvertXLSToXLSXPipeline.Name()))
+			return nil, activityErrorWithCauseFlat(
+				fmt.Sprintf("Failed to convert file: %s", errorsx.MessageOrErr(err)),
+				standardizeFileTypeActivityError, err)
+		}
+	} else {
+		convertedContent, err = pipeline.ConvertFileTypePipe(authCtx, w.pipelineClient, content, param.FileType, mimeType, param.RequesterUID.String())
+		if err != nil {
+			w.log.Warn("StandardizeFileTypeActivity: Pipeline standardization failed",
+				zap.Error(err),
+				zap.String("pipeline", pipeline.ConvertFileTypePipeline.Name()))
+			return nil, activityErrorWithCauseFlat(
+				fmt.Sprintf("Failed to convert file: %s", errorsx.MessageOrErr(err)),
+				standardizeFileTypeActivityError, err)
+		}
 	}
 
 	w.log.Info("StandardizeFileTypeActivity: File standardization successful",
@@ -1394,6 +1536,9 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 	case "mp4":
 		convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_VIDEO
 		fileExtension = "mp4"
+	case "xlsx":
+		convertedFileTypeEnum = artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_DOCUMENT
+		fileExtension = "xlsx"
 	default:
 		return nil, activityErrorSimple(
 			fmt.Sprintf("Unsupported target format: %s", targetFormat),
@@ -1613,6 +1758,18 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 	// Check if file type is supported for caching
 	if !filetype.IsFileTypeSupported(param.FileType) {
 		w.log.Info("CacheFileContextActivity: File type not supported for caching",
+			zap.String("fileType", param.FileType.String()))
+		return &CacheFileContextActivityResult{
+			CachedContextEnabled: false,
+		}, nil
+	}
+
+	// This activity caches the raw file bytes for Gemini to process directly.
+	// Non-Gemini-native types (e.g. XLSX/XLS) can't be cached because Gemini
+	// rejects their MIME type. Their content is extracted later by excelize,
+	// and the workflow's sequential summary path uses that extracted output.
+	if !isGeminiNativeFileType(param.FileType) {
+		w.log.Info("CacheFileContextActivity: File type not Gemini-native, skipping cache",
 			zap.String("fileType", param.FileType.String()))
 		return &CacheFileContextActivityResult{
 			CachedContextEnabled: false,
@@ -1895,17 +2052,29 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 
 	// For text-based files (TEXT/MARKDOWN/CSV/HTML), no AI conversion needed - content is already in usable format
 	// These file types are directly readable as text and don't require AI processing
-	if param.FileType == artifactpb.File_TYPE_TEXT ||
-		param.FileType == artifactpb.File_TYPE_MARKDOWN ||
-		param.FileType == artifactpb.File_TYPE_CSV ||
-		param.FileType == artifactpb.File_TYPE_HTML ||
-		param.FileType == artifactpb.File_TYPE_JSON {
+	switch param.FileType { //nolint:exhaustive // only text-based and spreadsheet types handled here; all others fall through to AI conversion
+	case artifactpb.File_TYPE_TEXT,
+		artifactpb.File_TYPE_MARKDOWN,
+		artifactpb.File_TYPE_CSV,
+		artifactpb.File_TYPE_HTML,
+		artifactpb.File_TYPE_JSON:
 		logger.Info("Text-based file - using content as-is (no AI conversion needed)",
 			zap.String("fileType", param.FileType.String()))
 		contentInMarkdown = string(rawFileContent)
 		length = []uint32{uint32(len(contentInMarkdown))}
 		pageCount = 1
-	} else {
+	case artifactpb.File_TYPE_XLSX:
+		logger.Info("Spreadsheet file - parsing with excelize (no AI conversion needed)",
+			zap.String("fileType", param.FileType.String()))
+		var err error
+		contentInMarkdown, positionData, length, pageCount, err = convertSpreadsheetToMarkdown(rawFileContent)
+		if err != nil {
+			logger.Error("Spreadsheet conversion failed", zap.Error(err))
+			return nil, activityErrorWithCauseFlat(
+				fmt.Sprintf("Failed to convert spreadsheet to markdown: %s", errorsx.MessageOrErr(err)),
+				processContentActivityError, err)
+		}
+	default:
 		// Check for UNSPECIFIED or unsupported file types
 		if param.FileType == artifactpb.File_TYPE_UNSPECIFIED {
 			logger.Error("File type is UNSPECIFIED")
@@ -2212,9 +2381,16 @@ type ProcessSummaryActivityParam struct {
 	ContentMarkdown string               // Optional: Pre-processed markdown content (used for OpenAI route where summary depends on content generation output)
 }
 
+// EntityTag represents a single entity extracted from file content.
+type EntityTag struct {
+	Name string // Canonical entity name (e.g., "Peter Thiel")
+	Type string // Entity type (e.g., "person", "organization", "concept")
+}
+
 // ProcessSummaryActivityResult defines output from ProcessSummaryActivity
 type ProcessSummaryActivityResult struct {
-	Summary          string                     // Generated summary content
+	Summary          string                     // Generated summary content (prose only, entities stripped)
+	EntityTags       []EntityTag                // Structured entities extracted from the same Gemini call
 	Length           []uint32                   // Length information (summary length)
 	PositionData     *types.PositionData        // Position data (single page with delimiter at end)
 	OriginalType     artifactpb.File_Type       // Original file type
@@ -2228,6 +2404,43 @@ type ProcessSummaryActivityResult struct {
 	// Error is set when the LLM call succeeded but post-processing failed.
 	// UsageMetadata is still valid for usage tracking. Empty means success.
 	Error string
+}
+
+// parseSummaryEntities splits the raw LLM output at the "## Entities" delimiter
+// and extracts entity tags. Returns the prose summary and the parsed entities.
+// If no delimiter is found, the full text is treated as summary with no entities.
+func parseSummaryEntities(raw string) (summary string, entities []EntityTag) {
+	const delimiter = "## Entities"
+	idx := strings.Index(raw, delimiter)
+	if idx < 0 {
+		return strings.TrimSpace(raw), nil
+	}
+
+	summary = strings.TrimSpace(raw[:idx])
+	entitySection := raw[idx+len(delimiter):]
+
+	for _, line := range strings.Split(entitySection, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "- ")
+
+		// Parse "EntityName [type]"
+		bracketIdx := strings.LastIndex(line, "[")
+		if bracketIdx < 0 {
+			if name := strings.TrimSpace(line); name != "" {
+				entities = append(entities, EntityTag{Name: name})
+			}
+			continue
+		}
+		name := strings.TrimSpace(line[:bracketIdx])
+		typePart := strings.TrimSuffix(strings.TrimSpace(line[bracketIdx+1:]), "]")
+		if name != "" {
+			entities = append(entities, EntityTag{Name: name, Type: typePart})
+		}
+	}
+	return summary, entities
 }
 
 // ProcessSummaryActivity handles the entire summary generation:
@@ -2448,6 +2661,15 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		}
 	} // End of Gemini route
 
+	// Parse structured output: split summary prose from entity list.
+	summaryProse, entityTags := parseSummaryEntities(summary)
+	if len(entityTags) > 0 {
+		logger.Info("Parsed entity tags from summary output",
+			zap.Int("entityCount", len(entityTags)))
+		result.EntityTags = entityTags
+		summary = summaryProse
+	}
+
 	// Merge patch into summary if x-instill-patch flag is set
 	summary = w.mergeSummaryPatchIfNeeded(ctx, summary, param.FileUID, param.KBUID, logger)
 
@@ -2539,6 +2761,48 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 	return result, nil
 }
 
+// SaveEntitiesActivityParam defines input for SaveEntitiesActivity.
+type SaveEntitiesActivityParam struct {
+	KBUID   types.KBUIDType
+	FileUID types.FileUIDType
+	Entities []EntityTag
+}
+
+// SaveEntitiesActivity upserts entity records and creates entity-file links.
+func (w *Worker) SaveEntitiesActivity(ctx context.Context, param *SaveEntitiesActivityParam) error {
+	if len(param.Entities) == 0 {
+		return nil
+	}
+
+	records := make([]repository.EntityRecord, len(param.Entities))
+	for i, e := range param.Entities {
+		records[i] = repository.EntityRecord{
+			Name:       e.Name,
+			EntityType: e.Type,
+		}
+	}
+
+	uids, err := w.repository.UpsertEntities(ctx, param.KBUID, records)
+	if err != nil {
+		w.log.Error("SaveEntitiesActivity: failed to upsert entities", zap.Error(err))
+		return err
+	}
+
+	for _, uid := range uids {
+		if err := w.repository.LinkEntityFile(ctx, uid, param.FileUID); err != nil {
+			w.log.Error("SaveEntitiesActivity: failed to link entity-file",
+				zap.String("entityUID", uid.String()),
+				zap.Error(err))
+			return err
+		}
+	}
+
+	w.log.Info("SaveEntitiesActivity: saved entities",
+		zap.Int("count", len(uids)),
+		zap.String("fileUID", param.FileUID.String()))
+	return nil
+}
+
 // DEPRECATED: SavePDFAsConvertedFileActivity
 // This activity has been merged into StandardizeFileTypeActivity for better efficiency:
 // - PDFs (converted or original) are now saved directly to converted-file folder during standardization
@@ -2556,6 +2820,124 @@ type DeleteTemporaryConvertedFileActivityParam struct {
 
 // ExtractPageDelimiters parses [Page: X] tags from AI-generated markdown and extracts page delimiter positions
 // Returns markdown WITH page tags preserved, position data for visual grounding,
+const (
+	maxSpreadsheetRows = 500
+	maxSpreadsheetCols = 30
+)
+
+// convertSpreadsheetToMarkdown converts XLSX bytes to structured markdown with
+// [Sheet: Name] markers and markdown tables. Each sheet becomes a section.
+// Caps at maxSpreadsheetRows rows and maxSpreadsheetCols columns per sheet.
+func convertSpreadsheetToMarkdown(data []byte) (string, *types.PositionData, []uint32, int32, error) {
+	f, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		return "", nil, nil, 0, fmt.Errorf("excelize.OpenReader: %w", err)
+	}
+	defer f.Close()
+
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return "", nil, nil, 0, fmt.Errorf("spreadsheet has no sheets")
+	}
+
+	var sb strings.Builder
+
+	for i, sheetName := range sheets {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(fmt.Sprintf("[Sheet: %s]\n\n", sheetName))
+
+		rows, err := f.GetRows(sheetName)
+		if err != nil {
+			return "", nil, nil, 0, fmt.Errorf("GetRows(%q): %w", sheetName, err)
+		}
+		if len(rows) == 0 {
+			continue
+		}
+
+		// Determine column count (max across first few rows, capped)
+		colCount := 0
+		for _, row := range rows {
+			if len(row) > colCount {
+				colCount = len(row)
+			}
+		}
+		if colCount > maxSpreadsheetCols {
+			colCount = maxSpreadsheetCols
+		}
+		if colCount == 0 {
+			continue
+		}
+
+		// Emit header row
+		sb.WriteString("|")
+		for c := 0; c < colCount; c++ {
+			val := ""
+			if c < len(rows[0]) {
+				val = escapeMarkdownTableCell(rows[0][c])
+			}
+			sb.WriteString(" " + val + " |")
+		}
+		sb.WriteString("\n")
+
+		// Emit separator
+		sb.WriteString("|")
+		for c := 0; c < colCount; c++ {
+			sb.WriteString(" --- |")
+		}
+		sb.WriteString("\n")
+
+		// Emit data rows (skip header)
+		dataRows := rows[1:]
+		truncated := false
+		if len(dataRows) > maxSpreadsheetRows {
+			truncated = true
+			dataRows = dataRows[:maxSpreadsheetRows]
+		}
+
+		for _, row := range dataRows {
+			sb.WriteString("|")
+			for c := 0; c < colCount; c++ {
+				val := ""
+				if c < len(row) {
+					val = escapeMarkdownTableCell(row[c])
+				}
+				sb.WriteString(" " + val + " |")
+			}
+			sb.WriteString("\n")
+		}
+
+		if truncated {
+			remaining := len(rows) - 1 - maxSpreadsheetRows
+			sb.WriteString(fmt.Sprintf("\n... (%d more rows)\n", remaining))
+		}
+	}
+
+	markdown := sb.String()
+	if strings.TrimSpace(markdown) == "" {
+		return "", nil, nil, 0, nil
+	}
+
+	markdownWithTags, _, positionData := parseMarkdownPages(markdown)
+	if markdownWithTags == "" {
+		markdownWithTags = markdown
+	}
+
+	pageCount := int32(len(sheets))
+	length := []uint32{uint32(len(markdownWithTags))}
+
+	return markdownWithTags, positionData, length, pageCount, nil
+}
+
+// escapeMarkdownTableCell escapes pipe characters and newlines for markdown table cells.
+func escapeMarkdownTableCell(s string) string {
+	s = strings.ReplaceAll(s, "|", "\\|")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", "")
+	return s
+}
+
 // character length array, and actual page count.
 // (Exported for EE worker overrides)
 func ExtractPageDelimiters(markdown string, logger *zap.Logger, logContext map[string]any) (string, *types.PositionData, []uint32, int32) {
@@ -2708,7 +3090,22 @@ func (w *Worker) remuxVideoToConvertedFolder(ctx context.Context, srcBucket, src
 			"-y", tmpOutPath,
 		}
 		if out2, err2 := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); err2 != nil {
-			return fmt.Errorf("ffmpeg fallback re-encode failed: %w\noutput: %s", err2, string(out2))
+			w.log.Warn("remuxVideoToConvertedFolder: audio re-encode failed, falling back to full re-encode",
+				zap.Error(err2), zap.String("ffmpegOutput", string(out2)))
+
+			// Full re-encode: transcode both video (h264) and audio (aac)
+			// for codecs incompatible with MP4 container (e.g., WMV2, VP8).
+			args = []string{
+				"-i", tmpIn.Name(),
+				"-map", "0:v:0", "-map", "0:a?",
+				"-c:v", "libx264", "-preset", "fast", "-crf", "23",
+				"-c:a", "aac", "-b:a", "192k",
+				"-movflags", "+faststart",
+				"-y", tmpOutPath,
+			}
+			if out3, err3 := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); err3 != nil {
+				return fmt.Errorf("ffmpeg full re-encode failed: %w\noutput: %s", err3, string(out3))
+			}
 		}
 	}
 
