@@ -124,6 +124,17 @@ func creatorDisplayInfo(creator *mgmtpb.User) (displayName string, avatar *strin
 	return
 }
 
+// creatorResourceName builds the creator resource name (e.g., "users/usr-xxx")
+// from the resolved mgmt User proto. Returns empty if the user couldn't be
+// resolved — we intentionally do NOT fall back to the raw UUID to avoid
+// leaking internal identifiers.
+func creatorResourceName(user *mgmtpb.User) string {
+	if user != nil && user.GetId() != "" {
+		return fmt.Sprintf("users/%s", user.GetId())
+	}
+	return ""
+}
+
 // convertKBFileToPB converts database FileModel to protobuf File.
 // The `name` field is computed dynamically following other backends' patterns.
 // The objectID parameter is the hash-based object ID (e.g., "obj-abc123") for AIP-122 compliant resource references.
@@ -140,10 +151,6 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 
 	ownerDisplay, ownerAvatar := ownerDisplayInfo(owner)
 	creatorDisplay, creatorAvatar := creatorDisplayInfo(creator)
-	creatorName := ""
-	if creator != nil {
-		creatorName = creator.GetName()
-	}
 
 	file := &artifactpb.File{
 		Id:                 fileID,
@@ -157,7 +164,7 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 		OwnerName:          ownerName,
 		OwnerDisplayName:   ownerDisplay,
 		OwnerAvatar:        ownerAvatar,
-		CreatorName:        creatorName,
+		CreatorName:        creatorResourceName(creator),
 		CreatorDisplayName: creatorDisplay,
 		CreatorAvatar:      creatorAvatar,
 		KnowledgeBases:     []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)},
