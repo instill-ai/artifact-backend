@@ -653,10 +653,6 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 
 	ownerDisplay, ownerAvatar := ownerDisplayInfo(owner)
 	creatorDisplay, creatorAvatar := creatorDisplayInfo(creator)
-	creatorName := ""
-	if creator != nil {
-		creatorName = creator.GetName()
-	}
 
 	return &artifactpb.CreateFileResponse{
 		File: &artifactpb.File{
@@ -665,7 +661,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			OwnerName:          ns.Name(),
 			OwnerDisplayName:   ownerDisplay,
 			OwnerAvatar:        ownerAvatar,
-			CreatorName:        creatorName,
+			CreatorName:        creatorResourceName(creator),
 			CreatorDisplayName: creatorDisplay,
 			CreatorAvatar:      creatorAvatar,
 			KnowledgeBases:     []string{fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, kb.ID)},
@@ -981,10 +977,6 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 
 		oDisplay, oAvatar := ownerDisplayInfo(owner)
 		cDisplay, cAvatar := creatorDisplayInfo(creator)
-		cName := ""
-		if creator != nil {
-			cName = creator.GetName()
-		}
 
 		file := &artifactpb.File{
 			Id:                 fileID,
@@ -992,7 +984,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			OwnerName:          ns.Name(),
 			OwnerDisplayName:   oDisplay,
 			OwnerAvatar:        oAvatar,
-			CreatorName:        cName,
+			CreatorName:        creatorResourceName(creator),
 			CreatorDisplayName: cDisplay,
 			CreatorAvatar:      cAvatar,
 			KnowledgeBases:     knowledgeBaseNames,
