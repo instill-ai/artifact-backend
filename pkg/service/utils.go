@@ -20,17 +20,40 @@ func IsTrustedBackendRequest(ctx context.Context) bool {
 	return resourcex.GetRequestSingleHeader(ctx, "Instill-Backend") != ""
 }
 
-// CheckNamespacePermission checks if the user has permission to access the namespace.
+// CheckNamespacePermission validates that the caller can access resources
+// within the given namespace. This is the namespace-level gate; per-resource
+// access is further controlled by FGA CheckPermission.
+//
+// Access methods (in priority order):
+//
+//  1. Trusted backend (Instill-Backend header) — service-to-service calls.
+//     The calling service already verified permissions at its own level.
+//
+//  2. Visitor (Instill-Auth-Type: visitor) — anonymous users accessing
+//     public resources via capability token. Visitors don't belong to any
+//     namespace; their access is gated entirely by per-resource FGA tuples
+//     (visitor:* reader). The capability token was validated by the API
+//     gateway before these headers were set.
+//
+//  3. User (Instill-Auth-Type: user) — authenticated users. Must be an org
+//     member (for organizations) or the namespace owner (for personal
+//     namespaces).
+//
+// Note: authenticated users accessing OTHER namespaces via capability tokens
+// (cross-workspace share links) are handled by agent-backend-ee's
+// GetCapabilityContext + CheckShareLinkPermission flow. artifact-backend
+// receives these as trusted S2S calls (case 1).
 func (s *service) CheckNamespacePermission(ctx context.Context, ns *resource.Namespace) error {
-	// Trusted backend-to-backend calls (e.g., agent-backend autofill workers)
-	// bypass FGA since the calling service already verified permissions.
 	if IsTrustedBackendRequest(ctx) {
 		return nil
 	}
 
-	// TODO: optimize ACL model
+	authType := resourcex.GetRequestSingleHeader(ctx, constant.HeaderAuthTypeKey)
+	if authType == "visitor" {
+		return nil
+	}
+
 	if ns.NsType == "organizations" {
-		// check if the user is a member of the organization
 		granted, err := s.aclClient.CheckPermission(ctx, "organization", ns.NsUID, "member")
 		if err != nil {
 			return err
@@ -38,7 +61,6 @@ func (s *service) CheckNamespacePermission(ctx context.Context, ns *resource.Nam
 		if !granted {
 			return errorsx.ErrUnauthenticated
 		}
-		// check if the user is the owner of the namespace
 	} else if ns.NsUID != uuid.FromStringOrNil(resourcex.GetRequestSingleHeader(ctx, constant.HeaderUserUIDKey)) {
 		return errorsx.ErrUnauthenticated
 	}
