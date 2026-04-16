@@ -12,6 +12,7 @@ import (
 	"github.com/instill-ai/artifact-backend/pkg/resource"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/mgmt/v1beta"
 )
 
@@ -174,6 +175,69 @@ func TestConvertKBFileToPB_CreatorName(t *testing.T) {
 		c.Assert(file.Object, qt.Equals, "namespaces/test-ns/objects/obj-hash123")
 		c.Assert(file.Size, qt.Equals, int64(1024))
 	})
+
+	c.Run("Visibility defaults to WORKSPACE when model field is empty", func(c *qt.C) {
+		// Legacy rows created before the visibility column existed will have
+		// an empty string after migration rollback/forward, so the converter
+		// must never surface UNSPECIFIED to the wire.
+		file := convertKBFileToPB(makeFileModel(), ns, kb, nil, nil, "")
+		c.Assert(file.Visibility, qt.Equals, artifactpb.File_VISIBILITY_WORKSPACE)
+	})
+
+	c.Run("Visibility from model is propagated to proto", func(c *qt.C) {
+		m := makeFileModel()
+		m.Visibility = artifactpb.File_VISIBILITY_LINK_SHARED.String()
+		file := convertKBFileToPB(m, ns, kb, nil, nil, "")
+		c.Assert(file.Visibility, qt.Equals, artifactpb.File_VISIBILITY_LINK_SHARED)
+	})
+}
+
+func TestConvertFileVisibility(t *testing.T) {
+	c := qt.New(t)
+
+	testCases := []struct {
+		name  string
+		input string
+		want  artifactpb.File_Visibility
+	}{
+		{"empty falls back to WORKSPACE", "", artifactpb.File_VISIBILITY_WORKSPACE},
+		{"unknown value falls back to WORKSPACE", "VISIBILITY_GARBAGE", artifactpb.File_VISIBILITY_WORKSPACE},
+		{"UNSPECIFIED is normalized to WORKSPACE", "VISIBILITY_UNSPECIFIED", artifactpb.File_VISIBILITY_WORKSPACE},
+		{"PRIVATE", "VISIBILITY_PRIVATE", artifactpb.File_VISIBILITY_PRIVATE},
+		{"PUBLIC", "VISIBILITY_PUBLIC", artifactpb.File_VISIBILITY_PUBLIC},
+		{"WORKSPACE", "VISIBILITY_WORKSPACE", artifactpb.File_VISIBILITY_WORKSPACE},
+		{"LINK_SHARED", "VISIBILITY_LINK_SHARED", artifactpb.File_VISIBILITY_LINK_SHARED},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		c.Run(tc.name, func(c *qt.C) {
+			c.Assert(convertFileVisibility(tc.input), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestNormalizeFileVisibility(t *testing.T) {
+	c := qt.New(t)
+
+	testCases := []struct {
+		name  string
+		input artifactpb.File_Visibility
+		want  string
+	}{
+		{"UNSPECIFIED maps to WORKSPACE string", artifactpb.File_VISIBILITY_UNSPECIFIED, "VISIBILITY_WORKSPACE"},
+		{"PRIVATE round-trips", artifactpb.File_VISIBILITY_PRIVATE, "VISIBILITY_PRIVATE"},
+		{"PUBLIC round-trips", artifactpb.File_VISIBILITY_PUBLIC, "VISIBILITY_PUBLIC"},
+		{"WORKSPACE round-trips", artifactpb.File_VISIBILITY_WORKSPACE, "VISIBILITY_WORKSPACE"},
+		{"LINK_SHARED round-trips", artifactpb.File_VISIBILITY_LINK_SHARED, "VISIBILITY_LINK_SHARED"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		c.Run(tc.name, func(c *qt.C) {
+			c.Assert(normalizeFileVisibility(tc.input), qt.Equals, tc.want)
+		})
+	}
 }
 
 func TestExtractCollectionIDs(t *testing.T) {

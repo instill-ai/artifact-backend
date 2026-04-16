@@ -179,6 +179,11 @@ type FileModel struct {
 	// Whether the document has a native text layer (true) or is image-based/scanned (false).
 	// Determined during file processing. Only meaningful for document types (PDF, DOCX, etc.).
 	IsTextBased bool `gorm:"column:is_text_based;default:false" json:"is_text_based"`
+	// Visibility controls who can discover and access the file. Stored as the
+	// string form of the artifactpb.File_Visibility enum (e.g.
+	// "VISIBILITY_WORKSPACE", "VISIBILITY_LINK_SHARED"). Defaults to
+	// VISIBILITY_WORKSPACE so org members can access the file.
+	Visibility string `gorm:"column:visibility;not null;default:VISIBILITY_WORKSPACE" json:"visibility"`
 }
 
 // TableName overrides the default table name for GORM
@@ -257,6 +262,7 @@ type FileColumns struct {
 	ExternalMetadata string
 	Tags             string
 	UsageMetadata    string
+	Visibility       string
 }
 
 // FileColumn is the columns for the file table
@@ -280,6 +286,7 @@ var FileColumn = FileColumns{
 	ExternalMetadata: "external_metadata",
 	Tags:             "tags",
 	UsageMetadata:    "usage_metadata",
+	Visibility:       "visibility",
 }
 
 // ConvertingPipeline extracts the conversion pipeline, if present, from the
