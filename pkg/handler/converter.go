@@ -171,6 +171,7 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 		Size:               kbf.Size,
 		ProcessStatus:      convertFileProcessStatus(kbf.ProcessStatus),
 		Aliases:            kbf.Aliases,
+		Visibility:         convertFileVisibility(kbf.Visibility),
 	}
 
 	// Handle optional fields
@@ -227,4 +228,32 @@ func convertFileProcessStatus(status string) artifactpb.FileProcessStatus {
 		// Legacy statuses (WAITING, CONVERTING, SUMMARIZING) return UNSPECIFIED
 		return artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_UNSPECIFIED
 	}
+}
+
+// convertFileVisibility converts the database visibility string to the
+// protobuf enum. Empty or unknown values fall back to VISIBILITY_WORKSPACE,
+// which matches the DB default and ensures legacy rows (created before the
+// visibility column existed) are surfaced as workspace-visible.
+func convertFileVisibility(v string) artifactpb.File_Visibility {
+	if v == "" {
+		return artifactpb.File_VISIBILITY_WORKSPACE
+	}
+	if val, ok := artifactpb.File_Visibility_value[v]; ok {
+		out := artifactpb.File_Visibility(val)
+		if out == artifactpb.File_VISIBILITY_UNSPECIFIED {
+			return artifactpb.File_VISIBILITY_WORKSPACE
+		}
+		return out
+	}
+	return artifactpb.File_VISIBILITY_WORKSPACE
+}
+
+// normalizeFileVisibility maps a requested visibility enum into the string
+// form persisted on FileModel. UNSPECIFIED is treated as WORKSPACE so callers
+// that omit the field get a safe default.
+func normalizeFileVisibility(v artifactpb.File_Visibility) string {
+	if v == artifactpb.File_VISIBILITY_UNSPECIFIED {
+		return artifactpb.File_VISIBILITY_WORKSPACE.String()
+	}
+	return v.String()
 }

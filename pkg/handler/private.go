@@ -678,6 +678,7 @@ func (h *PrivateHandler) ReprocessFileAdmin(ctx context.Context, req *artifactpb
 		ProcessStatus: artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[updatedFile.ProcessStatus]),
 		Size:          updatedFile.Size,
 		ContentSha256: updatedFile.ContentSHA256,
+		Visibility:    convertFileVisibility(updatedFile.Visibility),
 	}
 	if updatedFile.CreateTime != nil {
 		pbFile.CreateTime = timestamppb.New(*updatedFile.CreateTime)

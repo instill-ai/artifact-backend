@@ -229,6 +229,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 		ProcessStatus:             artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_NOTSTARTED.String(),
 		ExternalMetadataUnmarshal: md,
 		Tags:                      repository.TagsArray(req.GetFile().GetTags()),
+		Visibility:                normalizeFileVisibility(req.GetFile().GetVisibility()),
 	}
 
 	if req.GetFile().GetConvertingPipeline() != "" {
@@ -680,6 +681,7 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			Tags:               res.Tags,
 			Collections:        extractCollectionIDs(res.Tags),
 			ContentSha256:      res.ContentSHA256,
+			Visibility:         convertFileVisibility(res.Visibility),
 		},
 	}, nil
 }
@@ -1005,6 +1007,7 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 			Collections:        extractCollectionIDs(kbFile.Tags),
 			IsTextBased:        kbFile.IsTextBased,
 			ContentSha256:      kbFile.ContentSHA256,
+			Visibility:         convertFileVisibility(kbFile.Visibility),
 		}
 
 		// Include status message (error or success message)
