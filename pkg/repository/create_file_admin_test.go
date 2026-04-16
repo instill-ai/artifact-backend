@@ -49,7 +49,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			tags TEXT,
 			usage_metadata TEXT,
 			content_sha256 TEXT,
-			is_text_based BOOLEAN DEFAULT FALSE
+			is_text_based BOOLEAN DEFAULT FALSE,
+			visibility TEXT NOT NULL DEFAULT 'VISIBILITY_WORKSPACE'
 		)`,
 		`CREATE TABLE file_knowledge_base (
 			file_uid TEXT NOT NULL,
