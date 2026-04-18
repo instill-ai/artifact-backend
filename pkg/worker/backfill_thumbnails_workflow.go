@@ -44,8 +44,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/instill-ai/artifact-backend/config"
 	"github.com/instill-ai/artifact-backend/pkg/repository"
+	"github.com/instill-ai/artifact-backend/pkg/repository/object"
 	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
@@ -199,12 +199,20 @@ func (w *Worker) BackfillThumbnailsWorkflow(ctx workflow.Context, param Backfill
 			if param.MaxFiles > 0 && processed+len(futures) >= param.MaxFiles {
 				break
 			}
+			// The original upload may live in either `core-artifact`
+			// (legacy / KB-direct paths like `kb-<uid>/...`) or
+			// `core-blob` (object-API uploads with the `ns-<uid>/obj-<uid>`
+			// layout). `BucketFromDestination` is the single source of
+			// truth that encodes this convention; hardcoding
+			// `config.Config.Minio.BucketName` here silently skipped every
+			// blob-bucket file before (see
+			// `ARTIFACT-INV-THUMBNAIL-BACKFILL` in AGENTS.md).
 			futures = append(futures, pending{
 				fileUID: f.FileUID,
 				future: workflow.ExecuteActivity(thumbCtx, w.GenerateThumbnailActivity, &GenerateThumbnailActivityParam{
 					FileUID:         f.FileUID,
 					KBUID:           f.KBUID,
-					Bucket:          config.Config.Minio.BucketName,
+					Bucket:          object.BucketFromDestination(f.StoragePath),
 					Destination:     f.StoragePath,
 					FileType:        f.FileType,
 					FileDisplayName: f.DisplayName,

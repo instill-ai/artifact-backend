@@ -182,10 +182,19 @@ the EE-side authoring conventions.
     shared `thumbnailableFileTypes` allow-list — this list MUST stay in
     sync with `classifyThumbnailSource` in
     `pkg/worker/thumbnail_activity.go`.
-  - Runs on the ORIGINAL uploaded file (`file.storage_path` in the
-    bucket `config.Config.Minio.BucketName`). The standardized copy is
-    unavailable for pre-rollout rows, and ffmpeg decodes every supported
-    image/video codec natively so the output is identical.
+  - Runs on the ORIGINAL uploaded file at `file.storage_path`. The
+    target bucket MUST be resolved via
+    `object.BucketFromDestination(storagePath)` — never hardcoded to
+    `config.Config.Minio.BucketName`. The `file` table serves two
+    bucket layouts (`core-artifact` for `kb-<uid>/...` and legacy
+    `uploaded-file/...` paths, `core-blob` for `ns-<ns>/obj-<obj>`
+    object-API paths); hardcoding the default skipped every
+    blob-bucket row with "key does not exist" in a prior regression.
+    The standardized copy is unavailable for pre-rollout rows, and
+    ffmpeg decodes every supported image/video codec natively so the
+    output is identical. Regression test:
+    `TestBackfillThumbnailsWorkflow_ResolvesBucketFromStoragePath` in
+    `pkg/worker/backfill_thumbnails_workflow_test.go`.
   - Per-file failures are logged and skipped — the workflow is
     non-fatal, matching `ARTIFACT-INV-THUMBNAIL-NON-BLOCKING`.
     `GenerateThumbnailActivity`'s own MaximumAttempts = 3 absorbs
