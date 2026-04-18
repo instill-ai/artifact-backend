@@ -303,7 +303,7 @@ The hybrid search uses `WeightedRanker(0.7, 0.3)` instead of RRF:
 
 ### Quality Gating
 
-Agent-backend-ee applies a `minAbsoluteScore = 0.50` floor: if the top result scores below this, all results are rejected as noise. A `minRelativeScore = 0.6` further filters weak results relative to the top match.
+Downstream consumers of `SearchChunks` typically apply a `minAbsoluteScore = 0.50` floor: if the top result scores below this, all results are rejected as noise. A `minRelativeScore = 0.6` further filters weak results relative to the top match.
 
 ## File-Level Grouping Search
 
@@ -330,7 +330,7 @@ message SearchChunksRequest {
 
 ### Usage in global search
 
-The global search (`SearchFileContent` in agent-backend-ee) enables `group_by_file=true, group_size=2` for Phase 1 direct search to ensure result diversity across files. Phase 2 entity-hop search does not use grouping since it already targets specific files.
+A global-search consumer typically enables `group_by_file=true, group_size=2` for Phase 1 direct search to ensure result diversity across files. Phase 2 entity-hop search does not use grouping since it already targets specific files.
 
 ## Key Takeaways
 

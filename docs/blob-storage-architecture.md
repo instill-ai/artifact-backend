@@ -215,3 +215,43 @@ graph TB
 - **Authorization is front-loaded** - Permission check happens when generating the presigned URL
 - **Signatures are cryptographically secure** - MinIO validates the signature before allowing operations
 - **No sensitive data in URL path** - The base64-encoded URL is opaque to observers
+
+## `ListFiles` fan-out presign (`view` parameter)
+
+`ListFilesRequest.view` (added in the Files card preview optimization plan,
+Phase 2b) lets callers request a content view on a list response. When set,
+`PublicHandler.ListFiles` delegates per-row URL resolution to the shared
+`resolveDerivedResourceURI` helper — the same code path as `GetFile` — and
+fans out the per-row presigns through an `errgroup` with **bounded
+concurrency (16 workers)**. Each file gets its own MinIO HMAC computed in
+parallel; per-row errors are logged at `warn` level and surface as an
+empty `File.derived_resource_uri` instead of failing the whole list call.
+The following contract is intentional and must be preserved:
+
+- `File.derived_resource_uri` is **only** populated when the client
+  explicitly passes `view`. A list call without `view` returns the
+  legacy metadata-only response to keep cheap listings cheap.
+- `File.thumbnail_uri` is orthogonal to `view`: when a
+  `CONVERTED_FILE_TYPE_THUMBNAIL` row exists it is emitted on every
+  response regardless of the requested view. Resolution is handled by
+  `resolveThumbnailURI(ctx, kbFile)` in `pkg/handler/file.go`, which
+  generates a 15-minute MinIO presign for the thumbnail's
+  `storage_path` and encodes it through `service.EncodeBlobURL` so the
+  final URL routes through `/v1alpha/blob-urls/...` and is
+  Cloudflare-cacheable. The helper is invoked from both single-file
+  `GetFile` and from the `ListFiles` view fan-out — see
+  `ARTIFACT-INV-THUMBNAIL-URI-RESOLUTION`. All failure modes are
+  non-fatal (missing row, presign error, encoding error); the frontend
+  falls back through `derived_resource_uri` to the mime icon.
+- `ListFilesAdminRequest.view` mirrors the public field so internal
+  callers can opt into the same fan-out without having to re-presign
+  in their own service.
+
+Acceptance gates live with the service-level k6 regression tests in
+`integration-test/` — they upload the minimum file set needed to
+exercise the view fan-out end-to-end and assert that
+`derivedResourceUri` is populated on every row and that
+`thumbnail_uri` routes through `/v1alpha/blob-urls/...` for image and
+video rows while remaining absent for non-thumbnailable types (see
+`ARTIFACT-INV-LIST-VIEW-FANOUT` and
+`ARTIFACT-INV-THUMBNAIL-NON-BLOCKING` in `AGENTS.md`).

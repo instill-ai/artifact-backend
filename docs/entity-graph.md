@@ -49,7 +49,7 @@ flowchart TD
 
 ## Two-Phase Search Algorithm
 
-The entity hop is consumed by `SearchFileContent` in agent-backend-ee via the `EntityHopAdmin` private RPC.
+The entity hop is exposed via the `EntityHopAdmin` private RPC and consumed by downstream search services.
 
 1. **Phase 1 (Direct)**: `SearchChunks(TYPE_CONTENT)` — Milvus hybrid search returns top K content chunks
 2. **Entity Hop**: `extractTopFileIDs()` picks top 3 file IDs → `EntityHopAdmin` RPC → SQL join on `kb_entity_file` → returns file IDs sharing entities
@@ -90,14 +90,11 @@ Defined in `artifact/v1alpha/artifact_private_service.proto`. The handler resolv
 
 ## Key Files
 
-| Repository | File | Role |
-|---|---|---|
-| artifact-backend | `pkg/repository/entity.go` | `EntityHop()` SQL query, upsert, link, delete |
-| artifact-backend | `pkg/handler/private.go` | `EntityHopAdmin` gRPC handler |
-| artifact-backend | `pkg/worker/process_file_workflow.go` | Entity extraction during file processing |
-| agent-backend-ee | `pkg/external/artifact.go` | `EntityHop()` client (calls `EntityHopAdmin`) |
-| agent-backend-ee | `pkg/service/semantic_search.go` | Entity hop wiring in `SearchFileContent` |
-| agent-backend-ee | `pkg/service/semantic_search_test.go` | Unit tests for `extractTopFileIDs`, `mergeChunks` |
+| File | Role |
+|---|---|
+| `pkg/repository/entity.go` | `EntityHop()` SQL query, upsert, link, delete |
+| `pkg/handler/private.go` | `EntityHopAdmin` gRPC handler |
+| `pkg/worker/process_file_workflow.go` | Entity extraction during file processing |
 
 ## Future Improvements
 
