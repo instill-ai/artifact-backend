@@ -520,6 +520,13 @@ func (ph *PublicHandler) SearchChunks(
 		chunkFilePaths = append(chunkFilePaths, chunk.StoragePath)
 	}
 
+	// GetFilesByPaths follows "collect-all" semantics (see
+	// worker.GetFilesBatchActivity): per-path failures are reported via
+	// FileContent.Error rather than aborting the batch. We skip chunks whose
+	// blob could not be loaded so that one data-integrity issue (an orphan
+	// chunk row whose `.md` object no longer exists in MinIO) does not break
+	// the entire search. Missing chunks are logged with enough context to
+	// drive offline reconciliation.
 	chunkContents, err := ph.service.GetFilesByPaths(ctx, config.Config.Minio.BucketName, chunkFilePaths)
 	if err != nil {
 		return nil, errorsx.AddMessage(
@@ -568,9 +575,28 @@ func (ph *PublicHandler) SearchChunks(
 
 	// Build response with new protobuf format
 	simChunks := make([]*artifactpb.SimilarityChunk, 0, len(chunks))
+	var skippedMissing int
 	for i, chunk := range chunks {
 		if !chunk.Retrievable {
 			logger.Warn("Skipping non-retrievable chunk", zap.String("chunkUID", chunk.UID.String()))
+			continue
+		}
+
+		// Tolerate per-chunk fetch failures. Orphan chunk rows (DB row with a
+		// missing MinIO `.md` object) can exist when a prior reprocessing
+		// workflow deleted blobs but was aborted before the chunk rows were
+		// removed. Returning an error here would break global search entirely.
+		if i >= len(chunkContents) || chunkContents[i].Error != "" || len(chunkContents[i].Content) == 0 {
+			skippedMissing++
+			errMsg := ""
+			if i < len(chunkContents) {
+				errMsg = chunkContents[i].Error
+			}
+			logger.Warn("SearchChunks: skipping chunk with missing or unreadable blob",
+				zap.String("chunkUID", chunk.UID.String()),
+				zap.String("fileUID", chunk.FileUID.String()),
+				zap.String("storagePath", chunk.StoragePath),
+				zap.String("fetchError", errMsg))
 			continue
 		}
 
@@ -608,6 +634,7 @@ func (ph *PublicHandler) SearchChunks(
 	logger.Info("SearchChunks response",
 		zap.Int("totalChunks", len(chunks)),
 		zap.Int("returnedChunks", len(simChunks)),
+		zap.Int("skippedMissingContent", skippedMissing),
 		zap.Int("vectorSearchResults", len(simChunksScores)))
 
 	return &artifactpb.SearchChunksResponse{SimilarChunks: simChunks}, nil

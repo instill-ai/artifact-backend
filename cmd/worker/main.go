@@ -267,6 +267,21 @@ func main() {
 	// Format Standardization Phase - Executed before caching
 	w.RegisterActivity(cw.StandardizeFileTypeActivity) // Convert non-AI-native formats and save all standard files (PDF, PNG, OGG, MP4) to converted-file folder
 
+	// Thumbnail Phase - Non-blocking: fans out after StandardizeFileTypeActivity.
+	// Produces a 1024 px WebP preview persisted as a
+	// CONVERTED_FILE_TYPE_THUMBNAIL row and surfaced via `File.thumbnail_uri`.
+	// See files-card-preview-optimization plan, Phase 3.
+	w.RegisterActivity(cw.GenerateThumbnailActivity)
+
+	// Thumbnail backfill workflow (Phase 3e): admin-triggered one-shot
+	// that scans the file table in UID order and generates thumbnails for
+	// files uploaded before the in-pipeline activity shipped. Resumable
+	// via ContinueAsNew; see
+	// `../artifact-backend-ee/docs/runbook-backfill-thumbnails.md` for
+	// operator docs.
+	w.RegisterWorkflow(cw.BackfillThumbnailsWorkflow)
+	w.RegisterActivity(cw.ListFilesMissingThumbnailsActivity)
+
 	// AI Caching Phase - Create caches for efficient processing
 	w.RegisterActivity(cw.CacheFileContextActivity) // Create AI cache for individual file processing
 	w.RegisterActivity(cw.DeleteCacheActivity)      // Clean up AI cache after processing

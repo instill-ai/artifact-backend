@@ -396,7 +396,80 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 	w.log.Info("DeleteOldConvertedFilesActivity: Found converted files to delete",
 		zap.Int("count", len(allConvertedFiles)))
 
-	// Delete old converted files filtered by OnlyTypes (if set).
+	// --- Chunk cleanup (DB first, then blobs) ---------------------------------
+	//
+	// Root-cause fix for orphan chunks observed in prod (see AGENTS.md
+	// ARTIFACT-INV-CHUNK-INTEGRITY). The previous flow deleted chunk MinIO
+	// blobs here and relied on `DeleteOldTextChunksActivity` — which runs much
+	// later in the workflow — to delete the corresponding DB rows. Any
+	// fatal activity failure between the two (file standardization, AI
+	// conversion/summary, etc.) left chunk rows in the DB whose `storage_path`
+	// pointed to blobs we had already deleted, which in turn broke
+	// SearchChunks because GetFilesByPaths could not load their `.md`
+	// objects from MinIO.
+	//
+	// New invariant: chunk DB rows are the source of truth for blob
+	// existence. We always delete the rows BEFORE the blobs. Partial
+	// failures can therefore only leave orphan *blobs* (harmless for search;
+	// periodic GC can reap them), never orphan rows.
+	//
+	// Snapshot chunk UIDs and storage paths for all converted_files slated
+	// for deletion, up-front, while the DB rows still exist.
+	var chunkUIDsToDelete []types.ChunkUIDType
+	var chunkPathsToDelete []string
+	for _, file := range allConvertedFiles {
+		oldChunks, err := w.repository.GetTextChunksBySource(ctx, repository.ConvertedFileTableName, file.UID)
+		if err != nil {
+			w.log.Warn("DeleteOldConvertedFilesActivity: Failed to get old chunks (continuing anyway)",
+				zap.String("convertedFileUID", file.UID.String()),
+				zap.Error(err))
+			continue
+		}
+		for _, c := range oldChunks {
+			chunkUIDsToDelete = append(chunkUIDsToDelete, c.UID)
+			if c.StoragePath != "" && c.StoragePath != "pending" {
+				chunkPathsToDelete = append(chunkPathsToDelete, c.StoragePath)
+			}
+		}
+	}
+
+	if len(chunkUIDsToDelete) > 0 {
+		w.log.Info("DeleteOldConvertedFilesActivity: Deleting chunk DB rows before blobs",
+			zap.Int("chunkRows", len(chunkUIDsToDelete)),
+			zap.Int("chunkBlobs", len(chunkPathsToDelete)))
+
+		// Step 1: Delete chunk DB rows FIRST. If this fails we abort the
+		// activity for retry WITHOUT having touched MinIO — safe.
+		if err := w.repository.HardDeleteTextChunksByUIDs(ctx, chunkUIDsToDelete); err != nil {
+			w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete chunk DB rows",
+				zap.Error(err))
+			return activityErrorWithCauseFlat(
+				fmt.Sprintf("Failed to delete old chunk DB rows: %s", errorsx.MessageOrErr(err)),
+				deleteOldConvertedFilesActivityError,
+				err,
+			)
+		}
+
+		// Step 2: Best-effort blob cleanup. A failure here leaves orphan
+		// blobs — wasteful but not user-visible and GCed by a separate
+		// sweep. Importantly, we do NOT fail the activity on blob-delete
+		// errors: retrying would re-query `GetTextChunksBySource`, find no
+		// rows (we just deleted them), and silently skip the blob deletion,
+		// which is strictly worse than logging and moving on.
+		if len(chunkPathsToDelete) > 0 {
+			if err := w.deleteFilesSync(ctx, config.Config.Minio.BucketName, chunkPathsToDelete); err != nil {
+				w.log.Warn("DeleteOldConvertedFilesActivity: Best-effort chunk blob cleanup failed; blobs may leak until GC",
+					zap.Int("chunkBlobs", len(chunkPathsToDelete)),
+					zap.Error(err))
+			} else {
+				w.log.Info("DeleteOldConvertedFilesActivity: Successfully deleted chunk blobs",
+					zap.Int("chunkBlobs", len(chunkPathsToDelete)))
+			}
+		}
+	}
+
+	// --- Converted-file cleanup (blob + DB row) -------------------------------
+	//
 	// Both full reprocessing and patch-only mode set OnlyTypes to
 	// content+summary so the standardized preview file (PDF/PNG/OGG/MP4)
 	// remains available for VIEW_STANDARD_FILE_TYPE during processing.
@@ -406,44 +479,10 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 			zap.String("convertedType", file.ConvertedType),
 			zap.String("storagePath", file.StoragePath))
 
-		// CRITICAL: Delete old chunk blobs FIRST (before deleting converted_file DB record)
-		// This is necessary because chunks reference the converted_file UID
-		// Once we delete the converted_file record, we lose track of which chunks belong to it
-		oldChunks, err := w.repository.GetTextChunksBySource(ctx, repository.ConvertedFileTableName, file.UID)
-		if err != nil {
-			w.log.Warn("DeleteOldConvertedFilesActivity: Failed to get old chunks (continuing anyway)",
-				zap.String("convertedFileUID", file.UID.String()),
-				zap.Error(err))
-		} else if len(oldChunks) > 0 {
-			oldChunkPaths := make([]string, len(oldChunks))
-			for i, chunk := range oldChunks {
-				oldChunkPaths[i] = chunk.StoragePath
-			}
-			w.log.Info("DeleteOldConvertedFilesActivity: Deleting old chunk blobs",
-				zap.String("convertedFileUID", file.UID.String()),
-				zap.Int("chunkCount", len(oldChunkPaths)))
-
-			err = w.deleteFilesSync(ctx, config.Config.Minio.BucketName, oldChunkPaths)
-			if err != nil {
-				w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old chunk blobs from MinIO",
-					zap.String("convertedFileUID", file.UID.String()),
-					zap.Error(err))
-				return activityErrorWithCauseFlat(
-					fmt.Sprintf("Failed to delete old chunk blobs from MinIO: %s", errorsx.MessageOrErr(err)),
-					deleteOldConvertedFilesActivityError,
-					err,
-				)
-			}
-			w.log.Info("DeleteOldConvertedFilesActivity: Successfully deleted old chunk blobs",
-				zap.String("convertedFileUID", file.UID.String()),
-				zap.Int("deletedCount", len(oldChunkPaths)))
-		}
-
 		// Delete converted file from MinIO
 		// Note: MinIO DeleteFile is idempotent - if file doesn't exist, it succeeds.
 		// Any error returned here is a real error (network, permissions, etc.) that should be retried.
-		err = w.repository.GetMinIOStorage().DeleteFile(ctx, config.Config.Minio.BucketName, file.StoragePath)
-		if err != nil {
+		if err := w.repository.GetMinIOStorage().DeleteFile(ctx, config.Config.Minio.BucketName, file.StoragePath); err != nil {
 			w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old converted file from MinIO",
 				zap.String("storagePath", file.StoragePath),
 				zap.Error(err))
@@ -457,8 +496,7 @@ func (w *Worker) DeleteOldConvertedFilesActivity(ctx context.Context, param *Del
 		// IMPORTANT: Also delete the old converted_file DB record
 		// This prevents queries from returning the old record during reprocessing,
 		// which would cause duplicate key errors when creating new chunks with the old source_uid
-		err = w.repository.DeleteConvertedFile(ctx, file.UID)
-		if err != nil {
+		if err := w.repository.DeleteConvertedFile(ctx, file.UID); err != nil {
 			w.log.Error("DeleteOldConvertedFilesActivity: Failed to delete old converted file DB record",
 				zap.String("convertedFileUID", file.UID.String()),
 				zap.Error(err))
@@ -1153,14 +1191,37 @@ type SaveChunksActivityResult struct {
 	ChunkUIDs []types.ChunkUIDType // Saved chunk unique identifiers
 }
 
-// SaveChunksActivity saves chunks to database and MinIO storage
-// Note: Old data cleanup is handled at workflow level before this activity:
-//   - Chunk blobs: DeleteOldConvertedFilesActivity (when converted files are deleted)
-//   - Chunk DB records: DeleteOldTextChunksActivity
+// SaveChunksActivity saves chunks to MinIO and then to the database.
 //
-// This activity only creates new chunks without performing any deletion
+// Ordering is "blob first, DB row second" to preserve the ARTIFACT-INV-CHUNK-
+// INTEGRITY invariant (see AGENTS.md): a chunk DB row must never exist
+// without its `.md` blob in MinIO. Previously this activity:
+//
+//  1. Inserted DB rows with StoragePath = "pending".
+//  2. Uploaded blobs one-by-one; on first upload error the activity aborted.
+//  3. Updated StoragePath to the real path.
+//
+// A failure between (1) and (3) — or a Temporal cancellation — left dangling
+// "pending" rows; a failure inside (2) after some successful uploads left
+// orphan blobs with no DB row. Temporal's retry then inserted fresh rows
+// with fresh UIDs and the old rows leaked. With content-addressed blobs
+// (path = `<chunkUID>.md`) this contract is clean:
+//
+//  1. Pre-assign chunk UIDs and blob paths deterministically.
+//  2. Upload every blob (idempotent; same UID → same path → overwrite on
+//     retry).
+//  3. Insert the DB rows in one `CreateChunks` call, already pointing at
+//     the real storage path.
+//
+// Failures before step 3 only leak blobs — cheap to GC and invisible to
+// search. Failures during step 3 leave zero DB rows (CreateChunks is a
+// single transaction), so Temporal retry lands on a clean slate.
+//
+// Note: Old data cleanup runs at workflow level before this activity:
+//   - Chunk blobs AND DB rows: DeleteOldConvertedFilesActivity (atomic).
+//   - Safety-net DB sweep: DeleteOldTextChunksActivity.
 func (w *Worker) SaveChunksActivity(ctx context.Context, param *SaveChunksActivityParam) (*SaveChunksActivityResult, error) {
-	w.log.Info("SaveChunksActivity: Saving chunks to database and MinIO",
+	w.log.Info("SaveChunksActivity: Saving chunks to MinIO then database",
 		zap.String("fileUID", param.FileUID.String()),
 		zap.Int("chunkCount", len(param.Chunks)))
 
@@ -1170,11 +1231,8 @@ func (w *Worker) SaveChunksActivity(ctx context.Context, param *SaveChunksActivi
 	w.log.Info("SaveChunksActivity: Using converted file UID",
 		zap.String("convertedFileUID", convertedFileUID.String()))
 
-	// Chunks already have page references from ChunkContentActivity
-	// No need to add them again
 	chunksWithReferences := param.Chunks
 
-	// Log how many chunks already have references
 	chunksWithRefs := 0
 	for _, chunk := range chunksWithReferences {
 		if chunk.Reference != nil {
@@ -1185,25 +1243,41 @@ func (w *Worker) SaveChunksActivity(ctx context.Context, param *SaveChunksActivi
 		zap.Int("totalChunks", len(chunksWithReferences)),
 		zap.Int("chunksWithRefs", chunksWithRefs))
 
-	// IMPORTANT: Save chunks to database and upload to MinIO
-	// Step 1: Create chunk models
+	if len(chunksWithReferences) == 0 {
+		return &SaveChunksActivityResult{ChunkUIDs: nil}, nil
+	}
+
+	basePath := fmt.Sprintf("kb-%s/file-%s/chunk", param.KBUID.String(), param.FileUID.String())
+
+	// Step 1: Pre-assign chunk UIDs and materialize DB models with real paths.
 	chunks := make([]*repository.ChunkModel, len(chunksWithReferences))
-	texts := make([]string, len(chunksWithReferences))
+	paths := make([]string, len(chunksWithReferences))
 	for i, c := range chunksWithReferences {
-		// Convert protobuf Chunk.Type enum to string for database storage using .String() method
 		if c.Type == artifactpb.Chunk_TYPE_UNSPECIFIED {
 			w.log.Warn("SaveChunksActivity: Type is UNSPECIFIED, defaulting to content",
 				zap.Int("chunkIndex", i),
 				zap.String("fileUID", param.FileUID.String()))
 		}
 
+		chunkUID, err := uuid.NewV4()
+		if err != nil {
+			return nil, activityErrorWithCauseFlat(
+				fmt.Sprintf("Failed to allocate chunk UID: %s", errorsx.MessageOrErr(err)),
+				saveChunksActivityError,
+				err,
+			)
+		}
+		uid := types.ChunkUIDType(chunkUID)
+		path := fmt.Sprintf("%s/%s.md", basePath, uid.String())
+
 		chunks[i] = &repository.ChunkModel{
-			SourceUID:        convertedFileUID, // Use the provided converted file UID (content or summary)
+			UID:              uid,
+			SourceUID:        convertedFileUID,
 			SourceTable:      repository.ConvertedFileTableName,
 			StartPos:         c.Start,
 			EndPos:           c.End,
 			Reference:        c.Reference,
-			StoragePath:      "pending", // Placeholder, will be updated after MinIO save
+			StoragePath:      path,
 			Tokens:           c.Tokens,
 			Retrievable:      true,
 			InOrder:          i,
@@ -1212,58 +1286,34 @@ func (w *Worker) SaveChunksActivity(ctx context.Context, param *SaveChunksActivi
 			ContentType:      "text/markdown",
 			ChunkType:        c.Type.String(),
 		}
-		texts[i] = c.Text
+		paths[i] = path
 	}
 
-	// Step 2: Save chunks to database with placeholder destinations
-	// Note: Old chunks are deleted by DeleteOldTextChunksActivity at workflow level
-	// This activity only creates new chunks
-	err := w.repository.CreateChunks(ctx, chunks)
-	if err != nil {
-		return nil, activityErrorWithCauseFlat(
-			fmt.Sprintf("Failed to save chunks to database: %s", errorsx.MessageOrErr(err)),
-			saveChunksActivityError,
-			err,
-		)
-	}
-	createdChunks := chunks
-
-	// Step 3: Upload chunks to MinIO after DB transaction commits
-	destinations := make(map[string]string, len(createdChunks))
-	for i, chunk := range createdChunks {
-		chunkUID := chunk.UID.String()
-
-		// Construct the MinIO path using the format: kb-{kbUID}/file-{fileUID}/chunk/{chunkUID}.md
-		basePath := fmt.Sprintf("kb-%s/file-%s/chunk", param.KBUID.String(), param.FileUID.String())
-		path := fmt.Sprintf("%s/%s.md", basePath, chunkUID)
-
-		// Encode chunk content to base64
-		base64Content := base64.StdEncoding.EncodeToString([]byte(texts[i]))
-
-		// Save chunk content to MinIO
-		err := w.repository.GetMinIOStorage().UploadBase64File(
+	// Step 2: Upload blobs BEFORE inserting any DB row. Uploads are
+	// idempotent (content-addressed path), so Temporal can safely retry the
+	// whole activity after a partial upload failure.
+	for i, c := range chunksWithReferences {
+		base64Content := base64.StdEncoding.EncodeToString([]byte(c.Text))
+		if err := w.repository.GetMinIOStorage().UploadBase64File(
 			ctx,
 			config.Config.Minio.BucketName,
-			path,
+			paths[i],
 			base64Content,
 			"text/markdown",
-		)
-		if err != nil {
+		); err != nil {
 			return nil, activityErrorWithCauseFlat(
-				fmt.Sprintf("Failed to upload chunk (ID: %s) to MinIO: %s", chunkUID, errorsx.MessageOrErr(err)),
+				fmt.Sprintf("Failed to upload chunk (path: %s) to MinIO: %s", paths[i], errorsx.MessageOrErr(err)),
 				saveChunksActivityError,
 				err,
 			)
 		}
-
-		destinations[chunkUID] = path
 	}
 
-	// Step 4: Update chunk destinations in database
-	err = w.repository.UpdateTextChunkDestinations(ctx, destinations)
-	if err != nil {
+	// Step 3: Insert DB rows with real paths in a single batch. At this
+	// point every blob is durable.
+	if err := w.repository.CreateChunks(ctx, chunks); err != nil {
 		return nil, activityErrorWithCauseFlat(
-			fmt.Sprintf("Failed to update chunk destinations: %s", errorsx.MessageOrErr(err)),
+			fmt.Sprintf("Failed to save chunks to database: %s", errorsx.MessageOrErr(err)),
 			saveChunksActivityError,
 			err,
 		)
@@ -1271,7 +1321,7 @@ func (w *Worker) SaveChunksActivity(ctx context.Context, param *SaveChunksActivi
 
 	w.log.Info("SaveChunksActivity: Successfully saved chunks",
 		zap.String("fileUID", param.FileUID.String()),
-		zap.Int("chunkCount", len(createdChunks)))
+		zap.Int("chunkCount", len(chunks)))
 
 	return &SaveChunksActivityResult{
 		ChunkUIDs: nil,

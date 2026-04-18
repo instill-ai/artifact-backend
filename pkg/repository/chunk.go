@@ -42,6 +42,10 @@ type Chunk interface {
 	HardDeleteTextChunksByKBUID(_ context.Context, kbUID types.KBUIDType) error
 	// HardDeleteTextChunksByKBFileUID deletes all the chunks associated with a certain kbFileUID.
 	HardDeleteTextChunksByKBFileUID(_ context.Context, kbFileUID types.FileUIDType) error
+	// HardDeleteTextChunksByUIDs deletes chunk rows whose UID matches any entry
+	// in chunkUIDs. Used by reprocessing cleanup to remove only the chunks tied
+	// to the converted_file types being deleted (honoring the OnlyTypes filter).
+	HardDeleteTextChunksByUIDs(_ context.Context, chunkUIDs []types.ChunkUIDType) error
 	GetTextChunksBySource(_ context.Context, sourceTable string, sourceUID types.SourceUIDType) ([]ChunkModel, error)
 	GetTextChunksByUIDs(_ context.Context, chunkUIDs []types.ChunkUIDType) ([]ChunkModel, error)
 	GetTotalTokensByListKBUIDs(_ context.Context, kbUIDs []types.KBUIDType) (map[types.KBUIDType]int, error)
@@ -477,6 +481,16 @@ func (r *repository) ListTextChunksByKBFileUID(ctx context.Context, kbFileUID ty
 func (r *repository) HardDeleteTextChunksByKBFileUID(ctx context.Context, kbFileUID types.FileUIDType) error {
 	where := fmt.Sprintf("%s = ?", TextChunkColumn.FileUID)
 	return r.db.WithContext(ctx).Where(where, kbFileUID).Unscoped().Delete(&ChunkModel{}).Error
+}
+
+// HardDeleteTextChunksByUIDs deletes text chunks by their UID. No-op when the
+// input is empty so callers don't need to guard around it.
+func (r *repository) HardDeleteTextChunksByUIDs(ctx context.Context, chunkUIDs []types.ChunkUIDType) error {
+	if len(chunkUIDs) == 0 {
+		return nil
+	}
+	where := fmt.Sprintf("%s IN ?", TextChunkColumn.UID)
+	return r.db.WithContext(ctx).Where(where, chunkUIDs).Unscoped().Delete(&ChunkModel{}).Error
 }
 
 // UpdateTextChunkDestinations updates the storage_path field for multiple text chunks

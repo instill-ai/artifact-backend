@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -169,6 +170,55 @@ func TestGetFilesBatchActivity_Success(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Not(qt.IsNil))
 	c.Assert(len(result.Files), qt.Equals, 2)
+}
+
+// TestGetFilesBatchActivity_PartialFailure pins the "collect-all" contract:
+// per-path failures are surfaced via FileContent.Error rather than aborting
+// the batch. SearchChunks relies on this so a single orphan chunk row does
+// not break global search.
+func TestGetFilesBatchActivity_PartialFailure(t *testing.T) {
+	c := qt.New(t)
+	mc := minimock.NewController(t)
+
+	ctx := context.Background()
+	bucket := "test-bucket"
+	filePaths := []string{
+		"kb/file/chunk/good-1.md",
+		"kb/file/chunk/missing.md",
+		"kb/file/chunk/good-2.md",
+	}
+
+	mockStorage := mock.NewStorageMock(mc)
+	mockStorage.GetFileMock.Set(func(ctx context.Context, bucket string, path string) ([]byte, error) {
+		if strings.Contains(path, "missing") {
+			return nil, fmt.Errorf("The specified key does not exist.")
+		}
+		return []byte("content of " + path), nil
+	})
+
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockRepository.GetMinIOStorageMock.Return(mockStorage)
+
+	w := &Worker{repository: mockRepository, log: zap.NewNop()}
+
+	result, err := w.GetFilesBatchActivity(ctx, &GetFilesBatchActivityParam{
+		Bucket:    bucket,
+		FilePaths: filePaths,
+	})
+
+	c.Assert(err, qt.IsNil, qt.Commentf("batch must not fail when only some paths are missing"))
+	c.Assert(result, qt.Not(qt.IsNil))
+	c.Assert(result.Files, qt.HasLen, 3)
+
+	// Index alignment is part of the contract: callers use chunks[i].Content.
+	c.Assert(string(result.Files[0].Content), qt.Equals, "content of kb/file/chunk/good-1.md")
+	c.Assert(result.Files[0].Error, qt.Equals, "")
+
+	c.Assert(result.Files[1].Content, qt.IsNil)
+	c.Assert(result.Files[1].Error, qt.Contains, "does not exist")
+
+	c.Assert(string(result.Files[2].Content), qt.Equals, "content of kb/file/chunk/good-2.md")
+	c.Assert(result.Files[2].Error, qt.Equals, "")
 }
 
 func TestGetFilesBatchActivity_EmptyList(t *testing.T) {

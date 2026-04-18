@@ -826,6 +826,34 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 						"error", callbackErr.Error())
 				}
 			}
+
+			// Fire-and-forget thumbnail generation.
+			//
+			// We intentionally do NOT `.Get()` the future: a failure to
+			// produce a preview must never fail the ingestion workflow, and
+			// the Files page already falls back to `derived_resource_uri`
+			// and then to the MIME icon (see C-INV-19 /
+			// `FileCardPreview`). We cap retries at 3 to bound cost and use
+			// a short timeout because ffmpeg resizing a single frame is
+			// bounded by the input file size we already validated.
+			thumbCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: 5 * time.Minute,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalStandard,
+					MaximumAttempts:    3,
+				},
+			})
+			_ = workflow.ExecuteActivity(thumbCtx, w.GenerateThumbnailActivity, &GenerateThumbnailActivityParam{
+				FileUID:         fm.fileUID,
+				KBUID:           kbUID,
+				Bucket:          effectiveBucket,
+				Destination:     effectiveDestination,
+				FileType:        effectiveFileType,
+				FileDisplayName: fm.metadata.File.DisplayName,
+				Metadata:        fm.metadata.ExternalMetadata,
+			})
 		}
 
 		// Step 2d-pre: Probe media duration with ffprobe (before cache creation).

@@ -110,6 +110,16 @@ type File interface {
 	// within a specific knowledge base. Returns nil with no error if no match is found.
 	GetFileByContentSHA256InKB(ctx context.Context, kbUID types.KnowledgeBaseUIDType, sha256 string) (*FileModel, error)
 
+	// ListFilesMissingThumbnails returns COMPLETED image/video files that do
+	// not yet have a `converted_file` row of type
+	// `CONVERTED_FILE_TYPE_THUMBNAIL`, paired with their owning KB UID. The
+	// list is batched by `batchSize` and keyset-paginated via `afterFileUID`
+	// (pass the zero UUID on the first call). Used by
+	// `BackfillThumbnailsWorkflow` to seed previews for files uploaded before
+	// the thumbnail activity shipped — see files-card-preview-optimization
+	// plan, Phase 3e.
+	ListFilesMissingThumbnails(ctx context.Context, afterFileUID types.FileUIDType, batchSize int) ([]FileMissingThumbnail, error)
+
 	// CreateFileAdmin creates a file record and links it to a KB without
 	// triggering external service calls or updating KB usage. Used for admin
 	// operations like lightweight file copy where the caller manages storage
@@ -1518,4 +1528,95 @@ func (r *repository) GetKnowledgeBaseIDsForFiles(ctx context.Context, fileUIDs [
 	}
 
 	return result, nil
+}
+
+// FileMissingThumbnail is the minimal projection returned by
+// `ListFilesMissingThumbnails`. It intentionally carries only the columns
+// the backfill activity actually needs so the SELECT stays cheap on large
+// namespaces. `KBUID` is derived from the first association in
+// `file_knowledge_base`; files reachable from multiple KBs produce one row
+// per association to keep the SQL simple, but the activity deduplicates
+// on `FileUID` at runtime.
+type FileMissingThumbnail struct {
+	FileUID          types.FileUIDType          `json:"file_uid"`
+	KBUID            types.KnowledgeBaseUIDType `json:"kb_uid"`
+	FileType         string                     `json:"file_type"`
+	StoragePath      string                     `json:"storage_path"`
+	DisplayName      string                     `json:"display_name"`
+	ExternalMetadata string                     `json:"external_metadata"`
+}
+
+// thumbnailableFileTypes enumerates the `file.file_type` enum values that
+// `GenerateThumbnailActivity` can actually render into a WebP preview.
+// Keeping the list here (rather than in the activity) lets the DB filter
+// shed the work before the result reaches the worker. Must stay in sync
+// with `classifyThumbnailSource` in `pkg/worker/thumbnail_activity.go` —
+// `ARTIFACT-INV-THUMBNAIL-NON-BLOCKING` requires both to agree on the
+// image+video scope.
+var thumbnailableFileTypes = []string{
+	"TYPE_PNG",
+	"TYPE_JPEG",
+	"TYPE_GIF",
+	"TYPE_BMP",
+	"TYPE_TIFF",
+	"TYPE_WEBP",
+	"TYPE_MP4",
+	"TYPE_AVI",
+	"TYPE_MOV",
+	"TYPE_MKV",
+	"TYPE_FLV",
+	"TYPE_WMV",
+	"TYPE_MPEG",
+	"TYPE_WEBM_VIDEO",
+}
+
+// ListFilesMissingThumbnails returns COMPLETED image/video files that do
+// not yet have a thumbnail converted_file row, batched by `batchSize` and
+// keyset-paginated on `file.uid` (lexicographic). The caller passes the
+// zero UUID on the first call and the highest FileUID from the returned
+// batch on each subsequent call.
+//
+// We intentionally use a NOT EXISTS sub-select rather than a LEFT JOIN so
+// Postgres can short-circuit per-row and the outer query stays on the
+// `(file_type, process_status)` covering index. Each row is joined
+// against `file_knowledge_base` to resolve the KB UID the backfill
+// activity needs for MinIO path derivation — files attached to multiple
+// KBs surface once per association; the activity drops duplicates on
+// `FileUID` before scheduling work.
+func (r *repository) ListFilesMissingThumbnails(ctx context.Context, afterFileUID types.FileUIDType, batchSize int) ([]FileMissingThumbnail, error) {
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+
+	rows := make([]FileMissingThumbnail, 0, batchSize)
+	query := r.db.WithContext(ctx).
+		Table("file AS f").
+		Select(`
+			f.uid AS file_uid,
+			fkb.kb_uid AS kb_uid,
+			f.file_type AS file_type,
+			f.storage_path AS storage_path,
+			f.display_name AS display_name,
+			COALESCE(f.external_metadata::text, '') AS external_metadata
+		`).
+		Joins("JOIN file_knowledge_base fkb ON fkb.file_uid = f.uid").
+		Where("f.delete_time IS NULL").
+		Where("f.process_status = ?", "FILE_PROCESS_STATUS_COMPLETED").
+		Where("f.file_type IN ?", thumbnailableFileTypes).
+		Where(
+			`NOT EXISTS (
+				SELECT 1 FROM converted_file cf
+				WHERE cf.file_uid = f.uid
+				AND cf.converted_type = ?
+			)`,
+			artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_THUMBNAIL.String(),
+		).
+		Where("f.uid > ?", afterFileUID).
+		Order("f.uid ASC").
+		Limit(batchSize)
+
+	if err := query.Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("listing files missing thumbnails: %w", err)
+	}
+	return rows, nil
 }

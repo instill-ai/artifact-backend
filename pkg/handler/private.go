@@ -1036,6 +1036,13 @@ func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.Lis
 		filter := req.GetFilter()
 		publicReq.Filter = &filter
 	}
+	// Forward the optional `view` — when set, the CE public handler will
+	// fan-out per-row presigns and populate `File.derived_resource_uri` on
+	// every returned row. See `files-card-preview-optimization` Phase 2b.
+	if req.View != nil {
+		view := req.GetView()
+		publicReq.View = &view
+	}
 
 	// Create a public handler to reuse the existing ListFiles logic
 	publicHandler := &PublicHandler{

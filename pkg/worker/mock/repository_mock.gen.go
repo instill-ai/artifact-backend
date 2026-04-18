@@ -718,6 +718,13 @@ type RepositoryMock struct {
 	beforeHardDeleteTextChunksByKBUIDCounter uint64
 	HardDeleteTextChunksByKBUIDMock          mRepositoryMockHardDeleteTextChunksByKBUID
 
+	funcHardDeleteTextChunksByUIDs          func(ctx context.Context, chunkUIDs []types.ChunkUIDType) (err error)
+	funcHardDeleteTextChunksByUIDsOrigin    string
+	inspectFuncHardDeleteTextChunksByUIDs   func(ctx context.Context, chunkUIDs []types.ChunkUIDType)
+	afterHardDeleteTextChunksByUIDsCounter  uint64
+	beforeHardDeleteTextChunksByUIDsCounter uint64
+	HardDeleteTextChunksByUIDsMock          mRepositoryMockHardDeleteTextChunksByUIDs
+
 	funcIncreaseKnowledgeBaseUsage          func(ctx context.Context, tx *gorm.DB, kbUID string, amount int64) (err error)
 	funcIncreaseKnowledgeBaseUsageOrigin    string
 	inspectFuncIncreaseKnowledgeBaseUsage   func(ctx context.Context, tx *gorm.DB, kbUID string, amount int64)
@@ -780,6 +787,13 @@ type RepositoryMock struct {
 	afterListFilesCounter  uint64
 	beforeListFilesCounter uint64
 	ListFilesMock          mRepositoryMockListFiles
+
+	funcListFilesMissingThumbnails          func(ctx context.Context, afterFileUID types.FileUIDType, batchSize int) (fa1 []mm_repository.FileMissingThumbnail, err error)
+	funcListFilesMissingThumbnailsOrigin    string
+	inspectFuncListFilesMissingThumbnails   func(ctx context.Context, afterFileUID types.FileUIDType, batchSize int)
+	afterListFilesMissingThumbnailsCounter  uint64
+	beforeListFilesMissingThumbnailsCounter uint64
+	ListFilesMissingThumbnailsMock          mRepositoryMockListFilesMissingThumbnails
 
 	funcListKnowledgeBaseFilesAdmin          func(ctx context.Context, kbUID types.KnowledgeBaseUIDType, pageSize int32, pageToken string) (fa1 []mm_repository.FileModel, s1 string, i1 int32, err error)
 	funcListKnowledgeBaseFilesAdminOrigin    string
@@ -1372,6 +1386,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 	m.HardDeleteTextChunksByKBUIDMock = mRepositoryMockHardDeleteTextChunksByKBUID{mock: m}
 	m.HardDeleteTextChunksByKBUIDMock.callArgs = []*RepositoryMockHardDeleteTextChunksByKBUIDParams{}
 
+	m.HardDeleteTextChunksByUIDsMock = mRepositoryMockHardDeleteTextChunksByUIDs{mock: m}
+	m.HardDeleteTextChunksByUIDsMock.callArgs = []*RepositoryMockHardDeleteTextChunksByUIDsParams{}
+
 	m.IncreaseKnowledgeBaseUsageMock = mRepositoryMockIncreaseKnowledgeBaseUsage{mock: m}
 	m.IncreaseKnowledgeBaseUsageMock.callArgs = []*RepositoryMockIncreaseKnowledgeBaseUsageParams{}
 
@@ -1398,6 +1415,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.ListFilesMock = mRepositoryMockListFiles{mock: m}
 	m.ListFilesMock.callArgs = []*RepositoryMockListFilesParams{}
+
+	m.ListFilesMissingThumbnailsMock = mRepositoryMockListFilesMissingThumbnails{mock: m}
+	m.ListFilesMissingThumbnailsMock.callArgs = []*RepositoryMockListFilesMissingThumbnailsParams{}
 
 	m.ListKnowledgeBaseFilesAdminMock = mRepositoryMockListKnowledgeBaseFilesAdmin{mock: m}
 	m.ListKnowledgeBaseFilesAdminMock.callArgs = []*RepositoryMockListKnowledgeBaseFilesAdminParams{}
@@ -35823,6 +35843,348 @@ func (m *RepositoryMock) MinimockHardDeleteTextChunksByKBUIDInspect() {
 	}
 }
 
+type mRepositoryMockHardDeleteTextChunksByUIDs struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockHardDeleteTextChunksByUIDsExpectation
+	expectations       []*RepositoryMockHardDeleteTextChunksByUIDsExpectation
+
+	callArgs []*RepositoryMockHardDeleteTextChunksByUIDsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockHardDeleteTextChunksByUIDsExpectation specifies expectation struct of the Repository.HardDeleteTextChunksByUIDs
+type RepositoryMockHardDeleteTextChunksByUIDsExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockHardDeleteTextChunksByUIDsParams
+	paramPtrs          *RepositoryMockHardDeleteTextChunksByUIDsParamPtrs
+	expectationOrigins RepositoryMockHardDeleteTextChunksByUIDsExpectationOrigins
+	results            *RepositoryMockHardDeleteTextChunksByUIDsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockHardDeleteTextChunksByUIDsParams contains parameters of the Repository.HardDeleteTextChunksByUIDs
+type RepositoryMockHardDeleteTextChunksByUIDsParams struct {
+	ctx       context.Context
+	chunkUIDs []types.ChunkUIDType
+}
+
+// RepositoryMockHardDeleteTextChunksByUIDsParamPtrs contains pointers to parameters of the Repository.HardDeleteTextChunksByUIDs
+type RepositoryMockHardDeleteTextChunksByUIDsParamPtrs struct {
+	ctx       *context.Context
+	chunkUIDs *[]types.ChunkUIDType
+}
+
+// RepositoryMockHardDeleteTextChunksByUIDsResults contains results of the Repository.HardDeleteTextChunksByUIDs
+type RepositoryMockHardDeleteTextChunksByUIDsResults struct {
+	err error
+}
+
+// RepositoryMockHardDeleteTextChunksByUIDsOrigins contains origins of expectations of the Repository.HardDeleteTextChunksByUIDs
+type RepositoryMockHardDeleteTextChunksByUIDsExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originChunkUIDs string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) Optional() *mRepositoryMockHardDeleteTextChunksByUIDs {
+	mmHardDeleteTextChunksByUIDs.optional = true
+	return mmHardDeleteTextChunksByUIDs
+}
+
+// Expect sets up expected params for Repository.HardDeleteTextChunksByUIDs
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) Expect(ctx context.Context, chunkUIDs []types.ChunkUIDType) *mRepositoryMockHardDeleteTextChunksByUIDs {
+	if mmHardDeleteTextChunksByUIDs.mock.funcHardDeleteTextChunksByUIDs != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("RepositoryMock.HardDeleteTextChunksByUIDs mock is already set by Set")
+	}
+
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation == nil {
+		mmHardDeleteTextChunksByUIDs.defaultExpectation = &RepositoryMockHardDeleteTextChunksByUIDsExpectation{}
+	}
+
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation.paramPtrs != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("RepositoryMock.HardDeleteTextChunksByUIDs mock is already set by ExpectParams functions")
+	}
+
+	mmHardDeleteTextChunksByUIDs.defaultExpectation.params = &RepositoryMockHardDeleteTextChunksByUIDsParams{ctx, chunkUIDs}
+	mmHardDeleteTextChunksByUIDs.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmHardDeleteTextChunksByUIDs.expectations {
+		if minimock.Equal(e.params, mmHardDeleteTextChunksByUIDs.defaultExpectation.params) {
+			mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHardDeleteTextChunksByUIDs.defaultExpectation.params)
+		}
+	}
+
+	return mmHardDeleteTextChunksByUIDs
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.HardDeleteTextChunksByUIDs
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) ExpectCtxParam1(ctx context.Context) *mRepositoryMockHardDeleteTextChunksByUIDs {
+	if mmHardDeleteTextChunksByUIDs.mock.funcHardDeleteTextChunksByUIDs != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("RepositoryMock.HardDeleteTextChunksByUIDs mock is already set by Set")
+	}
+
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation == nil {
+		mmHardDeleteTextChunksByUIDs.defaultExpectation = &RepositoryMockHardDeleteTextChunksByUIDsExpectation{}
+	}
+
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation.params != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("RepositoryMock.HardDeleteTextChunksByUIDs mock is already set by Expect")
+	}
+
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteTextChunksByUIDs.defaultExpectation.paramPtrs = &RepositoryMockHardDeleteTextChunksByUIDsParamPtrs{}
+	}
+	mmHardDeleteTextChunksByUIDs.defaultExpectation.paramPtrs.ctx = &ctx
+	mmHardDeleteTextChunksByUIDs.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmHardDeleteTextChunksByUIDs
+}
+
+// ExpectChunkUIDsParam2 sets up expected param chunkUIDs for Repository.HardDeleteTextChunksByUIDs
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) ExpectChunkUIDsParam2(chunkUIDs []types.ChunkUIDType) *mRepositoryMockHardDeleteTextChunksByUIDs {
+	if mmHardDeleteTextChunksByUIDs.mock.funcHardDeleteTextChunksByUIDs != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("RepositoryMock.HardDeleteTextChunksByUIDs mock is already set by Set")
+	}
+
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation == nil {
+		mmHardDeleteTextChunksByUIDs.defaultExpectation = &RepositoryMockHardDeleteTextChunksByUIDsExpectation{}
+	}
+
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation.params != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("RepositoryMock.HardDeleteTextChunksByUIDs mock is already set by Expect")
+	}
+
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation.paramPtrs == nil {
+		mmHardDeleteTextChunksByUIDs.defaultExpectation.paramPtrs = &RepositoryMockHardDeleteTextChunksByUIDsParamPtrs{}
+	}
+	mmHardDeleteTextChunksByUIDs.defaultExpectation.paramPtrs.chunkUIDs = &chunkUIDs
+	mmHardDeleteTextChunksByUIDs.defaultExpectation.expectationOrigins.originChunkUIDs = minimock.CallerInfo(1)
+
+	return mmHardDeleteTextChunksByUIDs
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.HardDeleteTextChunksByUIDs
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) Inspect(f func(ctx context.Context, chunkUIDs []types.ChunkUIDType)) *mRepositoryMockHardDeleteTextChunksByUIDs {
+	if mmHardDeleteTextChunksByUIDs.mock.inspectFuncHardDeleteTextChunksByUIDs != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("Inspect function is already set for RepositoryMock.HardDeleteTextChunksByUIDs")
+	}
+
+	mmHardDeleteTextChunksByUIDs.mock.inspectFuncHardDeleteTextChunksByUIDs = f
+
+	return mmHardDeleteTextChunksByUIDs
+}
+
+// Return sets up results that will be returned by Repository.HardDeleteTextChunksByUIDs
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) Return(err error) *RepositoryMock {
+	if mmHardDeleteTextChunksByUIDs.mock.funcHardDeleteTextChunksByUIDs != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("RepositoryMock.HardDeleteTextChunksByUIDs mock is already set by Set")
+	}
+
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation == nil {
+		mmHardDeleteTextChunksByUIDs.defaultExpectation = &RepositoryMockHardDeleteTextChunksByUIDsExpectation{mock: mmHardDeleteTextChunksByUIDs.mock}
+	}
+	mmHardDeleteTextChunksByUIDs.defaultExpectation.results = &RepositoryMockHardDeleteTextChunksByUIDsResults{err}
+	mmHardDeleteTextChunksByUIDs.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmHardDeleteTextChunksByUIDs.mock
+}
+
+// Set uses given function f to mock the Repository.HardDeleteTextChunksByUIDs method
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) Set(f func(ctx context.Context, chunkUIDs []types.ChunkUIDType) (err error)) *RepositoryMock {
+	if mmHardDeleteTextChunksByUIDs.defaultExpectation != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("Default expectation is already set for the Repository.HardDeleteTextChunksByUIDs method")
+	}
+
+	if len(mmHardDeleteTextChunksByUIDs.expectations) > 0 {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("Some expectations are already set for the Repository.HardDeleteTextChunksByUIDs method")
+	}
+
+	mmHardDeleteTextChunksByUIDs.mock.funcHardDeleteTextChunksByUIDs = f
+	mmHardDeleteTextChunksByUIDs.mock.funcHardDeleteTextChunksByUIDsOrigin = minimock.CallerInfo(1)
+	return mmHardDeleteTextChunksByUIDs.mock
+}
+
+// When sets expectation for the Repository.HardDeleteTextChunksByUIDs which will trigger the result defined by the following
+// Then helper
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) When(ctx context.Context, chunkUIDs []types.ChunkUIDType) *RepositoryMockHardDeleteTextChunksByUIDsExpectation {
+	if mmHardDeleteTextChunksByUIDs.mock.funcHardDeleteTextChunksByUIDs != nil {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("RepositoryMock.HardDeleteTextChunksByUIDs mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockHardDeleteTextChunksByUIDsExpectation{
+		mock:               mmHardDeleteTextChunksByUIDs.mock,
+		params:             &RepositoryMockHardDeleteTextChunksByUIDsParams{ctx, chunkUIDs},
+		expectationOrigins: RepositoryMockHardDeleteTextChunksByUIDsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmHardDeleteTextChunksByUIDs.expectations = append(mmHardDeleteTextChunksByUIDs.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.HardDeleteTextChunksByUIDs return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockHardDeleteTextChunksByUIDsExpectation) Then(err error) *RepositoryMock {
+	e.results = &RepositoryMockHardDeleteTextChunksByUIDsResults{err}
+	return e.mock
+}
+
+// Times sets number of times Repository.HardDeleteTextChunksByUIDs should be invoked
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) Times(n uint64) *mRepositoryMockHardDeleteTextChunksByUIDs {
+	if n == 0 {
+		mmHardDeleteTextChunksByUIDs.mock.t.Fatalf("Times of RepositoryMock.HardDeleteTextChunksByUIDs mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmHardDeleteTextChunksByUIDs.expectedInvocations, n)
+	mmHardDeleteTextChunksByUIDs.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmHardDeleteTextChunksByUIDs
+}
+
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) invocationsDone() bool {
+	if len(mmHardDeleteTextChunksByUIDs.expectations) == 0 && mmHardDeleteTextChunksByUIDs.defaultExpectation == nil && mmHardDeleteTextChunksByUIDs.mock.funcHardDeleteTextChunksByUIDs == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmHardDeleteTextChunksByUIDs.mock.afterHardDeleteTextChunksByUIDsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHardDeleteTextChunksByUIDs.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// HardDeleteTextChunksByUIDs implements mm_repository.Repository
+func (mmHardDeleteTextChunksByUIDs *RepositoryMock) HardDeleteTextChunksByUIDs(ctx context.Context, chunkUIDs []types.ChunkUIDType) (err error) {
+	mm_atomic.AddUint64(&mmHardDeleteTextChunksByUIDs.beforeHardDeleteTextChunksByUIDsCounter, 1)
+	defer mm_atomic.AddUint64(&mmHardDeleteTextChunksByUIDs.afterHardDeleteTextChunksByUIDsCounter, 1)
+
+	mmHardDeleteTextChunksByUIDs.t.Helper()
+
+	if mmHardDeleteTextChunksByUIDs.inspectFuncHardDeleteTextChunksByUIDs != nil {
+		mmHardDeleteTextChunksByUIDs.inspectFuncHardDeleteTextChunksByUIDs(ctx, chunkUIDs)
+	}
+
+	mm_params := RepositoryMockHardDeleteTextChunksByUIDsParams{ctx, chunkUIDs}
+
+	// Record call args
+	mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.mutex.Lock()
+	mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.callArgs = append(mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.callArgs, &mm_params)
+	mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.mutex.Unlock()
+
+	for _, e := range mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.defaultExpectation.Counter, 1)
+		mm_want := mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.defaultExpectation.params
+		mm_want_ptrs := mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockHardDeleteTextChunksByUIDsParams{ctx, chunkUIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmHardDeleteTextChunksByUIDs.t.Errorf("RepositoryMock.HardDeleteTextChunksByUIDs got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.chunkUIDs != nil && !minimock.Equal(*mm_want_ptrs.chunkUIDs, mm_got.chunkUIDs) {
+				mmHardDeleteTextChunksByUIDs.t.Errorf("RepositoryMock.HardDeleteTextChunksByUIDs got unexpected parameter chunkUIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.defaultExpectation.expectationOrigins.originChunkUIDs, *mm_want_ptrs.chunkUIDs, mm_got.chunkUIDs, minimock.Diff(*mm_want_ptrs.chunkUIDs, mm_got.chunkUIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmHardDeleteTextChunksByUIDs.t.Errorf("RepositoryMock.HardDeleteTextChunksByUIDs got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmHardDeleteTextChunksByUIDs.HardDeleteTextChunksByUIDsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmHardDeleteTextChunksByUIDs.t.Fatal("No results are set for the RepositoryMock.HardDeleteTextChunksByUIDs")
+		}
+		return (*mm_results).err
+	}
+	if mmHardDeleteTextChunksByUIDs.funcHardDeleteTextChunksByUIDs != nil {
+		return mmHardDeleteTextChunksByUIDs.funcHardDeleteTextChunksByUIDs(ctx, chunkUIDs)
+	}
+	mmHardDeleteTextChunksByUIDs.t.Fatalf("Unexpected call to RepositoryMock.HardDeleteTextChunksByUIDs. %v %v", ctx, chunkUIDs)
+	return
+}
+
+// HardDeleteTextChunksByUIDsAfterCounter returns a count of finished RepositoryMock.HardDeleteTextChunksByUIDs invocations
+func (mmHardDeleteTextChunksByUIDs *RepositoryMock) HardDeleteTextChunksByUIDsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteTextChunksByUIDs.afterHardDeleteTextChunksByUIDsCounter)
+}
+
+// HardDeleteTextChunksByUIDsBeforeCounter returns a count of RepositoryMock.HardDeleteTextChunksByUIDs invocations
+func (mmHardDeleteTextChunksByUIDs *RepositoryMock) HardDeleteTextChunksByUIDsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHardDeleteTextChunksByUIDs.beforeHardDeleteTextChunksByUIDsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.HardDeleteTextChunksByUIDs.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmHardDeleteTextChunksByUIDs *mRepositoryMockHardDeleteTextChunksByUIDs) Calls() []*RepositoryMockHardDeleteTextChunksByUIDsParams {
+	mmHardDeleteTextChunksByUIDs.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockHardDeleteTextChunksByUIDsParams, len(mmHardDeleteTextChunksByUIDs.callArgs))
+	copy(argCopy, mmHardDeleteTextChunksByUIDs.callArgs)
+
+	mmHardDeleteTextChunksByUIDs.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockHardDeleteTextChunksByUIDsDone returns true if the count of the HardDeleteTextChunksByUIDs invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockHardDeleteTextChunksByUIDsDone() bool {
+	if m.HardDeleteTextChunksByUIDsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.HardDeleteTextChunksByUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.HardDeleteTextChunksByUIDsMock.invocationsDone()
+}
+
+// MinimockHardDeleteTextChunksByUIDsInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockHardDeleteTextChunksByUIDsInspect() {
+	for _, e := range m.HardDeleteTextChunksByUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.HardDeleteTextChunksByUIDs at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterHardDeleteTextChunksByUIDsCounter := mm_atomic.LoadUint64(&m.afterHardDeleteTextChunksByUIDsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.HardDeleteTextChunksByUIDsMock.defaultExpectation != nil && afterHardDeleteTextChunksByUIDsCounter < 1 {
+		if m.HardDeleteTextChunksByUIDsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.HardDeleteTextChunksByUIDs at\n%s", m.HardDeleteTextChunksByUIDsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.HardDeleteTextChunksByUIDs at\n%s with params: %#v", m.HardDeleteTextChunksByUIDsMock.defaultExpectation.expectationOrigins.origin, *m.HardDeleteTextChunksByUIDsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcHardDeleteTextChunksByUIDs != nil && afterHardDeleteTextChunksByUIDsCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.HardDeleteTextChunksByUIDs at\n%s", m.funcHardDeleteTextChunksByUIDsOrigin)
+	}
+
+	if !m.HardDeleteTextChunksByUIDsMock.invocationsDone() && afterHardDeleteTextChunksByUIDsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.HardDeleteTextChunksByUIDs at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.HardDeleteTextChunksByUIDsMock.expectedInvocations), m.HardDeleteTextChunksByUIDsMock.expectedInvocationsOrigin, afterHardDeleteTextChunksByUIDsCounter)
+	}
+}
+
 type mRepositoryMockIncreaseKnowledgeBaseUsage struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -39028,6 +39390,380 @@ func (m *RepositoryMock) MinimockListFilesInspect() {
 	if !m.ListFilesMock.invocationsDone() && afterListFilesCounter > 0 {
 		m.t.Errorf("Expected %d calls to RepositoryMock.ListFiles at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.ListFilesMock.expectedInvocations), m.ListFilesMock.expectedInvocationsOrigin, afterListFilesCounter)
+	}
+}
+
+type mRepositoryMockListFilesMissingThumbnails struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockListFilesMissingThumbnailsExpectation
+	expectations       []*RepositoryMockListFilesMissingThumbnailsExpectation
+
+	callArgs []*RepositoryMockListFilesMissingThumbnailsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockListFilesMissingThumbnailsExpectation specifies expectation struct of the Repository.ListFilesMissingThumbnails
+type RepositoryMockListFilesMissingThumbnailsExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockListFilesMissingThumbnailsParams
+	paramPtrs          *RepositoryMockListFilesMissingThumbnailsParamPtrs
+	expectationOrigins RepositoryMockListFilesMissingThumbnailsExpectationOrigins
+	results            *RepositoryMockListFilesMissingThumbnailsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockListFilesMissingThumbnailsParams contains parameters of the Repository.ListFilesMissingThumbnails
+type RepositoryMockListFilesMissingThumbnailsParams struct {
+	ctx          context.Context
+	afterFileUID types.FileUIDType
+	batchSize    int
+}
+
+// RepositoryMockListFilesMissingThumbnailsParamPtrs contains pointers to parameters of the Repository.ListFilesMissingThumbnails
+type RepositoryMockListFilesMissingThumbnailsParamPtrs struct {
+	ctx          *context.Context
+	afterFileUID *types.FileUIDType
+	batchSize    *int
+}
+
+// RepositoryMockListFilesMissingThumbnailsResults contains results of the Repository.ListFilesMissingThumbnails
+type RepositoryMockListFilesMissingThumbnailsResults struct {
+	fa1 []mm_repository.FileMissingThumbnail
+	err error
+}
+
+// RepositoryMockListFilesMissingThumbnailsOrigins contains origins of expectations of the Repository.ListFilesMissingThumbnails
+type RepositoryMockListFilesMissingThumbnailsExpectationOrigins struct {
+	origin             string
+	originCtx          string
+	originAfterFileUID string
+	originBatchSize    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) Optional() *mRepositoryMockListFilesMissingThumbnails {
+	mmListFilesMissingThumbnails.optional = true
+	return mmListFilesMissingThumbnails
+}
+
+// Expect sets up expected params for Repository.ListFilesMissingThumbnails
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) Expect(ctx context.Context, afterFileUID types.FileUIDType, batchSize int) *mRepositoryMockListFilesMissingThumbnails {
+	if mmListFilesMissingThumbnails.mock.funcListFilesMissingThumbnails != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by Set")
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation == nil {
+		mmListFilesMissingThumbnails.defaultExpectation = &RepositoryMockListFilesMissingThumbnailsExpectation{}
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation.paramPtrs != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by ExpectParams functions")
+	}
+
+	mmListFilesMissingThumbnails.defaultExpectation.params = &RepositoryMockListFilesMissingThumbnailsParams{ctx, afterFileUID, batchSize}
+	mmListFilesMissingThumbnails.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListFilesMissingThumbnails.expectations {
+		if minimock.Equal(e.params, mmListFilesMissingThumbnails.defaultExpectation.params) {
+			mmListFilesMissingThumbnails.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListFilesMissingThumbnails.defaultExpectation.params)
+		}
+	}
+
+	return mmListFilesMissingThumbnails
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.ListFilesMissingThumbnails
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) ExpectCtxParam1(ctx context.Context) *mRepositoryMockListFilesMissingThumbnails {
+	if mmListFilesMissingThumbnails.mock.funcListFilesMissingThumbnails != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by Set")
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation == nil {
+		mmListFilesMissingThumbnails.defaultExpectation = &RepositoryMockListFilesMissingThumbnailsExpectation{}
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation.params != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by Expect")
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation.paramPtrs == nil {
+		mmListFilesMissingThumbnails.defaultExpectation.paramPtrs = &RepositoryMockListFilesMissingThumbnailsParamPtrs{}
+	}
+	mmListFilesMissingThumbnails.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListFilesMissingThumbnails.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmListFilesMissingThumbnails
+}
+
+// ExpectAfterFileUIDParam2 sets up expected param afterFileUID for Repository.ListFilesMissingThumbnails
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) ExpectAfterFileUIDParam2(afterFileUID types.FileUIDType) *mRepositoryMockListFilesMissingThumbnails {
+	if mmListFilesMissingThumbnails.mock.funcListFilesMissingThumbnails != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by Set")
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation == nil {
+		mmListFilesMissingThumbnails.defaultExpectation = &RepositoryMockListFilesMissingThumbnailsExpectation{}
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation.params != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by Expect")
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation.paramPtrs == nil {
+		mmListFilesMissingThumbnails.defaultExpectation.paramPtrs = &RepositoryMockListFilesMissingThumbnailsParamPtrs{}
+	}
+	mmListFilesMissingThumbnails.defaultExpectation.paramPtrs.afterFileUID = &afterFileUID
+	mmListFilesMissingThumbnails.defaultExpectation.expectationOrigins.originAfterFileUID = minimock.CallerInfo(1)
+
+	return mmListFilesMissingThumbnails
+}
+
+// ExpectBatchSizeParam3 sets up expected param batchSize for Repository.ListFilesMissingThumbnails
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) ExpectBatchSizeParam3(batchSize int) *mRepositoryMockListFilesMissingThumbnails {
+	if mmListFilesMissingThumbnails.mock.funcListFilesMissingThumbnails != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by Set")
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation == nil {
+		mmListFilesMissingThumbnails.defaultExpectation = &RepositoryMockListFilesMissingThumbnailsExpectation{}
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation.params != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by Expect")
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation.paramPtrs == nil {
+		mmListFilesMissingThumbnails.defaultExpectation.paramPtrs = &RepositoryMockListFilesMissingThumbnailsParamPtrs{}
+	}
+	mmListFilesMissingThumbnails.defaultExpectation.paramPtrs.batchSize = &batchSize
+	mmListFilesMissingThumbnails.defaultExpectation.expectationOrigins.originBatchSize = minimock.CallerInfo(1)
+
+	return mmListFilesMissingThumbnails
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.ListFilesMissingThumbnails
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) Inspect(f func(ctx context.Context, afterFileUID types.FileUIDType, batchSize int)) *mRepositoryMockListFilesMissingThumbnails {
+	if mmListFilesMissingThumbnails.mock.inspectFuncListFilesMissingThumbnails != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("Inspect function is already set for RepositoryMock.ListFilesMissingThumbnails")
+	}
+
+	mmListFilesMissingThumbnails.mock.inspectFuncListFilesMissingThumbnails = f
+
+	return mmListFilesMissingThumbnails
+}
+
+// Return sets up results that will be returned by Repository.ListFilesMissingThumbnails
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) Return(fa1 []mm_repository.FileMissingThumbnail, err error) *RepositoryMock {
+	if mmListFilesMissingThumbnails.mock.funcListFilesMissingThumbnails != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by Set")
+	}
+
+	if mmListFilesMissingThumbnails.defaultExpectation == nil {
+		mmListFilesMissingThumbnails.defaultExpectation = &RepositoryMockListFilesMissingThumbnailsExpectation{mock: mmListFilesMissingThumbnails.mock}
+	}
+	mmListFilesMissingThumbnails.defaultExpectation.results = &RepositoryMockListFilesMissingThumbnailsResults{fa1, err}
+	mmListFilesMissingThumbnails.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListFilesMissingThumbnails.mock
+}
+
+// Set uses given function f to mock the Repository.ListFilesMissingThumbnails method
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) Set(f func(ctx context.Context, afterFileUID types.FileUIDType, batchSize int) (fa1 []mm_repository.FileMissingThumbnail, err error)) *RepositoryMock {
+	if mmListFilesMissingThumbnails.defaultExpectation != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("Default expectation is already set for the Repository.ListFilesMissingThumbnails method")
+	}
+
+	if len(mmListFilesMissingThumbnails.expectations) > 0 {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("Some expectations are already set for the Repository.ListFilesMissingThumbnails method")
+	}
+
+	mmListFilesMissingThumbnails.mock.funcListFilesMissingThumbnails = f
+	mmListFilesMissingThumbnails.mock.funcListFilesMissingThumbnailsOrigin = minimock.CallerInfo(1)
+	return mmListFilesMissingThumbnails.mock
+}
+
+// When sets expectation for the Repository.ListFilesMissingThumbnails which will trigger the result defined by the following
+// Then helper
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) When(ctx context.Context, afterFileUID types.FileUIDType, batchSize int) *RepositoryMockListFilesMissingThumbnailsExpectation {
+	if mmListFilesMissingThumbnails.mock.funcListFilesMissingThumbnails != nil {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("RepositoryMock.ListFilesMissingThumbnails mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockListFilesMissingThumbnailsExpectation{
+		mock:               mmListFilesMissingThumbnails.mock,
+		params:             &RepositoryMockListFilesMissingThumbnailsParams{ctx, afterFileUID, batchSize},
+		expectationOrigins: RepositoryMockListFilesMissingThumbnailsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmListFilesMissingThumbnails.expectations = append(mmListFilesMissingThumbnails.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.ListFilesMissingThumbnails return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockListFilesMissingThumbnailsExpectation) Then(fa1 []mm_repository.FileMissingThumbnail, err error) *RepositoryMock {
+	e.results = &RepositoryMockListFilesMissingThumbnailsResults{fa1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.ListFilesMissingThumbnails should be invoked
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) Times(n uint64) *mRepositoryMockListFilesMissingThumbnails {
+	if n == 0 {
+		mmListFilesMissingThumbnails.mock.t.Fatalf("Times of RepositoryMock.ListFilesMissingThumbnails mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListFilesMissingThumbnails.expectedInvocations, n)
+	mmListFilesMissingThumbnails.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListFilesMissingThumbnails
+}
+
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) invocationsDone() bool {
+	if len(mmListFilesMissingThumbnails.expectations) == 0 && mmListFilesMissingThumbnails.defaultExpectation == nil && mmListFilesMissingThumbnails.mock.funcListFilesMissingThumbnails == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListFilesMissingThumbnails.mock.afterListFilesMissingThumbnailsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListFilesMissingThumbnails.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListFilesMissingThumbnails implements mm_repository.Repository
+func (mmListFilesMissingThumbnails *RepositoryMock) ListFilesMissingThumbnails(ctx context.Context, afterFileUID types.FileUIDType, batchSize int) (fa1 []mm_repository.FileMissingThumbnail, err error) {
+	mm_atomic.AddUint64(&mmListFilesMissingThumbnails.beforeListFilesMissingThumbnailsCounter, 1)
+	defer mm_atomic.AddUint64(&mmListFilesMissingThumbnails.afterListFilesMissingThumbnailsCounter, 1)
+
+	mmListFilesMissingThumbnails.t.Helper()
+
+	if mmListFilesMissingThumbnails.inspectFuncListFilesMissingThumbnails != nil {
+		mmListFilesMissingThumbnails.inspectFuncListFilesMissingThumbnails(ctx, afterFileUID, batchSize)
+	}
+
+	mm_params := RepositoryMockListFilesMissingThumbnailsParams{ctx, afterFileUID, batchSize}
+
+	// Record call args
+	mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.mutex.Lock()
+	mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.callArgs = append(mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.callArgs, &mm_params)
+	mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.mutex.Unlock()
+
+	for _, e := range mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.fa1, e.results.err
+		}
+	}
+
+	if mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.defaultExpectation.Counter, 1)
+		mm_want := mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.defaultExpectation.params
+		mm_want_ptrs := mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockListFilesMissingThumbnailsParams{ctx, afterFileUID, batchSize}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListFilesMissingThumbnails.t.Errorf("RepositoryMock.ListFilesMissingThumbnails got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.afterFileUID != nil && !minimock.Equal(*mm_want_ptrs.afterFileUID, mm_got.afterFileUID) {
+				mmListFilesMissingThumbnails.t.Errorf("RepositoryMock.ListFilesMissingThumbnails got unexpected parameter afterFileUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.defaultExpectation.expectationOrigins.originAfterFileUID, *mm_want_ptrs.afterFileUID, mm_got.afterFileUID, minimock.Diff(*mm_want_ptrs.afterFileUID, mm_got.afterFileUID))
+			}
+
+			if mm_want_ptrs.batchSize != nil && !minimock.Equal(*mm_want_ptrs.batchSize, mm_got.batchSize) {
+				mmListFilesMissingThumbnails.t.Errorf("RepositoryMock.ListFilesMissingThumbnails got unexpected parameter batchSize, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.defaultExpectation.expectationOrigins.originBatchSize, *mm_want_ptrs.batchSize, mm_got.batchSize, minimock.Diff(*mm_want_ptrs.batchSize, mm_got.batchSize))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListFilesMissingThumbnails.t.Errorf("RepositoryMock.ListFilesMissingThumbnails got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListFilesMissingThumbnails.ListFilesMissingThumbnailsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListFilesMissingThumbnails.t.Fatal("No results are set for the RepositoryMock.ListFilesMissingThumbnails")
+		}
+		return (*mm_results).fa1, (*mm_results).err
+	}
+	if mmListFilesMissingThumbnails.funcListFilesMissingThumbnails != nil {
+		return mmListFilesMissingThumbnails.funcListFilesMissingThumbnails(ctx, afterFileUID, batchSize)
+	}
+	mmListFilesMissingThumbnails.t.Fatalf("Unexpected call to RepositoryMock.ListFilesMissingThumbnails. %v %v %v", ctx, afterFileUID, batchSize)
+	return
+}
+
+// ListFilesMissingThumbnailsAfterCounter returns a count of finished RepositoryMock.ListFilesMissingThumbnails invocations
+func (mmListFilesMissingThumbnails *RepositoryMock) ListFilesMissingThumbnailsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListFilesMissingThumbnails.afterListFilesMissingThumbnailsCounter)
+}
+
+// ListFilesMissingThumbnailsBeforeCounter returns a count of RepositoryMock.ListFilesMissingThumbnails invocations
+func (mmListFilesMissingThumbnails *RepositoryMock) ListFilesMissingThumbnailsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListFilesMissingThumbnails.beforeListFilesMissingThumbnailsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.ListFilesMissingThumbnails.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListFilesMissingThumbnails *mRepositoryMockListFilesMissingThumbnails) Calls() []*RepositoryMockListFilesMissingThumbnailsParams {
+	mmListFilesMissingThumbnails.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockListFilesMissingThumbnailsParams, len(mmListFilesMissingThumbnails.callArgs))
+	copy(argCopy, mmListFilesMissingThumbnails.callArgs)
+
+	mmListFilesMissingThumbnails.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListFilesMissingThumbnailsDone returns true if the count of the ListFilesMissingThumbnails invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockListFilesMissingThumbnailsDone() bool {
+	if m.ListFilesMissingThumbnailsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ListFilesMissingThumbnailsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListFilesMissingThumbnailsMock.invocationsDone()
+}
+
+// MinimockListFilesMissingThumbnailsInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockListFilesMissingThumbnailsInspect() {
+	for _, e := range m.ListFilesMissingThumbnailsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.ListFilesMissingThumbnails at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterListFilesMissingThumbnailsCounter := mm_atomic.LoadUint64(&m.afterListFilesMissingThumbnailsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListFilesMissingThumbnailsMock.defaultExpectation != nil && afterListFilesMissingThumbnailsCounter < 1 {
+		if m.ListFilesMissingThumbnailsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.ListFilesMissingThumbnails at\n%s", m.ListFilesMissingThumbnailsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.ListFilesMissingThumbnails at\n%s with params: %#v", m.ListFilesMissingThumbnailsMock.defaultExpectation.expectationOrigins.origin, *m.ListFilesMissingThumbnailsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListFilesMissingThumbnails != nil && afterListFilesMissingThumbnailsCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.ListFilesMissingThumbnails at\n%s", m.funcListFilesMissingThumbnailsOrigin)
+	}
+
+	if !m.ListFilesMissingThumbnailsMock.invocationsDone() && afterListFilesMissingThumbnailsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.ListFilesMissingThumbnails at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListFilesMissingThumbnailsMock.expectedInvocations), m.ListFilesMissingThumbnailsMock.expectedInvocationsOrigin, afterListFilesMissingThumbnailsCounter)
 	}
 }
 
@@ -55103,6 +55839,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockHardDeleteTextChunksByKBUIDInspect()
 
+			m.MinimockHardDeleteTextChunksByUIDsInspect()
+
 			m.MinimockIncreaseKnowledgeBaseUsageInspect()
 
 			m.MinimockInsertVectorsInCollectionInspect()
@@ -55120,6 +55858,8 @@ func (m *RepositoryMock) MinimockFinish() {
 			m.MinimockListEmbeddingsByKBFileUIDInspect()
 
 			m.MinimockListFilesInspect()
+
+			m.MinimockListFilesMissingThumbnailsInspect()
 
 			m.MinimockListKnowledgeBaseFilesAdminInspect()
 
@@ -55324,6 +56064,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockHardDeleteKnowledgeBaseDone() &&
 		m.MinimockHardDeleteTextChunksByKBFileUIDDone() &&
 		m.MinimockHardDeleteTextChunksByKBUIDDone() &&
+		m.MinimockHardDeleteTextChunksByUIDsDone() &&
 		m.MinimockIncreaseKnowledgeBaseUsageDone() &&
 		m.MinimockInsertVectorsInCollectionDone() &&
 		m.MinimockIsCollectionInUseDone() &&
@@ -55333,6 +56074,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockListAllObjectsDone() &&
 		m.MinimockListEmbeddingsByKBFileUIDDone() &&
 		m.MinimockListFilesDone() &&
+		m.MinimockListFilesMissingThumbnailsDone() &&
 		m.MinimockListKnowledgeBaseFilesAdminDone() &&
 		m.MinimockListKnowledgeBasesDone() &&
 		m.MinimockListKnowledgeBasesByTypeDone() &&

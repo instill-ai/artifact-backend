@@ -474,6 +474,14 @@ func TestDeleteOldConvertedFilesActivity_ConvertedFileWithChunks(t *testing.T) {
 		{UID: chunk2UID, StoragePath: dbChunkPaths[1]},
 		{UID: chunk3UID, StoragePath: dbChunkPaths[2]},
 	}, nil)
+	// New contract (ARTIFACT-INV-CHUNK-INTEGRITY): chunk DB rows are deleted
+	// BEFORE their MinIO blobs so a mid-activity crash can only leak orphan
+	// blobs, never orphan rows.
+	var hardDeletedUIDs []types.ChunkUIDType
+	mockRepository.HardDeleteTextChunksByUIDsMock.Set(func(_ context.Context, uids []types.ChunkUIDType) error {
+		hardDeletedUIDs = append(hardDeletedUIDs, uids...)
+		return nil
+	})
 	mockRepository.GetMinIOStorageMock.Return(mockStorage)
 	mockRepository.DeleteConvertedFileMock.Return(nil)
 
@@ -488,4 +496,8 @@ func TestDeleteOldConvertedFilesActivity_ConvertedFileWithChunks(t *testing.T) {
 
 	// 3 DB chunk blobs + 1 converted file blob = 4 total deletes
 	c.Assert(deleteCount.Load(), qt.Equals, int64(4))
+
+	// Chunk DB rows must be deleted up-front, in one call, covering every
+	// chunk associated with the old converted_file.
+	c.Assert(hardDeletedUIDs, qt.HasLen, 3)
 }

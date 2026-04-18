@@ -790,12 +790,29 @@ func (w *Worker) CleanupFile(ctx context.Context, fileUID types.FileUIDType, use
 
 // ===== MinIO Batch Activities =====
 
-// FileContent represents file content with metadata
+// FileContent represents file content with metadata.
+//
+// GetFilesBatchActivity follows "collect-all" semantics: one entry is always
+// returned per input path, aligned by index. If the fetch for a given path
+// failed, Content is nil/empty and Error carries a short description. Callers
+// that need per-path failure inspection should read Error; those that need
+// content must check for `len(Content) > 0` before dereferencing.
 type FileContent struct {
 	Index   int
 	Name    string
 	Content []byte
+	Error   string // Non-empty when the per-path fetch failed; Content is nil in that case.
 }
+
+// GetFilesBatch tuning. Bounded concurrency prevents us from fanning out
+// hundreds of simultaneous MinIO connections for a single search result set,
+// which in turn prevents head-of-line-blocking when a single path is slow.
+// PerFileTimeout isolates a slow/stuck object fetch so it cannot cancel its
+// siblings.
+const (
+	GetFilesBatchMaxConcurrency = 16
+	GetFilesBatchPerFileTimeout = 30 * time.Second
+)
 
 // DeleteFilesBatchActivityParam defines parameters for deleting multiple files
 type DeleteFilesBatchActivityParam struct {
@@ -858,8 +875,21 @@ type GetFilesBatchActivityResult struct {
 	Files []FileContent // Retrieved files in order
 }
 
-// GetFilesBatchActivity retrieves multiple files from MinIO in parallel using goroutines
-// This is more efficient than using a workflow for simple parallel I/O operations
+// GetFilesBatchActivity retrieves multiple files from MinIO in parallel with
+// bounded concurrency, a per-file timeout, and "collect-all" semantics.
+//
+// Historical behavior was "fail-fast": the first failed fetch aborted the
+// batch, which canceled the parent context and surfaced as a string of
+// `context canceled` errors for the remaining (in-flight) fetches. That was
+// fine for pipeline activities that must run atomically, but it makes the
+// global search user-hostile: if *any* chunk blob is missing or slow, the
+// entire search returns an internal error (see SearchChunks handler).
+//
+// New contract: we always return one FileContent per input path, aligned by
+// index. Per-path failures are reported via FileContent.Error; callers that
+// can tolerate partial loss (e.g. SearchChunks) simply skip empty entries.
+// The activity itself only returns an error for conditions that prevent *any*
+// fetch from succeeding (auth failure, parent context cancellation).
 func (w *Worker) GetFilesBatchActivity(ctx context.Context, param *GetFilesBatchActivityParam) (*GetFilesBatchActivityResult, error) {
 	w.log.Info("Starting GetFilesBatchActivity",
 		zap.String("bucket", param.Bucket),
@@ -869,7 +899,6 @@ func (w *Worker) GetFilesBatchActivity(ctx context.Context, param *GetFilesBatch
 		return &GetFilesBatchActivityResult{Files: []FileContent{}}, nil
 	}
 
-	// Create authenticated context if metadata provided
 	authCtx := ctx
 	if param.Metadata != nil {
 		var err error
@@ -880,41 +909,63 @@ func (w *Worker) GetFilesBatchActivity(ctx context.Context, param *GetFilesBatch
 		}
 	}
 
-	// Use buffered channel to collect results
-	type result struct {
-		index   int
-		content []byte
-		err     error
-	}
-	resultChan := make(chan result, len(param.FilePaths))
+	results := make([]FileContent, len(param.FilePaths))
+	sem := make(chan struct{}, GetFilesBatchMaxConcurrency)
+	var wg sync.WaitGroup
 
-	// Get files in parallel using goroutines
 	for i, filePath := range param.FilePaths {
-		i := i // Capture loop variable
+		i := i
 		filePath := filePath
+		wg.Add(1)
+		sem <- struct{}{}
 		go func() {
-			content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, filePath)
-			resultChan <- result{index: i, content: content, err: err}
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			// Per-file timeout so one slow/stuck object cannot hold the batch
+			// past the activity timeout. We derive from authCtx so cancellation
+			// of the activity still propagates.
+			fetchCtx, cancel := context.WithTimeout(authCtx, GetFilesBatchPerFileTimeout)
+			defer cancel()
+
+			content, err := w.repository.GetMinIOStorage().GetFile(fetchCtx, param.Bucket, filePath)
+			name := filepath.Base(filePath)
+			if err != nil {
+				results[i] = FileContent{
+					Index: i,
+					Name:  name,
+					Error: err.Error(),
+				}
+				return
+			}
+			results[i] = FileContent{
+				Index:   i,
+				Name:    name,
+				Content: content,
+			}
 		}()
 	}
 
-	// Collect results and check for errors
-	results := make([]FileContent, len(param.FilePaths))
-	for i := 0; i < len(param.FilePaths); i++ {
-		res := <-resultChan
-		if res.err != nil {
-			err := errorsx.AddMessage(res.err, fmt.Sprintf("Failed to retrieve file: %s. Please try again.", param.FilePaths[res.index]))
-			return nil, activityError(err, "GetFilesBatchActivity")
-		}
-		results[res.index] = FileContent{
-			Index:   res.index,
-			Name:    filepath.Base(param.FilePaths[res.index]),
-			Content: res.content,
+	wg.Wait()
+
+	// Summarize partial failures. We deliberately do NOT return an error here
+	// so callers can choose their own tolerance policy. See SearchChunks in
+	// pkg/handler/chunk.go for a consumer that skips empty entries.
+	var failed int
+	for _, r := range results {
+		if r.Error != "" {
+			failed++
 		}
 	}
-
-	w.log.Info("GetFilesBatchActivity completed successfully",
-		zap.Int("filesRetrieved", len(results)))
+	if failed > 0 {
+		w.log.Warn("GetFilesBatchActivity: some files failed to fetch",
+			zap.Int("failed", failed),
+			zap.Int("total", len(param.FilePaths)),
+			zap.String("bucket", param.Bucket))
+	} else {
+		w.log.Info("GetFilesBatchActivity completed successfully",
+			zap.Int("filesRetrieved", len(results)))
+	}
 
 	return &GetFilesBatchActivityResult{Files: results}, nil
 }

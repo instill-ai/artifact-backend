@@ -15,6 +15,7 @@ import (
 
 	"go.einride.tech/aip/filtering"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -1035,6 +1036,97 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 		files = append(files, file)
 	}
 
+	// When the caller requested an explicit view (SUMMARY / CONTENT /
+	// STANDARD_FILE_TYPE / ORIGINAL_FILE_TYPE / PATCH / CACHE), resolve each
+	// row's `derived_resource_uri` in parallel. This subsumes the
+	// per-card `GetFile(view=…)` fan-out the Files page used to perform
+	// client-side — see `files-card-preview-optimization` plan Phase 2b.
+	// Failures are non-fatal: a row whose presign fails simply surfaces
+	// with an empty `derived_resource_uri`, matching the single-file
+	// `GetFile` contract.
+	//
+	// Bounded concurrency keeps MinIO/GCS request pressure predictable
+	// regardless of page_size (max 100 per request), and errgroup
+	// propagates context cancellation to every in-flight presign.
+	if view := req.GetView(); view != artifactpb.File_VIEW_UNSPECIFIED &&
+		view != artifactpb.File_VIEW_BASIC &&
+		view != artifactpb.File_VIEW_FULL &&
+		len(files) > 0 {
+		const presignFanoutConcurrency = 16
+		storageProvider := artifactpb.File_STORAGE_PROVIDER_UNSPECIFIED
+		sem := make(chan struct{}, presignFanoutConcurrency)
+		g, gCtx := errgroup.WithContext(ctx)
+		for i := range files {
+			i := i
+			kbFileModel := kbFileList.Files[i]
+			g.Go(func() error {
+				select {
+				case sem <- struct{}{}:
+				case <-gCtx.Done():
+					return gCtx.Err()
+				}
+				defer func() { <-sem }()
+
+				// Resolve per-file KB when the list wasn't scoped to one KB.
+				// When kb is already set (kbID != ""), reuse it to avoid a
+				// superfluous DB round trip per row.
+				var rowKB *repository.KnowledgeBaseModel
+				var rowKBUIDs []types.KBUIDType
+				if kb != nil {
+					rowKB = kb
+					rowKBUIDs = []types.KBUIDType{kb.UID}
+				} else {
+					uids, uErr := ph.service.Repository().GetKnowledgeBaseUIDsForFile(gCtx, kbFileModel.UID)
+					if uErr != nil || len(uids) == 0 {
+						logger.Warn("failed to resolve KB UIDs for list-files view fan-out",
+							zap.Error(uErr),
+							zap.String("fileUID", kbFileModel.UID.String()))
+						return nil
+					}
+					kbRef, kbErr := ph.service.Repository().GetKnowledgeBaseByUID(gCtx, uids[0])
+					if kbErr != nil {
+						logger.Warn("failed to resolve KB for list-files view fan-out",
+							zap.Error(kbErr),
+							zap.String("fileUID", kbFileModel.UID.String()))
+						return nil
+					}
+					rowKB = kbRef
+					rowKBUIDs = uids
+				}
+
+				uri, rErr := ph.resolveDerivedResourceURI(gCtx, &kbFileModel, rowKB, ns, rowKBUIDs, view, storageProvider)
+				if rErr != nil {
+					// Fatal only for GCS-explicit path (not our default) or
+					// invalid-argument cache creation. Either way log and
+					// continue — ListFiles must not fail the whole page
+					// because one row's presign had a hiccup.
+					logger.Warn("failed to resolve derived_resource_uri for list-files view fan-out",
+						zap.Error(rErr),
+						zap.String("fileUID", kbFileModel.UID.String()))
+					return nil
+				}
+				if uri != nil {
+					files[i].DerivedResourceUri = uri
+				}
+
+				// Populate thumbnail_uri in the same fan-out pass. A missing
+				// row (file uploaded before the thumbnail activity shipped,
+				// or still being processed) just leaves the field empty —
+				// the frontend fallback chain (thumbnail → derived → mime
+				// icon) keeps the tile usable.
+				if thumbURI := ph.resolveThumbnailURI(gCtx, &kbFileModel); thumbURI != nil {
+					files[i].ThumbnailUri = thumbURI
+				}
+				return nil
+			})
+		}
+		// Errors are already downgraded to warnings inside workers;
+		// errgroup.Wait only returns a non-nil error if a worker
+		// propagated ctx cancellation. In that case the caller's ctx is
+		// gone and we have nothing meaningful to return.
+		_ = g.Wait()
+	}
+
 	return &artifactpb.ListFilesResponse{
 		Files:         files,
 		TotalSize:     int32(kbFileList.TotalCount),
@@ -1078,7 +1170,6 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 	file := files.Files[0]
 
 	// Handle view-specific content
-	var derivedResourceURI *string
 	view := req.GetView()
 
 	// For VIEW_BASIC and VIEW_FULL, only return metadata (no derived content)
@@ -1118,8 +1209,122 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 		return &artifactpb.GetFileResponse{File: file}, nil
 	}
 
-	// Check which storage provider is requested
-	storageProvider := req.GetStorageProvider()
+	derivedResourceURI, err := ph.resolveDerivedResourceURI(ctx, &kbFile, kb, ns, kbUIDs, view, req.GetStorageProvider())
+	if err != nil {
+		return nil, err
+	}
+
+	// Always attempt to resolve the thumbnail — it is independent of the
+	// requested view. When no thumbnail row exists (eg. audio/PDF/document
+	// types, or files uploaded before the thumbnail rollout) the helper
+	// returns nil and the frontend falls back to the derived URL or the
+	// mime icon. See `C-INV-21`.
+	if thumbURI := ph.resolveThumbnailURI(ctx, &kbFile); thumbURI != nil {
+		file.ThumbnailUri = thumbURI
+	}
+
+	return &artifactpb.GetFileResponse{
+		File:               file,
+		DerivedResourceUri: derivedResourceURI,
+	}, nil
+}
+
+// resolveThumbnailURI returns the `/v1alpha/blob-urls/...` encoded presigned
+// URL for the `CONVERTED_FILE_TYPE_THUMBNAIL` row belonging to `kbFile`, or
+// nil if no thumbnail exists yet. Contract:
+//
+//   - Independent of `view`: thumbnails are identical regardless of which
+//     file view was requested, so we can populate them cheaply alongside the
+//     existing `derived_resource_uri` fan-out.
+//   - Non-fatal: every failure (DB miss, presign error, encoding error)
+//     downgrades to a Warn-level log and a nil return. The Files page's
+//     fallback chain thumbnail → derived → mime icon is designed around
+//     this.
+//   - Cacheable: the returned URL is a standard Instill Core blob URL that
+//     the API gateway proxies to MinIO. Phase 4 adds a Cloudflare cache
+//     rule keyed on the encoded path so the same preview is served from
+//     edge PoPs across users.
+//
+// See `artifact-backend/AGENTS.md` → `ARTIFACT-INV-THUMBNAIL-NON-BLOCKING`.
+func (ph *PublicHandler) resolveThumbnailURI(
+	ctx context.Context,
+	kbFile *repository.FileModel,
+) *string {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	convertedFile, err := ph.service.Repository().GetConvertedFileByFileUIDAndType(
+		ctx,
+		kbFile.UID,
+		artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_THUMBNAIL,
+	)
+	if err != nil || convertedFile == nil {
+		// Missing rows are the common case (audio/PDF/pre-rollout files).
+		// We stay at Debug to avoid log noise on every ListFiles page.
+		return nil
+	}
+
+	minioURL, err := ph.service.Repository().GetMinIOStorage().GetPresignedURLForDownload(
+		ctx,
+		config.Config.Minio.BucketName,
+		convertedFile.StoragePath,
+		fmt.Sprintf("%s-thumbnail.webp", kbFile.DisplayName),
+		"image/webp",
+		15*time.Minute,
+	)
+	if err != nil {
+		logger.Warn("failed to presign thumbnail", zap.Error(err),
+			zap.String("fileUID", kbFile.UID.String()))
+		return nil
+	}
+
+	gatewayURL, err := service.EncodeBlobURL(minioURL)
+	if err != nil {
+		logger.Warn("failed to encode thumbnail blob URL", zap.Error(err),
+			zap.String("fileUID", kbFile.UID.String()))
+		return nil
+	}
+	return &gatewayURL
+}
+
+// resolveDerivedResourceURI computes the per-file `derived_resource_uri` for a
+// given view + storage provider. Shared by the single-file `GetFile` path and
+// the parallel fan-out performed by `ListFiles` when
+// `ListFilesRequest.view` is set.
+//
+// Contract:
+//   - Returns `(nil, nil)` for VIEW_BASIC / VIEW_FULL / VIEW_UNSPECIFIED (no
+//     derived content is applicable).
+//   - For content-bearing views (SUMMARY, CONTENT, STANDARD_FILE_TYPE,
+//     ORIGINAL_FILE_TYPE, PATCH, CACHE), resolves either a MinIO presigned URL
+//     (default), a GCS signed URL, or a Gemini cache resource name depending
+//     on `storageProvider` and view.
+//   - When the requested derived content isn't available yet (e.g. summary
+//     missing while the file is still processing, no thumbnail row), returns
+//     `(nil, nil)` and logs at Info/Warn. Callers then leave the field empty.
+//   - Returns a non-nil error only when GCS storage was explicitly requested
+//     and its fetch/upload fails, or when the cache creation path returns an
+//     `errorsx.ErrInvalidArgument` (unsupported file type). All other errors
+//     are downgraded to warnings.
+//
+// Used by:
+//   - `PublicHandler.GetFile`
+//   - `PublicHandler.ListFiles` (per-row fan-out under `errgroup`)
+func (ph *PublicHandler) resolveDerivedResourceURI(
+	ctx context.Context,
+	kbFile *repository.FileModel,
+	kb *repository.KnowledgeBaseModel,
+	ns *resource.Namespace,
+	kbUIDs []types.KBUIDType,
+	view artifactpb.File_View,
+	storageProvider artifactpb.File_StorageProvider,
+) (*string, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	if view == artifactpb.File_VIEW_BASIC || view == artifactpb.File_VIEW_FULL || view == artifactpb.File_VIEW_UNSPECIFIED {
+		return nil, nil
+	}
+
+	var derivedResourceURI *string
 	useGCSStorage := storageProvider == artifactpb.File_STORAGE_PROVIDER_GCS
 
 	// Helper function to get file URL (MinIO or GCS)
@@ -1345,7 +1550,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 					zap.String("fileUID", kbFile.UID.String()),
 					zap.String("processStatus", kbFile.ProcessStatus))
 
-				if err := ph.triggerFileReprocessing(ctx, kbFile, kb, ns); err != nil {
+				if err := ph.triggerFileReprocessing(ctx, *kbFile, kb, ns); err != nil {
 					logger.Warn("Failed to trigger automatic reprocessing",
 						zap.Error(err),
 						zap.String("fileUID", kbFile.UID.String()))
@@ -1397,7 +1602,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 					zap.String("fileUID", kbFile.UID.String()),
 					zap.String("processStatus", kbFile.ProcessStatus))
 
-				if err := ph.triggerFileReprocessing(ctx, kbFile, kb, ns); err != nil {
+				if err := ph.triggerFileReprocessing(ctx, *kbFile, kb, ns); err != nil {
 					logger.Warn("Failed to trigger automatic reprocessing",
 						zap.Error(err),
 						zap.String("fileUID", kbFile.UID.String()))
@@ -1624,10 +1829,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 
 	}
 
-	return &artifactpb.GetFileResponse{
-		File:               file,
-		DerivedResourceUri: derivedResourceURI,
-	}, nil
+	return derivedResourceURI, nil
 }
 
 // DeleteFile deletes a file (AIP-compliant).
