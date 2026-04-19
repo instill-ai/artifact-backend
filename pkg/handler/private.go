@@ -990,10 +990,6 @@ func (h *PrivateHandler) GetDefaultSystemAdmin(ctx context.Context, req *artifac
 func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.ListFilesAdminRequest) (*artifactpb.ListFilesAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	logger.Info("ListFilesAdmin called",
-		zap.String("parent", req.GetParent()),
-		zap.String("filter", req.GetFilter()))
-
 	// Resolve namespace from parent to inject admin metadata.
 	// The public ListFiles handler requires a user UID in context and performs
 	// namespace permission checks. For admin endpoints we inject the namespace

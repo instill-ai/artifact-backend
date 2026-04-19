@@ -2300,7 +2300,16 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 			// workflow to orchestrate per-batch chunked conversion instead of retrying
 			// the monolithic activity. Return as a result flag (not an error) so
 			// Temporal's retry policy only fires for true infrastructure errors.
-			if contentInMarkdown == "" && conversionErr != nil && isTransientError(conversionErr) {
+			//
+			// Only signal chunked conversion when a Gemini cache is actually
+			// available — per-batch conversion is implemented on top of cached
+			// content and fails immediately otherwise. When no cache exists
+			// (e.g. non-Gemini model, file too small for the 1024-token cache
+			// minimum, cache creation error), fall through to the transient-error
+			// return path below so Temporal retries the single-shot activity
+			// directly. This prevents "batch conversion requested but no cache
+			// available" workflow failures on quota blips for small documents.
+			if contentInMarkdown == "" && conversionErr != nil && isTransientError(conversionErr) && param.CacheName != "" {
 				logger.Info("Single-shot conversions failed with transient error, signaling workflow for per-batch chunked conversion",
 					zap.Error(conversionErr))
 				return &ProcessContentActivityResult{
