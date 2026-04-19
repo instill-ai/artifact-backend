@@ -211,6 +211,32 @@ the EE-side authoring conventions.
     frontend just falls back to `derived_resource_uri` for legacy
     rows.
 
+- **ARTIFACT-INV-CE-DOCS-SELF-CONTAINED.** Files under `docs/` in this
+  repo are CE engineering documentation and MUST NOT reference
+  EE-only repos (`artifact-backend-ee`, `agent-backend-ee`,
+  `console-ee`, etc.), EE-only surfaces (Cloudflare, the EE API
+  gateway, the EE console's global search modal, billing / credit
+  flows), or EE-only operational artifacts (runbooks, commander EE
+  flags, EE-only integration tests). CE docs should describe CE
+  behaviour and link only to CE-internal paths; downstream
+  forwarding, FGA filtering, Cloudflare cache rules, and other
+  EE-specific concerns belong in `artifact-backend-ee/docs/`. This
+  file (`AGENTS.md`) is exempt because it is the cross-repo contract
+  layer — CE↔EE worker registration parity, the k6 integration-test
+  contract, and the "which tests live where" mapping inherently
+  mention EE paths — but prose docs under `docs/` must stay
+  self-contained. Regression check:
+  `rg -n '(-ee|/ee|enterprise| EE |\bEE\b)' -g '!AGENTS.md' docs/`
+  in this repo MUST return no matches (case-insensitive matches on
+  common English words like "sheet", "See", "speed", "feedback" are
+  fine; only real EE references count). Acceptance artifacts,
+  operational follow-ups, and EE-only integration-test naming all
+  live in `artifact-backend-ee/docs/` — e.g. the Phase 4 follow-up
+  notes moved to
+  `artifact-backend-ee/docs/files-card-preview-optimization-followups.md`,
+  and the backfill runbook lives at
+  `artifact-backend-ee/docs/runbook-backfill-thumbnails.md`.
+
 ## Working here
 
 - Always `cd` into this repo before running `go`, `make`, or `git`.

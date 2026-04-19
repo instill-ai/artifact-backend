@@ -255,3 +255,32 @@ exercise the view fan-out end-to-end and assert that
 video rows while remaining absent for non-thumbnailable types (see
 `ARTIFACT-INV-LIST-VIEW-FANOUT` and
 `ARTIFACT-INV-THUMBNAIL-NON-BLOCKING` in `AGENTS.md`).
+
+> **`view` propagation gotcha (Phase 2b regression, fixed April 2026):**
+> The `view` query parameter must survive *every* hop from the browser to
+> this handler for Phase 2b fan-out to trigger. We've been bitten once by
+> Krakend's `input_query_strings` allow-list in `api-gateway-ee` being
+> stale (the rendered `krakend.json` shipped without `"view"` on
+> `GET /v1alpha/namespaces/{namespace_id}/files`, even though
+> `endpoints.json` had it), which silently dropped the param at the edge
+> and caused the Files page to render as if every row were a
+> non-standardizable type. The contract is:
+>
+> 1. `api-gateway-ee` must re-render `krakend.json` from `endpoints.json`
+>    whenever the allow-list for list endpoints changes — restart the
+>    gateway (`commander restart api-gateway --env ee`) after editing
+>    `config/settings-env/endpoints.json`.
+> 2. `agent-backend-ee/pkg/handler/file.go` `ListFiles` MUST forward
+>    `req.View` (including the unset sentinel) to
+>    `ListKnowledgeBaseFilesWithPagination`, which in turn passes it to
+>    `ListFilesAdmin` verbatim — never zero it out in the translation
+>    layer.
+> 3. The CE regression test
+>    `integration-test/rest-file-type.js` (in the per-type group) and the
+>    EE regression in
+>    `agent-backend-ee/integration-test/rest-file.js` (the
+>    "File Processing Sanity: PDF file" group) both call
+>    `ListFiles(view=VIEW_STANDARD_FILE_TYPE)` and assert that
+>    `derivedResourceUri` is non-empty for the standardizable row — this
+>    is the canary that catches a dropped `view` at either the Krakend
+>    hop or the grpc-gateway/client translation hop.
