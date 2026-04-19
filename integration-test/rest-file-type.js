@@ -924,5 +924,50 @@ function runFileTest(data, opts) {
     check(listChunksRes, {
       [`GET /v1alpha/namespaces/{namespace_id}/files/{file_id}/chunks 200 (${testLabel})`]: (r) => r.status === 200,
     });
+
+    // Phase 2b: ListFiles with a content view MUST fan-out per-row presigns so
+    // the Files page can render cards without N+1 GetFile storms. The
+    // view=STANDARD_FILE_TYPE query param must survive the CE ListFiles public
+    // handler (which is the single source of truth for the fan-out contract —
+    // all EE callers delegate to this handler via ListFilesAdmin). See
+    // pdf-preview-intermittent-fix plan.
+    const listBase = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${knowledgeBaseId}/files`;
+    const listNoViewRes = http.request("GET", `${listBase}?pageSize=200`, null, data.header);
+    logUnexpected(listNoViewRes, 'GET /v1alpha/namespaces/{ns}/knowledge-bases/{kb}/files (no view)');
+    let listNoViewJson; try { listNoViewJson = listNoViewRes.json(); } catch (e) { listNoViewJson = {}; }
+    check(listNoViewRes, {
+      [`ListFiles no-view 200 (${testLabel})`]: (r) => r.status === 200,
+      [`ListFiles no-view leaves derivedResourceUri empty for this row (${testLabel})`]: () => {
+        const row = (listNoViewJson.files || []).find((f) => f.id === fileId);
+        if (!row) return false;
+        return !row.derivedResourceUri;
+      },
+    });
+
+    if (isStandardizable) {
+      const listStandardRes = http.request("GET", `${listBase}?pageSize=200&view=VIEW_STANDARD_FILE_TYPE`, null, data.header);
+      logUnexpected(listStandardRes, 'GET /v1alpha/namespaces/{ns}/knowledge-bases/{kb}/files?view=VIEW_STANDARD_FILE_TYPE');
+      let listStandardJson; try { listStandardJson = listStandardRes.json(); } catch (e) { listStandardJson = {}; }
+      check(listStandardRes, {
+        [`ListFiles view=STANDARD 200 (${testLabel})`]: (r) => r.status === 200,
+        [`ListFiles view=STANDARD populates derivedResourceUri for standardizable row (${testLabel})`]: () => {
+          const row = (listStandardJson.files || []).find((f) => f.id === fileId);
+          if (!row) return false;
+          return typeof row.derivedResourceUri === "string" && row.derivedResourceUri.length > 0;
+        },
+      });
+    }
+
+    const listOriginalRes = http.request("GET", `${listBase}?pageSize=200&view=VIEW_ORIGINAL_FILE_TYPE`, null, data.header);
+    logUnexpected(listOriginalRes, 'GET /v1alpha/namespaces/{ns}/knowledge-bases/{kb}/files?view=VIEW_ORIGINAL_FILE_TYPE');
+    let listOriginalJson; try { listOriginalJson = listOriginalRes.json(); } catch (e) { listOriginalJson = {}; }
+    check(listOriginalRes, {
+      [`ListFiles view=ORIGINAL 200 (${testLabel})`]: (r) => r.status === 200,
+      [`ListFiles view=ORIGINAL populates derivedResourceUri for every row (${testLabel})`]: () => {
+        const row = (listOriginalJson.files || []).find((f) => f.id === fileId);
+        if (!row) return false;
+        return typeof row.derivedResourceUri === "string" && row.derivedResourceUri.length > 0;
+      },
+    });
   });
 }
