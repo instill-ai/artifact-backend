@@ -209,6 +209,36 @@ graph TB
 3. artifact-backend triggers Temporal workflow for async cleanup
 4. Worker cleans up all resources (MinIO files, Milvus embeddings, DB records)
 
+### Range / partial-content support
+
+`/v1alpha/blob-urls/...` is a transparent byte-proxy to MinIO, so HTTP
+`Range` and conditional-request semantics flow end-to-end:
+
+- The api-gateway `blob` plugin forwards `Range`, `If-Range`,
+  `If-None-Match`, and `If-Modified-Since` onto the upstream MinIO
+  request. MinIO answers `206 Partial Content` with a valid
+  `Content-Range` for byte-range requests and `304 Not Modified` for
+  matching validators.
+- The 24 h `Cache-Control: public, max-age=86400` directive added in
+  object-ID mode is scoped to `200 OK` responses only. `206` and `304`
+  responses intentionally do **not** receive that directive: a partial
+  body must never be cached as if it were the whole object, and `304`
+  already relies on the validator attached to the original `200`.
+
+Consequences for consumers:
+
+- Browser `<video>` / `<audio>` elements seeking via `fastSeek()` issue
+  `Range` requests; a multi-hundred-MB citation video jumps to the
+  requested offset without re-streaming the whole object.
+- HTTP caches (browser, Cloudflare) can revalidate long-lived
+  `derivedResourceUri` responses cheaply via `If-None-Match`.
+
+This contract is guarded by `api-gateway/plugins/blob/main_test.go`
+(invariant `BLOB-INV-RANGE` — see `api-gateway/AGENTS.md`) and by
+`artifact-backend-ee/integration-test/standalone-blob-range.js`, which
+uploads a small MP4 and asserts the protocol end-to-end through the live
+gateway.
+
 ## Security Considerations
 
 - **Presigned URLs have expiration** - Default 1-7 days, configurable per request
