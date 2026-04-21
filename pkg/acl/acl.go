@@ -128,8 +128,23 @@ func (c *ACLClient) GetOwner(ctx context.Context, objectType string, objectUID u
 }
 
 // Legacy alias for backward compatibility.
+//
+// The upstream `x.ACLClient.ListPermissions` signature was split into two
+// functions in x@v0.10.1-alpha.0.20260420155055 (PR instill-ai/x#89):
+//   - `ListPermissions(ctx, objectType, role)` - permissions for the
+//     authenticated requester resolved from ctx headers.
+//   - `ListPublicPermissions(ctx, objectType, role)` - permissions granted
+//     to the `user:*` wildcard (public collections).
+//
+// This wrapper preserves the old 4-argument signature so existing callers in
+// both artifact-backend and artifact-backend-ee keep compiling, and dispatches
+// to the correct new function based on `isPublic`. New callers should prefer
+// invoking the x client methods directly.
 func (c *ACLClient) ListPermissions(ctx context.Context, objectType string, role string, isPublic bool) ([]uuid.UUID, error) {
-	return c.ACLClient.ListPermissions(ctx, objectType, role, isPublic)
+	if isPublic {
+		return c.ListPublicPermissions(ctx, objectType, role)
+	}
+	return c.ACLClient.ListPermissions(ctx, objectType, role)
 }
 
 // FormatOwnerPermissionsPrefix returns a helper for owner permission formatting.
