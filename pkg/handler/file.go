@@ -1218,7 +1218,7 @@ func (ph *PublicHandler) GetFile(ctx context.Context, req *artifactpb.GetFileReq
 	// requested view. When no thumbnail row exists (eg. audio/PDF/document
 	// types, or files uploaded before the thumbnail rollout) the helper
 	// returns nil and the frontend falls back to the derived URL or the
-	// mime icon. See `C-INV-21`.
+	// mime icon. See `C-INV-24`.
 	if thumbURI := ph.resolveThumbnailURI(ctx, &kbFile); thumbURI != nil {
 		file.ThumbnailUri = thumbURI
 	}

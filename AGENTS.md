@@ -144,7 +144,7 @@ the EE-side authoring conventions.
   retries never create duplicate MinIO objects. Only image and video
   types render; PDF/document/audio/text short-circuit as
   `Skipped=true` so the frontend's mime-icon fallback stays the
-  authoritative path (see console-ee `C-INV-21`). Callers populating
+  authoritative path (see console-ee `C-INV-24`). Callers populating
   `File.thumbnail_uri` MUST resolve the converted row through the same
   `GetConvertedFileByFileUIDAndType` lookup and render the stable
   `/v1alpha/blob-urls/{object_uid}` URL — never a per-row presign — so
@@ -161,7 +161,7 @@ the EE-side authoring conventions.
   failure modes (missing row, presign error, encoding error) are
   non-fatal and return `nil`, because the frontend Files card preview
   owns a graceful fallback chain: `thumbnail_uri` →
-  `derived_resource_uri` → mime icon (see console-ee `C-INV-21`).
+  `derived_resource_uri` → mime icon (see console-ee `C-INV-24`).
   Resolution is independent of the requested `view`, so callers MUST
   attempt it on every `GetFile` response — not just when a content-
   bearing view was asked for. The 15-minute TTL matches the

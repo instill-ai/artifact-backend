@@ -856,7 +856,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			// We intentionally do NOT `.Get()` the future: a failure to
 			// produce a preview must never fail the ingestion workflow, and
 			// the Files page already falls back to `derived_resource_uri`
-			// and then to the MIME icon (see C-INV-19 /
+			// and then to the MIME icon (see C-INV-22 /
 			// `FileCardPreview`). We cap retries at 3 to bound cost and use
 			// a short timeout because ffmpeg resizing a single frame is
 			// bounded by the input file size we already validated.
