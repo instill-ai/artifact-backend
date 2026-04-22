@@ -1,20 +1,23 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-	"bytes"
+	"unicode/utf8"
 
 	"github.com/gofrs/uuid"
+	"github.com/lib/pq"
 	"github.com/xuri/excelize/v2"
 	"go.uber.org/zap"
 	"google.golang.org/genai"
@@ -104,7 +107,29 @@ const (
 	standardizeFileTypeActivityError            = "StandardizeFileTypeActivity"
 	processContentActivityError                 = "ProcessContentActivity"
 	processSummaryActivityError                 = "ProcessSummaryActivity"
+	getMediaDurationActivityError               = "GetMediaDurationActivity"
 )
+
+// mediaDurationUnprobableErrorType is the Temporal ApplicationError type set
+// on GetMediaDurationActivity failures that are intrinsic to the file content
+// (all of video/audio/format ffprobe queries returned N/A or empty), as opposed
+// to transient infrastructure failures. The workflow uses this type string to
+// route the error down the file-failed path (MEDIA-INV-DURATION-PROBE-FALLBACK)
+// instead of silently falling back to the non-long-media single-shot path,
+// which wedges on 500 MB+ videos.
+const mediaDurationUnprobableErrorType = getMediaDurationActivityError + ":MEDIA_DURATION_UNPROBABLE"
+
+// videoRemuxUnconvertableErrorType is the Temporal ApplicationError type set
+// on StandardizeFileTypeActivity failures where every ffmpeg fallback
+// (fast remux → audio re-encode → full re-encode) rejected the input bytes
+// with a non-zero exit. That pattern is intrinsic to the file (malformed
+// MP4/MOV container, missing sample tables, etc.) — retrying the activity
+// re-runs the same bytes through the same toolchain and cannot possibly
+// succeed, so we mark it non-retryable and route through `handleFileError`
+// with stage "file type standardization" so the operator's `process_outcome`
+// points at the actual cause instead of a retry-exhausted timeout.
+// See ARTIFACT-INV-VIDEO-REMUX-FAIL-FAST.
+const videoRemuxUnconvertableErrorType = standardizeFileTypeActivityError + ":VIDEO_REMUX_UNCONVERTABLE"
 
 // ===== METADATA & CONTENT ACTIVITIES =====
 
@@ -1423,6 +1448,21 @@ func (w *Worker) StandardizeFileTypeActivity(ctx context.Context, param *Standar
 				// The remux reorders streams (video first) and moves moov atom to front.
 				err := w.remuxVideoToConvertedFolder(authCtx, param.Bucket, param.Destination, config.Config.Minio.BucketName, convertedDestination)
 				if err != nil {
+					// ARTIFACT-INV-VIDEO-REMUX-FAIL-FAST: if every ffmpeg
+					// fallback rejected the bytes, the file is
+					// structurally unconvertable. Retrying wastes ~15s
+					// per attempt over the retry policy lifetime and
+					// still ends with the same diagnostic. Surface a
+					// non-retryable error so the workflow's
+					// handleFileError path persists the ffmpeg reason on
+					// `process_outcome` in one shot.
+					if errors.Is(err, errVideoRemuxUnconvertable) {
+						return nil, activityErrorNonRetryableFlat(
+							fmt.Sprintf("Failed to remux video to converted-file folder: %s", errorsx.MessageOrErr(err)),
+							videoRemuxUnconvertableErrorType,
+							err,
+						)
+					}
 					return nil, activityErrorWithCauseFlat(
 						fmt.Sprintf("Failed to remux video to converted-file folder: %s", errorsx.MessageOrErr(err)),
 						standardizeFileTypeActivityError,
@@ -1927,12 +1967,38 @@ func (w *Worker) GetMediaDurationActivity(ctx context.Context, param *GetMediaDu
 
 	content, err := w.repository.GetMinIOStorage().GetFile(authCtx, param.Bucket, param.Destination)
 	if err != nil {
-		return nil, fmt.Errorf("failed to download media file for duration probe: %w", err)
+		return nil, activityErrorWithCauseFlat(
+			fmt.Sprintf("failed to download media file for duration probe: %s", err.Error()),
+			getMediaDurationActivityError,
+			err,
+		)
 	}
 
-	duration, err := probeMediaDuration(content)
+	duration, err := probeMediaDuration(ctx, content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to probe media duration: %w", err)
+		// MEDIA-INV-DURATION-PROBE-FALLBACK: when every ffprobe fallback
+		// yielded N/A we KNOW retrying will not help — the file's
+		// container genuinely lacks a duration we can recover. Surface it
+		// as a non-retryable typed error so the workflow marks the file
+		// FAILED instead of retrying 3× and then silently falling through
+		// to the non-long-media single-shot path.
+		if errors.Is(err, errMediaDurationUnprobable) {
+			w.log.Warn("GetMediaDurationActivity: media duration unprobable, failing fast (non-retryable)",
+				zap.String("destination", param.Destination),
+				zap.Error(err))
+			return nil, activityErrorNonRetryableFlat(
+				fmt.Sprintf("media duration unprobable (ffprobe returned N/A for all stream and format queries; file may be fragmented, streaming-only, or corrupted): %s", err.Error()),
+				mediaDurationUnprobableErrorType,
+				err,
+			)
+		}
+		// Transient failure (ffprobe missing, I/O error, etc.) — let
+		// Temporal's retry policy absorb it.
+		return nil, activityErrorWithCauseFlat(
+			fmt.Sprintf("failed to probe media duration: %s", err.Error()),
+			getMediaDurationActivityError,
+			err,
+		)
 	}
 
 	w.log.Info("GetMediaDurationActivity: Duration probed",
@@ -2444,6 +2510,12 @@ type ProcessSummaryActivityParam struct {
 type EntityTag struct {
 	Name string // Canonical entity name (e.g., "Peter Thiel")
 	Type string // Entity type (e.g., "person", "organization", "concept")
+	// Aliases holds bilingual / synonym surface forms of the same referent
+	// (e.g. Rooster -> ["cock", "chicken", "雞", "公雞", "酉"]). Already
+	// deduped + capped (max 6) by parseSummaryEntities; empty when the LLM
+	// did not supply any. These land in kb_entity.aliases and the
+	// TYPE_AUGMENTED chunk text so BM25 can bridge scripts and synonyms.
+	Aliases []string
 }
 
 // ProcessSummaryActivityResult defines output from ProcessSummaryActivity
@@ -2465,9 +2537,81 @@ type ProcessSummaryActivityResult struct {
 	Error string
 }
 
+// augmentedChunkMaxRunes caps the length of the augmented-entity chunk text we
+// feed to BM25 / the embedding model. A runaway prompt-expansion bug (LLM
+// returning 30 entities each with 6 long aliases) would otherwise blow past
+// chunking budgets; the cap truncates at a whole entity boundary so we never
+// cut a name or alias list mid-character.
+const augmentedChunkMaxRunes = 2000
+
+// formatAugmentedEntities renders entity tags as the text that goes into a
+// TYPE_AUGMENTED chunk for BM25 + embedding indexing. When aliases are
+// present, emits "Name (alias1, alias2, ...); Name2 (...); ...". Entities
+// without aliases stay as bare names separated by "; " so the output is
+// single-pass scannable by the standard analyzer (confirmed by the Pre-PR1
+// CJK probe — single CJK chars become independent tokens, so "公雞" inside
+// a parenthesis matches both "雞" and "公雞" queries).
+//
+// The idempotency marker " (" in the output is relied on by the backfill
+// activity to detect "already backfilled" files and skip them, so every
+// edit to the format must preserve the open-parenthesis-after-space shape
+// when at least one alias is present.
+func formatAugmentedEntities(entities []EntityTag) string {
+	if len(entities) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(entities))
+	for _, e := range entities {
+		if len(e.Aliases) == 0 {
+			parts = append(parts, e.Name)
+			continue
+		}
+		parts = append(parts, e.Name+" ("+strings.Join(e.Aliases, ", ")+")")
+	}
+	out := strings.Join(parts, "; ")
+	// Rune-safe truncation. We count runes (not bytes) so CJK text never
+	// cuts mid-character. Truncate at the nearest preceding "; " so the
+	// final entity stays whole.
+	if utf8.RuneCountInString(out) <= augmentedChunkMaxRunes {
+		return out
+	}
+	// Walk the joined string rune-by-rune, remembering the last "; "
+	// boundary we saw; stop at the cap.
+	var (
+		runeCount  int
+		lastCut    = -1
+		prevSemi   = false
+	)
+	for i, r := range out {
+		if runeCount >= augmentedChunkMaxRunes {
+			break
+		}
+		if prevSemi && r == ' ' {
+			lastCut = i - 1 // position of the ';' itself
+		}
+		prevSemi = r == ';'
+		runeCount++
+	}
+	if lastCut > 0 {
+		return out[:lastCut]
+	}
+	return out[:runeCount]
+}
+
+// maxAliasesPerEntity caps the number of aliases a single entity can carry so
+// that a prompt-expansion bug cannot blow up the augmented chunk length or the
+// kb_entity.aliases array. Mirrors the "up to 5 aliases" instruction in the
+// EE summary prompt with one slot of headroom.
+const maxAliasesPerEntity = 6
+
 // parseSummaryEntities splits the raw LLM output at the "## Entities" delimiter
 // and extracts entity tags. Returns the prose summary and the parsed entities.
 // If no delimiter is found, the full text is treated as summary with no entities.
+//
+// Each entity line may optionally carry an alias list in the trailing
+// parenthesis, e.g. "- Rooster [concept] (cock, chicken, 雞, 公雞, 酉)". Aliases
+// are comma-separated, trimmed, deduped case-insensitively, filtered against
+// the entity name, and capped at maxAliasesPerEntity.
 func parseSummaryEntities(raw string) (summary string, entities []EntityTag) {
 	const delimiter = "## Entities"
 	idx := strings.Index(raw, delimiter)
@@ -2485,21 +2629,73 @@ func parseSummaryEntities(raw string) (summary string, entities []EntityTag) {
 		}
 		line = strings.TrimPrefix(line, "- ")
 
-		// Parse "EntityName [type]"
-		bracketIdx := strings.LastIndex(line, "[")
-		if bracketIdx < 0 {
-			if name := strings.TrimSpace(line); name != "" {
-				entities = append(entities, EntityTag{Name: name})
+		// Pull the alias list off first if present, so the bracket handling
+		// below does not trip on a ")" that happens to sit after "]".
+		var aliasStr string
+		if parenIdx := strings.LastIndex(line, "("); parenIdx > 0 {
+			trimmed := strings.TrimSpace(line[parenIdx:])
+			if strings.HasPrefix(trimmed, "(") && strings.HasSuffix(trimmed, ")") {
+				aliasStr = trimmed[1 : len(trimmed)-1]
+				line = strings.TrimSpace(line[:parenIdx])
 			}
+		}
+
+		// Parse "EntityName [type]" from the remainder.
+		bracketIdx := strings.LastIndex(line, "[")
+		var name, typePart string
+		if bracketIdx < 0 {
+			name = strings.TrimSpace(line)
+		} else {
+			name = strings.TrimSpace(line[:bracketIdx])
+			typePart = strings.TrimSuffix(strings.TrimSpace(line[bracketIdx+1:]), "]")
+		}
+		if name == "" {
 			continue
 		}
-		name := strings.TrimSpace(line[:bracketIdx])
-		typePart := strings.TrimSuffix(strings.TrimSpace(line[bracketIdx+1:]), "]")
-		if name != "" {
-			entities = append(entities, EntityTag{Name: name, Type: typePart})
-		}
+
+		entities = append(entities, EntityTag{
+			Name:    name,
+			Type:    typePart,
+			Aliases: parseEntityAliases(name, aliasStr),
+		})
 	}
 	return summary, entities
+}
+
+// parseEntityAliases splits a comma-separated alias list, trims each element,
+// drops empties and entries that collide with the entity name
+// (case-insensitive), deduplicates case-insensitively keeping first-seen
+// casing, and caps at maxAliasesPerEntity. Returns nil for empty input so
+// callers can distinguish "no aliases" from "empty list".
+func parseEntityAliases(name, aliasStr string) []string {
+	if strings.TrimSpace(aliasStr) == "" {
+		return nil
+	}
+	seen := make(map[string]struct{}, maxAliasesPerEntity)
+	lowerName := strings.ToLower(strings.TrimSpace(name))
+	out := make([]string, 0, maxAliasesPerEntity)
+	for _, raw := range strings.Split(aliasStr, ",") {
+		alias := strings.TrimSpace(raw)
+		if alias == "" {
+			continue
+		}
+		key := strings.ToLower(alias)
+		if key == lowerName {
+			continue
+		}
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, alias)
+		if len(out) >= maxAliasesPerEntity {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // ProcessSummaryActivity handles the entire summary generation:
@@ -2838,6 +3034,7 @@ func (w *Worker) SaveEntitiesActivity(ctx context.Context, param *SaveEntitiesAc
 		records[i] = repository.EntityRecord{
 			Name:       e.Name,
 			EntityType: e.Type,
+			Aliases:    pq.StringArray(e.Aliases),
 		}
 	}
 
@@ -3094,12 +3291,44 @@ func (w *Worker) FindTargetFileByNameActivity(ctx context.Context, param *FindTa
 
 // ===== MEDIA DURATION HELPERS =====
 
-// probeMediaDuration writes content to a temp file and runs ffprobe to extract
-// the media duration in seconds.
+// errVideoRemuxUnconvertable is the sentinel returned by
+// remuxVideoToConvertedFolder when every ffmpeg fallback (fast remux →
+// audio re-encode → full re-encode) rejected the input with a non-zero
+// exit. That pattern is intrinsic to the file (malformed MP4/MOV
+// container, missing/invalid sample tables, etc.). Retrying the activity
+// cannot succeed: it just re-runs the same bytes through the same
+// toolchain, producing the same error and wasting a few minutes of
+// worker time before Temporal's retry policy gives up.
+//
+// Transient failures (ffmpeg missing from $PATH, context cancel, I/O
+// errors on the temp files, MinIO download/upload errors) keep
+// propagating as wrapped errors so Temporal's default retry policy
+// absorbs them.
+//
+// ARTIFACT-INV-VIDEO-REMUX-FAIL-FAST: `StandardizeFileTypeActivity` MUST
+// convert this sentinel into a non-retryable Temporal ApplicationError
+// of type `videoRemuxUnconvertableErrorType` so `ProcessFileWorkflow`
+// fails the file fast via `handleFileError("file type standardization",
+// …)` instead of spinning through Temporal's default retry policy and
+// burying the operator-visible reason under a generic timeout.
+var errVideoRemuxUnconvertable = errors.New("video remux unconvertable: ffmpeg rejected the file on every fallback (fast remux / audio re-encode / full re-encode)")
+
+// ffmpegRun is the ffmpeg invocation used by remuxVideoToConvertedFolder.
+// It's a package-level variable so tests can swap a deterministic fake in
+// without depending on a real ffmpeg binary (see
+// TestRemuxVideoToConvertedFolder_*). Production callers MUST NOT
+// reassign it outside of tests.
+var ffmpegRun = func(ctx context.Context, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput()
+}
+
 // remuxVideoToConvertedFolder downloads a video from storage, runs ffmpeg to
 // remux it with Gemini API-compliant stream ordering (video first, moov atom
 // at front), and uploads the result to the converted-file destination.
-// Falls back to audio re-encoding if the fast stream-copy remux fails.
+// Falls back to audio re-encoding, then to a full re-encode, if the earlier
+// attempts fail. If every fallback exits non-zero (i.e. ffmpeg rejects the
+// bytes entirely), returns `errVideoRemuxUnconvertable` so the activity
+// wrapper can convert it into a non-retryable Temporal ApplicationError.
 func (w *Worker) remuxVideoToConvertedFolder(ctx context.Context, srcBucket, srcPath, dstBucket, dstPath string) error {
 	content, err := w.repository.GetMinIOStorage().GetFile(ctx, srcBucket, srcPath)
 	if err != nil {
@@ -3127,45 +3356,88 @@ func (w *Worker) remuxVideoToConvertedFolder(ctx context.Context, srcBucket, src
 	tmpOut.Close()
 	defer os.Remove(tmpOutPath)
 
-	// Fast path: stream-copy with video-first ordering and faststart.
-	args := []string{
-		"-i", tmpIn.Name(),
-		"-map", "0:v:0", "-map", "0:a?",
-		"-c", "copy",
-		"-movflags", "+faststart",
-		"-avoid_negative_ts", "make_zero",
-		"-y", tmpOutPath,
-	}
-	if out, err := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); err != nil {
-		w.log.Warn("remuxVideoToConvertedFolder: fast remux failed, falling back to audio re-encode",
-			zap.Error(err), zap.String("ffmpegOutput", string(out)))
-
-		// Slow path: re-encode audio to guarantee correct interleaving.
-		args = []string{
+	// Fallback chain: fast remux → audio re-encode → full re-encode.
+	//
+	// For each attempt we record (a) the error (nil on success), (b) whether
+	// the error was an `*exec.ExitError` (ffmpeg rejected the bytes) as
+	// opposed to a transient failure like ffmpeg-not-installed or context
+	// cancel, and (c) a short stderr snippet for the operator-visible
+	// `process_outcome`. When *every* attempt is an `*exec.ExitError` we
+	// emit `errVideoRemuxUnconvertable`; otherwise we surface the last
+	// error as a wrapped (retryable) error so Temporal re-schedules.
+	attempts := [][]string{
+		{
+			"-i", tmpIn.Name(),
+			"-map", "0:v:0", "-map", "0:a?",
+			"-c", "copy",
+			"-movflags", "+faststart",
+			"-avoid_negative_ts", "make_zero",
+			"-y", tmpOutPath,
+		},
+		{
 			"-i", tmpIn.Name(),
 			"-map", "0:v:0", "-map", "0:a?",
 			"-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
 			"-movflags", "+faststart",
 			"-y", tmpOutPath,
-		}
-		if out2, err2 := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); err2 != nil {
-			w.log.Warn("remuxVideoToConvertedFolder: audio re-encode failed, falling back to full re-encode",
-				zap.Error(err2), zap.String("ffmpegOutput", string(out2)))
+		},
+		{
+			"-i", tmpIn.Name(),
+			"-map", "0:v:0", "-map", "0:a?",
+			"-c:v", "libx264", "-preset", "fast", "-crf", "23",
+			"-c:a", "aac", "-b:a", "192k",
+			"-movflags", "+faststart",
+			"-y", tmpOutPath,
+		},
+	}
+	stageNames := []string{
+		"fast remux",
+		"audio re-encode",
+		"full re-encode",
+	}
 
-			// Full re-encode: transcode both video (h264) and audio (aac)
-			// for codecs incompatible with MP4 container (e.g., WMV2, VP8).
-			args = []string{
-				"-i", tmpIn.Name(),
-				"-map", "0:v:0", "-map", "0:a?",
-				"-c:v", "libx264", "-preset", "fast", "-crf", "23",
-				"-c:a", "aac", "-b:a", "192k",
-				"-movflags", "+faststart",
-				"-y", tmpOutPath,
-			}
-			if out3, err3 := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); err3 != nil {
-				return fmt.Errorf("ffmpeg full re-encode failed: %w\noutput: %s", err3, string(out3))
-			}
+	var (
+		lastErr    error
+		allExitErr = true
+		snippets   []string
+		success    bool
+	)
+	for i, args := range attempts {
+		if ctx.Err() != nil {
+			return fmt.Errorf("ffmpeg canceled before %s: %w", stageNames[i], ctx.Err())
 		}
+		out, err := ffmpegRun(ctx, args...)
+		if err == nil {
+			success = true
+			break
+		}
+		lastErr = err
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			allExitErr = false
+		}
+		snippet := strings.TrimSpace(string(out))
+		if len(snippet) > 200 {
+			snippet = snippet[len(snippet)-200:]
+		}
+		snippets = append(snippets, fmt.Sprintf("%s: %s", stageNames[i], snippet))
+		if i < len(attempts)-1 {
+			w.log.Warn("remuxVideoToConvertedFolder: ffmpeg attempt failed, falling back",
+				zap.String("stage", stageNames[i]),
+				zap.String("nextStage", stageNames[i+1]),
+				zap.Error(err))
+		}
+	}
+	if !success {
+		// Transient failure (ffmpeg missing, IPC error, cancel): let
+		// Temporal's default retry policy absorb it.
+		if lastErr != nil && !allExitErr {
+			return fmt.Errorf("ffmpeg invocation failed on every fallback: %w", lastErr)
+		}
+		// Intrinsic file rejection: every attempt returned *exec.ExitError.
+		// Surface the sentinel so the activity wrapper can mark the error
+		// non-retryable and fail the file fast.
+		return fmt.Errorf("%w (attempts: %s)", errVideoRemuxUnconvertable, strings.Join(snippets, " | "))
 	}
 
 	remuxed, err := os.ReadFile(tmpOutPath)
@@ -3186,7 +3458,64 @@ func (w *Worker) remuxVideoToConvertedFolder(ctx context.Context, srcBucket, src
 	return nil
 }
 
-func probeMediaDuration(content []byte) (float64, error) {
+// errMediaDurationUnprobable is the sentinel returned by probeMediaDuration
+// when ffprobe cannot recover a duration for any fallback stream. This
+// covers two structurally-irrecoverable cases:
+//
+//  1. ffprobe ran cleanly on every fallback query but each stdout was
+//     empty or `N/A` (e.g. fragmented MP4 whose `moov.mvhd.duration` is
+//     zero, MediaRecorder output, some remuxer outputs).
+//  2. ffprobe rejected the file on every fallback query with a non-zero
+//     exit (e.g. `Invalid data found when processing input` on a truncated
+//     or semantically-empty MP4 — the file parses as ISO MP4 but carries
+//     no sample tables). Retrying this won't help: the bytes are fixed.
+//
+// Transient failures (ffprobe missing from $PATH, context cancel, I/O
+// errors on temp files) still propagate as wrapped errors so Temporal's
+// default retry policy absorbs them.
+//
+// MEDIA-INV-DURATION-PROBE-FALLBACK: the activity wrapper
+// (`GetMediaDurationActivity`) MUST convert this sentinel into a
+// non-retryable Temporal ApplicationError of type
+// `mediaDurationUnprobableErrorType` so `ProcessFileWorkflow` fails the file
+// fast rather than letting a ~500 MB+ video fall through to the
+// non-long-media single-shot path (which wedges `ProcessContentActivity` /
+// `ProcessSummaryActivity` on the worker).
+var errMediaDurationUnprobable = errors.New("media duration unprobable: ffprobe returned N/A (or rejected the file) for video, audio, and format streams")
+
+// ffprobeRun is the ffprobe invocation used by probeMediaDuration. It is a
+// package-level variable so tests can swap a deterministic fake in without
+// depending on a real ffprobe binary (see
+// TestProbeMediaDuration_*). Production callers MUST NOT reassign it outside
+// of tests.
+var ffprobeRun = func(ctx context.Context, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, "ffprobe", args...).Output()
+}
+
+// probeMediaDuration writes `content` to a temp file and walks a fallback
+// chain of ffprobe queries to recover the media duration in seconds:
+//
+//  1. First video stream duration  (`-select_streams v:0 -show_entries stream=duration`)
+//  2. First audio stream duration  (`-select_streams a:0 -show_entries stream=duration`)
+//  3. Container-level duration     (`-show_entries format=duration`)
+//
+// The first positive finite value wins. Each query's stdout may contain
+// `N/A`, an empty line, or a float; those are filtered by parseDurationLines.
+// When every query yields no usable value but at least one ffprobe invocation
+// succeeded (i.e. ffprobe itself is installed and returned cleanly), we
+// return `errMediaDurationUnprobable` so the caller can decide between
+// fail-fast and graceful-degradation without pattern-matching on error text.
+//
+// This replaces the legacy single-shot `format=duration` probe, which
+// returned `"N/A"` for fragmented MP4, streamable MP4, certain remuxed
+// outputs, and some browser-recorded videos — any file whose container
+// lacks a `moov.mvhd.duration` box but whose per-stream duration boxes are
+// still well-formed. That was the root cause of the cht-SzZSvFGyBe /
+// kb-2gNsSWakjs production incident, where ~650 MB videos with valid
+// stream durations failed this activity three times in a row and then had
+// the workflow silently shove them down the single-shot path (which hung
+// `ProcessContentActivity`). See `ARTIFACT-INV-MEDIA-DURATION-PROBE-FALLBACK`.
+func probeMediaDuration(ctx context.Context, content []byte) (float64, error) {
 	tmp, err := os.CreateTemp("", "media-probe-*.mp4")
 	if err != nil {
 		return 0, fmt.Errorf("create temp file: %w", err)
@@ -3199,21 +3528,83 @@ func probeMediaDuration(content []byte) (float64, error) {
 	}
 	tmp.Close()
 
-	out, err := exec.Command("ffprobe",
-		"-v", "quiet",
-		"-show_entries", "format=duration",
-		"-of", "csv=p=0",
-		tmp.Name(),
-	).Output()
-	if err != nil {
-		return 0, fmt.Errorf("ffprobe failed: %w", err)
+	queries := [][]string{
+		{"-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration", "-of", "csv=p=0", tmp.Name()},
+		{"-v", "error", "-select_streams", "a:0", "-show_entries", "stream=duration", "-of", "csv=p=0", tmp.Name()},
+		{"-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", tmp.Name()},
 	}
 
-	dur, err := strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse ffprobe output %q: %w", strings.TrimSpace(string(out)), err)
+	var (
+		lastErr      error
+		allExitErr   = true              // every failure so far was *exec.ExitError
+		parsedPerQry []string             // raw stdout of each invocation, for error context
+	)
+	for _, q := range queries {
+		out, err := ffprobeRun(ctx, q...)
+		if err != nil {
+			lastErr = err
+			// Context cancel / deadline is a transient infra signal — the
+			// workflow will re-schedule the activity, not permanently fail
+			// the file. Exec-not-found (ffprobe missing) is also transient
+			// from a file perspective.
+			if ctx.Err() != nil {
+				return 0, fmt.Errorf("ffprobe canceled: %w", ctx.Err())
+			}
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
+				allExitErr = false
+			} else {
+				// Preserve the first ~200 bytes of stderr per failed query
+				// so the eventual unprobable error message tells operators
+				// which ffprobe diagnostic triggered the fail-fast path.
+				stderr := strings.TrimSpace(string(exitErr.Stderr))
+				if len(stderr) > 200 {
+					stderr = stderr[:200] + "..."
+				}
+				parsedPerQry = append(parsedPerQry, "ffprobe-error: "+stderr)
+			}
+			continue
+		}
+		parsedPerQry = append(parsedPerQry, strings.TrimSpace(string(out)))
+		if dur, ok := parseDurationLines(string(out)); ok {
+			return dur, nil
+		}
 	}
-	return dur, nil
+
+	// If every failure was a non-exec (ffprobe-missing, permissions, IPC)
+	// surface a transient error so Temporal retries — the file itself may
+	// be fine.
+	if lastErr != nil && !allExitErr {
+		return 0, fmt.Errorf("ffprobe invocation failed on every query: %w", lastErr)
+	}
+
+	// Either (a) every query ran cleanly but yielded N/A / empty / non-
+	// positive output, or (b) every failing query was an *exec.ExitError
+	// (ffprobe rejected the file). Both map to "unprobable": no amount of
+	// retrying will make the bytes probe. Emit the sentinel so the
+	// workflow fails the file fast via MEDIA_DURATION_UNPROBABLE.
+	return 0, fmt.Errorf("%w (outputs: %q)", errMediaDurationUnprobable, strings.Join(parsedPerQry, " | "))
+}
+
+// parseDurationLines scans ffprobe stdout (one value per line) and returns
+// the first positive, finite float it finds. "N/A", empty lines, and values
+// that parse to Inf/NaN are skipped. Returns (0, false) if none qualify.
+func parseDurationLines(s string) (float64, bool) {
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.EqualFold(line, "N/A") {
+			continue
+		}
+		v, err := strconv.ParseFloat(line, 64)
+		if err != nil {
+			continue
+		}
+		if math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 {
+			continue
+		}
+		return v, true
+	}
+	return 0, false
 }
 
 // PatchFilename is the well-known name for patch files stored alongside converted content.

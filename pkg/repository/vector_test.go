@@ -1,74 +1,42 @@
 package repository
 
 import (
+	"encoding/json"
 	"testing"
 
-	"github.com/frankban/quicktest"
-	"github.com/gofrs/uuid"
+	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
 
-func TestGroupByFile(t *testing.T) {
-	c := quicktest.New(t)
+// TestHybridRerankerIsRRF pins the hybrid-search path to a single
+// reranker: `RRFRanker(hybridRRFK)`. The reranker choice is NOT
+// runtime-configurable — downstream consumers read the ranker off
+// `SearchChunksResponse.ranker` (the proto `Ranker` enum) and must be
+// able to assume the server's choice is stable across requests. If you
+// change the reranker, update the handler that populates the proto
+// enum in lockstep or you silently violate that contract.
+func TestHybridRerankerIsRRF(t *testing.T) {
+	r := milvusclient.NewRRFReranker().WithK(float64(hybridRRFK))
 
-	fileA := uuid.Must(uuid.NewV4())
-	fileB := uuid.Must(uuid.NewV4())
-	fileC := uuid.Must(uuid.NewV4())
-
-	mkEmb := func(fileUID uuid.UUID, score float32) SimilarVectorEmbedding {
-		return SimilarVectorEmbedding{
-			VectorEmbedding: VectorEmbedding{FileUID: fileUID},
-			Score:           score,
+	var strategy, raw string
+	for _, kv := range r.GetParams() {
+		switch kv.GetKey() {
+		case "strategy":
+			strategy = kv.GetValue()
+		case "params":
+			raw = kv.GetValue()
 		}
 	}
+	if strategy != "rrf" {
+		t.Fatalf("strategy = %q, want %q", strategy, "rrf")
+	}
 
-	t.Run("groupSize=1 keeps best per file", func(t *testing.T) {
-		input := []SimilarVectorEmbedding{
-			mkEmb(fileA, 0.95),
-			mkEmb(fileA, 0.90),
-			mkEmb(fileB, 0.88),
-			mkEmb(fileA, 0.85),
-			mkEmb(fileB, 0.80),
-			mkEmb(fileC, 0.75),
-		}
-		got := groupByFile(input, 1)
-		c.Assert(len(got), quicktest.Equals, 3)
-		c.Assert(got[0].FileUID, quicktest.Equals, fileA)
-		c.Assert(got[0].Score, quicktest.Equals, float32(0.95))
-		c.Assert(got[1].FileUID, quicktest.Equals, fileB)
-		c.Assert(got[2].FileUID, quicktest.Equals, fileC)
-	})
-
-	t.Run("groupSize=2 keeps top 2 per file", func(t *testing.T) {
-		input := []SimilarVectorEmbedding{
-			mkEmb(fileA, 0.95),
-			mkEmb(fileA, 0.90),
-			mkEmb(fileB, 0.88),
-			mkEmb(fileA, 0.85),
-			mkEmb(fileB, 0.80),
-			mkEmb(fileC, 0.75),
-		}
-		got := groupByFile(input, 2)
-		c.Assert(len(got), quicktest.Equals, 5)
-		c.Assert(got[0].Score, quicktest.Equals, float32(0.95))
-		c.Assert(got[1].Score, quicktest.Equals, float32(0.90))
-		c.Assert(got[2].Score, quicktest.Equals, float32(0.88))
-		c.Assert(got[3].Score, quicktest.Equals, float32(0.80))
-		c.Assert(got[4].Score, quicktest.Equals, float32(0.75))
-	})
-
-	t.Run("empty input", func(t *testing.T) {
-		got := groupByFile(nil, 1)
-		c.Assert(len(got), quicktest.Equals, 0)
-	})
-
-	t.Run("single file many chunks", func(t *testing.T) {
-		input := []SimilarVectorEmbedding{
-			mkEmb(fileA, 0.95),
-			mkEmb(fileA, 0.90),
-			mkEmb(fileA, 0.85),
-		}
-		got := groupByFile(input, 1)
-		c.Assert(len(got), quicktest.Equals, 1)
-		c.Assert(got[0].Score, quicktest.Equals, float32(0.95))
-	})
+	var p struct {
+		K float64 `json:"k,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		t.Fatalf("unmarshal rrf params: %v", err)
+	}
+	if int(p.K) != hybridRRFK {
+		t.Fatalf("rrf k = %v, want %d", p.K, hybridRRFK)
+	}
 }

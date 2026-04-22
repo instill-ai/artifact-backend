@@ -273,10 +273,7 @@ func decodeBase64SAKeys(cfg *AppConfig) error {
 // ValidateConfig is for custom validation rules for the configuration
 func ValidateConfig(cfg *AppConfig) error {
 	validate := validator.New()
-	if err := validate.Struct(cfg); err != nil {
-		return err
-	}
-	return nil
+	return validate.Struct(cfg)
 }
 
 var defaultConfigPath = "config/config.yaml"

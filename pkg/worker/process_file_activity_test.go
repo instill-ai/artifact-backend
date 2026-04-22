@@ -2,7 +2,10 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -1060,4 +1063,353 @@ func TestParseSummaryEntities(t *testing.T) {
 		c.Assert(len(entities), qt.Equals, 1)
 		c.Assert(entities[0].Name, qt.Equals, "Valid")
 	})
+
+	t.Run("aliases parenthesis is extracted and deduped", func(t *testing.T) {
+		// Regression guard for Part 1 of the bilingual_zodiac_retrieval
+		// plan: the summary prompt instructs Gemini to append up to six
+		// alias surface forms after the bracketed type. We need those
+		// aliases to land in EntityTag.Aliases so they can flow through
+		// to kb_entity.aliases + the TYPE_AUGMENTED chunk.
+		raw := "Prose.\n\n## Entities\n- Rooster [concept] (cock, chicken, 雞, 公雞, 酉, rooster, duplicate, extra7)\n"
+		summary, entities := parseSummaryEntities(raw)
+		c.Assert(summary, qt.Equals, "Prose.")
+		c.Assert(len(entities), qt.Equals, 1)
+		c.Assert(entities[0].Name, qt.Equals, "Rooster")
+		c.Assert(entities[0].Type, qt.Equals, "concept")
+		// Self-reference "rooster" dropped (case-insensitive match with
+		// Name), remainder deduped + capped at maxAliasesPerEntity=6.
+		c.Assert(entities[0].Aliases, qt.DeepEquals,
+			[]string{"cock", "chicken", "雞", "公雞", "酉", "duplicate"})
+	})
+
+	t.Run("aliases cap at six and dedup is case-insensitive", func(t *testing.T) {
+		raw := "S.\n\n## Entities\n- X [c] (a, A, b, B, c, C, d, E, F, G)\n"
+		_, entities := parseSummaryEntities(raw)
+		c.Assert(len(entities), qt.Equals, 1)
+		c.Assert(len(entities[0].Aliases), qt.Equals, 6)
+		c.Assert(entities[0].Aliases[0], qt.Equals, "a")
+		c.Assert(entities[0].Aliases[1], qt.Equals, "b")
+	})
+
+	t.Run("empty aliases parens yields nil slice", func(t *testing.T) {
+		raw := "S.\n\n## Entities\n- X [c] ()\n- Y [c] ( )\n"
+		_, entities := parseSummaryEntities(raw)
+		c.Assert(len(entities), qt.Equals, 2)
+		c.Assert(entities[0].Aliases, qt.IsNil)
+		c.Assert(entities[1].Aliases, qt.IsNil)
+	})
+}
+
+func TestFormatAugmentedEntities(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("empty input yields empty string", func(t *testing.T) {
+		c.Assert(formatAugmentedEntities(nil), qt.Equals, "")
+		c.Assert(formatAugmentedEntities([]EntityTag{}), qt.Equals, "")
+	})
+
+	t.Run("entities without aliases separated by semicolons", func(t *testing.T) {
+		got := formatAugmentedEntities([]EntityTag{
+			{Name: "Alice"}, {Name: "Bob"}, {Name: "Charlie"},
+		})
+		c.Assert(got, qt.Equals, "Alice; Bob; Charlie")
+	})
+
+	t.Run("aliases render inside parentheses", func(t *testing.T) {
+		// The " (" open-paren-after-space is the idempotency marker the
+		// backfill workflow uses to skip already-backfilled files.
+		got := formatAugmentedEntities([]EntityTag{
+			{Name: "Rooster", Aliases: []string{"cock", "chicken", "雞", "公雞"}},
+			{Name: "monopoly", Aliases: []string{"monopoly theory"}},
+			{Name: "Peter Thiel"},
+		})
+		c.Assert(got, qt.Equals,
+			"Rooster (cock, chicken, 雞, 公雞); monopoly (monopoly theory); Peter Thiel")
+	})
+
+	t.Run("rune-safe truncation stops at a whole-entity boundary", func(t *testing.T) {
+		// Construct entities whose total length crosses the
+		// augmentedChunkMaxRunes cap. We verify we stop at a ";" and
+		// never mid-alias. Each entity contributes exactly 30 runes
+		// including the trailing "; " separator.
+		var tags []EntityTag
+		for i := 0; i < 100; i++ {
+			tags = append(tags, EntityTag{Name: fmt.Sprintf("ent-%020d", i)})
+		}
+		got := formatAugmentedEntities(tags)
+		c.Assert(len(got) <= augmentedChunkMaxRunes*4, qt.Equals, true) // bytes bound
+		// Result must end on an entity boundary (last byte is not a
+		// space and the trailing "; " was dropped).
+		c.Assert(strings.HasSuffix(got, " "), qt.Equals, false)
+		c.Assert(strings.HasSuffix(got, ";"), qt.Equals, false)
+	})
+}
+
+// withFakeFFprobe swaps the package-level ffprobeRun for the duration of the
+// subtest so probeMediaDuration can be exercised without a real ffprobe
+// binary. The returned function restores the original.
+func withFakeFFprobe(t *testing.T, fake func(ctx context.Context, args ...string) ([]byte, error)) {
+	t.Helper()
+	orig := ffprobeRun
+	ffprobeRun = fake
+	t.Cleanup(func() { ffprobeRun = orig })
+}
+
+// fakeFFprobeByQuery returns a fake ffprobeRun that routes each invocation to
+// a canned response based on the `-select_streams` / `-show_entries` pair at
+// the front of the args. Any query with no mapping falls through to the
+// `defaultOut` / `defaultErr`. This mirrors the probe fallback chain in
+// probeMediaDuration (video → audio → format).
+func fakeFFprobeByQuery(responses map[string]ffprobeResponse, defaultResp ffprobeResponse) func(ctx context.Context, args ...string) ([]byte, error) {
+	return func(ctx context.Context, args ...string) ([]byte, error) {
+		key := probeQueryKey(args)
+		if r, ok := responses[key]; ok {
+			return []byte(r.out), r.err
+		}
+		return []byte(defaultResp.out), defaultResp.err
+	}
+}
+
+type ffprobeResponse struct {
+	out string
+	err error
+}
+
+// probeQueryKey extracts a stable key from ffprobe args identifying the
+// stream/format target, e.g. "v:0|stream=duration", "a:0|stream=duration",
+// or "format=duration".
+func probeQueryKey(args []string) string {
+	var (
+		selectStreams = ""
+		showEntries   = ""
+	)
+	for i := 0; i < len(args)-1; i++ {
+		switch args[i] {
+		case "-select_streams":
+			selectStreams = args[i+1]
+		case "-show_entries":
+			showEntries = args[i+1]
+		}
+	}
+	if selectStreams == "" {
+		return showEntries
+	}
+	return selectStreams + "|" + showEntries
+}
+
+// TestProbeMediaDuration_FormatNAFallsBackToVideoStream reproduces the
+// production bug for chat cht-SzZSvFGyBe / kb-2gNsSWakjs: ffprobe returns
+// "N/A" for `format=duration` on fragmented MP4s, but the first video
+// stream still carries a valid per-stream duration. The legacy single-shot
+// probe failed with NumError "parsing \"N/A\"". The fallback chain must
+// recover the stream value so the workflow can correctly route the file
+// onto the long-media path.
+func TestProbeMediaDuration_FormatNAFallsBackToVideoStream(t *testing.T) {
+	c := qt.New(t)
+	withFakeFFprobe(t, fakeFFprobeByQuery(map[string]ffprobeResponse{
+		"v:0|stream=duration": {out: "125.42\n", err: nil},
+		"a:0|stream=duration": {out: "N/A\n", err: nil},
+		"format=duration":     {out: "N/A\n", err: nil},
+	}, ffprobeResponse{out: "", err: nil}))
+
+	dur, err := probeMediaDuration(context.Background(), []byte("fake-mp4"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(dur, qt.Equals, 125.42)
+}
+
+// TestProbeMediaDuration_AudioFallback: video stream has no duration
+// (audio-only file or video stream with N/A), but the audio stream does.
+// The fallback chain must not stop at the video miss.
+func TestProbeMediaDuration_AudioFallback(t *testing.T) {
+	c := qt.New(t)
+	withFakeFFprobe(t, fakeFFprobeByQuery(map[string]ffprobeResponse{
+		"v:0|stream=duration": {out: "\n", err: nil}, // empty = no video stream matched
+		"a:0|stream=duration": {out: "88.7\n", err: nil},
+		"format=duration":     {out: "N/A\n", err: nil},
+	}, ffprobeResponse{out: "", err: nil}))
+
+	dur, err := probeMediaDuration(context.Background(), []byte("fake-audio"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(dur, qt.Equals, 88.7)
+}
+
+// TestProbeMediaDuration_FormatOnly: only container-level duration is
+// available (no per-stream values). Regression guard that the third
+// fallback still wins.
+func TestProbeMediaDuration_FormatOnly(t *testing.T) {
+	c := qt.New(t)
+	withFakeFFprobe(t, fakeFFprobeByQuery(map[string]ffprobeResponse{
+		"v:0|stream=duration": {out: "N/A\n", err: nil},
+		"a:0|stream=duration": {out: "N/A\n", err: nil},
+		"format=duration":     {out: "42.0\n", err: nil},
+	}, ffprobeResponse{out: "", err: nil}))
+
+	dur, err := probeMediaDuration(context.Background(), []byte("fake-mp4"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(dur, qt.Equals, 42.0)
+}
+
+// TestProbeMediaDuration_AllUnprobableReturnsSentinel mirrors the
+// production failure fingerprint where every query returned "N/A". The
+// caller (GetMediaDurationActivity) relies on errors.Is to recognise this
+// exact sentinel and wrap it as MEDIA_DURATION_UNPROBABLE.
+func TestProbeMediaDuration_AllUnprobableReturnsSentinel(t *testing.T) {
+	c := qt.New(t)
+	withFakeFFprobe(t, fakeFFprobeByQuery(map[string]ffprobeResponse{
+		"v:0|stream=duration": {out: "N/A\n", err: nil},
+		"a:0|stream=duration": {out: "N/A\n", err: nil},
+		"format=duration":     {out: "N/A\n", err: nil},
+	}, ffprobeResponse{out: "", err: nil}))
+
+	dur, err := probeMediaDuration(context.Background(), []byte("fake-mp4"))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, errMediaDurationUnprobable), qt.Equals, true)
+	c.Assert(dur, qt.Equals, 0.0)
+}
+
+// TestProbeMediaDuration_TransientErrorNotSentinel ensures a broken
+// ffprobe binary propagates as a plain wrapped error — NOT the unprobable
+// sentinel — so Temporal's retry policy still absorbs transient failures.
+// Only content-intrinsic paths (N/A outputs, or `*exec.ExitError`s on
+// every query) are marked non-retryable.
+func TestProbeMediaDuration_TransientErrorNotSentinel(t *testing.T) {
+	c := qt.New(t)
+	boom := fmt.Errorf("exec: ffprobe: executable file not found in $PATH")
+	withFakeFFprobe(t, fakeFFprobeByQuery(
+		map[string]ffprobeResponse{}, // no canned matches
+		ffprobeResponse{out: "", err: boom},
+	))
+
+	dur, err := probeMediaDuration(context.Background(), []byte("fake"))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, errMediaDurationUnprobable), qt.Equals, false)
+	c.Assert(strings.Contains(err.Error(), "ffprobe invocation failed on every query"), qt.Equals, true)
+	c.Assert(dur, qt.Equals, 0.0)
+}
+
+// TestProbeMediaDuration_AllExitErrorsReturnSentinel locks in the
+// "ffprobe rejected the file on every fallback query" path. A malformed
+// MP4 (e.g. a skeleton ISO-MP4 with no sample tables, the fixture used by
+// `standalone-media-duration-probe.js`) causes ffprobe to exit non-zero
+// on all three queries with stderr `Invalid data found...`. Before
+// the MEDIA-INV-DURATION-PROBE-FALLBACK tightening these propagated as
+// transient errors and the workflow silently skipped duration probing,
+// re-routing ~500 MB+ uploads down the non-long-media single-shot path.
+// Now they MUST surface as `errMediaDurationUnprobable` so the workflow
+// fails the file fast with a deterministic `status_message`.
+func TestProbeMediaDuration_AllExitErrorsReturnSentinel(t *testing.T) {
+	c := qt.New(t)
+	exitErr := &exec.ExitError{
+		ProcessState: &os.ProcessState{},
+		Stderr:       []byte("[mov,mp4,m4a] invalid STSD entries 0\nInvalid data found when processing input"),
+	}
+	withFakeFFprobe(t, fakeFFprobeByQuery(
+		map[string]ffprobeResponse{}, // force defaultResp for every query
+		ffprobeResponse{out: "", err: exitErr},
+	))
+
+	dur, err := probeMediaDuration(context.Background(), []byte("fake"))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, errMediaDurationUnprobable), qt.Equals, true)
+	c.Assert(strings.Contains(err.Error(), "ffprobe-error:"), qt.Equals, true,
+		qt.Commentf("error message should include stderr context for ops: %v", err))
+	c.Assert(dur, qt.Equals, 0.0)
+}
+
+// TestProbeMediaDuration_MixedExitAndNA treats "some queries exit-err,
+// others return N/A" as unprobable too — the file is just as broken as
+// in the all-exit-err case and no retry will make it probe. This covers
+// semi-malformed MP4s where ffprobe parses the container header (so
+// `format=duration` returns N/A) but bails on the per-stream queries.
+func TestProbeMediaDuration_MixedExitAndNA(t *testing.T) {
+	c := qt.New(t)
+	exitErr := &exec.ExitError{
+		ProcessState: &os.ProcessState{},
+		Stderr:       []byte("stream not found"),
+	}
+	withFakeFFprobe(t, fakeFFprobeByQuery(map[string]ffprobeResponse{
+		"v:0|stream=duration": {out: "", err: exitErr},
+		"a:0|stream=duration": {out: "", err: exitErr},
+		"format=duration":     {out: "N/A\n", err: nil},
+	}, ffprobeResponse{out: "", err: nil}))
+
+	dur, err := probeMediaDuration(context.Background(), []byte("fake"))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, errMediaDurationUnprobable), qt.Equals, true)
+	c.Assert(dur, qt.Equals, 0.0)
+}
+
+// TestProbeMediaDuration_ContextCanceledIsTransient pins that a
+// canceled / deadline-expired context surfaces as a plain transient
+// error, NOT the unprobable sentinel. Otherwise a Temporal scheduling
+// blip (shutdown, worker drain) would permanently fail an otherwise-
+// healthy file.
+func TestProbeMediaDuration_ContextCanceledIsTransient(t *testing.T) {
+	c := qt.New(t)
+	withFakeFFprobe(t, fakeFFprobeByQuery(
+		map[string]ffprobeResponse{},
+		ffprobeResponse{out: "", err: context.Canceled},
+	))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	dur, err := probeMediaDuration(ctx, []byte("fake"))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, errMediaDurationUnprobable), qt.Equals, false)
+	c.Assert(strings.Contains(err.Error(), "ffprobe canceled"), qt.Equals, true)
+	c.Assert(dur, qt.Equals, 0.0)
+}
+
+// TestProbeMediaDuration_NonPositiveIgnored: ffprobe occasionally prints
+// "0" or "0.000000" for placeholder/zero-length streams. Those must be
+// treated as unusable so we fall through to the next query rather than
+// returning a bogus 0-second duration (which would pass the `err == nil`
+// check but then make the workflow's `DurationSeconds > 0` branch flaky).
+func TestProbeMediaDuration_NonPositiveIgnored(t *testing.T) {
+	c := qt.New(t)
+	withFakeFFprobe(t, fakeFFprobeByQuery(map[string]ffprobeResponse{
+		"v:0|stream=duration": {out: "0.000000\n", err: nil},
+		"a:0|stream=duration": {out: "-1\n", err: nil},
+		"format=duration":     {out: "7.5\n", err: nil},
+	}, ffprobeResponse{out: "", err: nil}))
+
+	dur, err := probeMediaDuration(context.Background(), []byte("fake"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(dur, qt.Equals, 7.5)
+}
+
+// TestParseDurationLines covers the small in-process parser used by
+// probeMediaDuration; it lets us pin the "N/A-is-never-a-float" contract
+// without invoking the full probe chain.
+func TestParseDurationLines(t *testing.T) {
+	c := qt.New(t)
+
+	cases := []struct {
+		name    string
+		in      string
+		wantV   float64
+		wantOK  bool
+	}{
+		{"positive float", "12.34\n", 12.34, true},
+		{"N/A literal", "N/A\n", 0, false},
+		{"lower-case n/a", "n/a\n", 0, false},
+		{"empty", "\n", 0, false},
+		{"whitespace only", "   \n\t\n", 0, false},
+		{"multi-line, first is N/A", "N/A\n\n55.5\n", 55.5, true},
+		{"negative", "-3.14\n", 0, false},
+		{"zero", "0\n", 0, false},
+		{"inf", "inf\n", 0, false},
+		{"nan", "nan\n", 0, false},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			v, ok := parseDurationLines(tc.in)
+			c.Assert(ok, qt.Equals, tc.wantOK)
+			if tc.wantOK {
+				c.Assert(v, qt.Equals, tc.wantV)
+			}
+		})
+	}
 }

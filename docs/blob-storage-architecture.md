@@ -298,8 +298,8 @@ video rows while remaining absent for non-thumbnailable types (see
 >
 > 1. `api-gateway-ee` must re-render `krakend.json` from `endpoints.json`
 >    whenever the allow-list for list endpoints changes — restart the
->    gateway (`commander restart api-gateway --env ee`) after editing
->    `config/settings-env/endpoints.json`.
+>    gateway after editing `config/settings-env/endpoints.json` so the
+>    rendered config picks up the new allow-list entries.
 > 2. `agent-backend-ee/pkg/handler/file.go` `ListFiles` MUST forward
 >    `req.View` (including the unset sentinel) to
 >    `ListKnowledgeBaseFilesWithPagination`, which in turn passes it to

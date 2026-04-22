@@ -116,6 +116,14 @@ const (
 
 	// BM25 function name for native Milvus full-text search
 	bm25FunctionName = "text_bm25_emb"
+
+	// hybridRRFK is the Milvus RRF smoothing constant (the "k" in
+	// `1/(k+rank)`). 60 mirrors Milvus' own `RRFRanker` default; it is
+	// the only ranker knob the hybrid-search path exposes and is
+	// intentionally not runtime-configurable — the proto `Ranker`
+	// enum, carried on `SearchChunksResponse`, is the single contract
+	// downstream consumers use to pick their score-floor shape.
+	hybridRRFK = 60
 )
 
 type milvusClient struct {
@@ -658,10 +666,16 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 		logger.Debug("Using native Milvus BM25 with text query",
 			zap.String("query_text", p.QueryText[:min(50, len(p.QueryText))]))
 
-		// Execute hybrid search with weighted reranker: 70% dense cosine, 30% BM25.
-		// WeightedRanker normalizes scores to [0,1] range, enabling absolute quality gating.
+		// Execute hybrid search with Reciprocal Rank Fusion. RRF turns
+		// dense + BM25 into rank buckets and sums `1/(k+rank)`, so
+		// scores live in `(0, 2/(k+1)]` and downstream thresholds are
+		// rank-structural (`1/(k+topK)`) rather than tied to the
+		// absolute score distribution. The enum value that identifies
+		// this reranker on `SearchChunksResponse.ranker` is populated
+		// by the handler; this package just implements the reranker.
+		reranker := milvusclient.NewRRFReranker().WithK(float64(hybridRRFK))
 		hybridOpt := milvusclient.NewHybridSearchOption(collectionName, topK, denseRequest, sparseRequest).
-			WithReranker(milvusclient.NewWeightedReranker([]float64{0.7, 0.3})).
+			WithReranker(reranker).
 			WithOutputFields(outputFields...)
 
 		results, err = m.c.HybridSearch(ctx, hybridOpt)

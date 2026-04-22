@@ -631,11 +631,18 @@ func (ph *PublicHandler) SearchChunks(
 		simChunks = append(simChunks, pbChunk)
 	}
 
+	// Advertise the hybrid reranker on the response so score-threshold
+	// consumers can pick the correct floor shape. The repository layer
+	// hardcodes `RRFRanker`; if you change it, update this enum in
+	// lockstep or you silently break downstream gating.
 	logger.Info("SearchChunks response",
 		zap.Int("totalChunks", len(chunks)),
 		zap.Int("returnedChunks", len(simChunks)),
 		zap.Int("skippedMissingContent", skippedMissing),
 		zap.Int("vectorSearchResults", len(simChunksScores)))
 
-	return &artifactpb.SearchChunksResponse{SimilarChunks: simChunks}, nil
+	return &artifactpb.SearchChunksResponse{
+		SimilarChunks: simChunks,
+		Ranker:        artifactpb.Ranker_RANKER_RRF,
+	}, nil
 }

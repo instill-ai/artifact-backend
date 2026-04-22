@@ -276,11 +276,17 @@ func main() {
 	// Thumbnail backfill workflow (Phase 3e): admin-triggered one-shot
 	// that scans the file table in UID order and generates thumbnails for
 	// files uploaded before the in-pipeline activity shipped. Resumable
-	// via ContinueAsNew; see
-	// `../artifact-backend-ee/docs/runbook-backfill-thumbnails.md` for
-	// operator docs.
+	// via ContinueAsNew.
 	w.RegisterWorkflow(cw.BackfillThumbnailsWorkflow)
 	w.RegisterActivity(cw.ListFilesMissingThumbnailsActivity)
+
+	// NOTE: Admin-triggered backfill workflows that exist solely to serve
+	// operator tooling (e.g. `BackfillEntityAliasesWorkflow`) are NOT
+	// registered on the CE worker binary. Their Temporal workflow code
+	// may live in `pkg/worker/` for reuse, but the CE
+	// `cmd/worker/main.go` is the product surface of the OSS release and
+	// has no operator path to trigger them. Registration lives in the EE
+	// worker binary only. See ARTIFACT-INV-ALIAS-BACKFILL.
 
 	// AI Caching Phase - Create caches for efficient processing
 	w.RegisterActivity(cw.CacheFileContextActivity) // Create AI cache for individual file processing

@@ -211,6 +211,222 @@ the EE-side authoring conventions.
     frontend just falls back to `derived_resource_uri` for legacy
     rows.
 
+- **ARTIFACT-INV-ALIAS-BACKFILL.** `BackfillEntityAliasesWorkflow` in
+  `pkg/worker/backfill_alias_activity.go` is an EE-admin-only
+  counterpart to the in-pipeline alias rewrite. It walks every file in
+  a single KB that already has kb_entity links, regenerates the entity
+  list through Gemini with the alias-aware summary prompt, union-merges
+  aliases into `kb_entity.aliases`, and rewrites the file's
+  TYPE_AUGMENTED chunk so BM25 can bridge bilingual / synonym surface
+  forms (e.g. `chicken` → `雞`).
+
+  **Registration surface.** The workflow and its activities live in
+  this CE package for reuse but are registered **only** on the EE
+  worker binary (`artifact-backend-ee/cmd/worker/main.go`). The CE
+  `cmd/worker/main.go` MUST NOT register them: CE ships an OSS stack
+  with no operator path to trigger an admin backfill, and CE prose /
+  code MUST NOT reference EE-internal operator tooling (see
+  `instill-core-ee/AGENTS.md` → "Commander is EE-private"). This is
+  the common-code-in-CE / EE-only-registration split also used by the
+  thumbnail backfill.
+
+  Contract:
+  - Scoped per `KBUID` — there is no "backfill every KB" mode.
+    Each invocation opts in per KB because the rewrite spends Gemini
+    credits.
+  - Idempotent via the content marker: a TYPE_AUGMENTED chunk whose
+    MinIO body contains the literal `" ("` sequence has already been
+    written by the alias-aware `formatAugmentedEntities`, so the file
+    is skipped. Re-running the workflow on a drained KB completes in
+    seconds.
+  - Snapshot-paged: the workflow pulls the full eligible file-UID
+    slice once via `repository.ListFileUIDsWithEntitiesByKB` and then
+    fans it out to a pool of per-file coroutines. Default concurrency
+    is `defaultBackfillConcurrency = 4`; the knob is exposed via
+    `BackfillEntityAliasesWorkflowParam.Concurrency` and preserved
+    across `ContinueAsNew`. At ~30–60 s per Gemini summary call this
+    peaks at ~4–8 RPM, two orders of magnitude under every paid-tier
+    Gemini quota, so operators can raise it (to 8 or 16) in
+    quota-rich deployments. Bounded-parallel writes to `kb_entity`
+    are safe because `UpsertEntities` serializes at the Postgres row
+    level under ON CONFLICT and `LinkEntityFile` uses disjoint
+    `(entity, file)` tuples across coroutines. The workflow MUST
+    drain every in-flight coroutine before `ContinueAsNew` (and
+    before returning): restarting history without draining would
+    orphan running activities and silently lose work.
+  - `kb_entity.aliases` is `TEXT[] NOT NULL DEFAULT '{}'` with a GIN
+    index (migration 000069). The ON CONFLICT branch of
+    `repository.UpsertEntities` union-merges the existing array with
+    the new aliases via
+    `SELECT ARRAY(SELECT DISTINCT UNNEST(kb_entity.aliases || EXCLUDED.aliases))`
+    so re-running the workflow never shrinks the alias set.
+  - Per-file failures are logged and skipped; the workflow is
+    non-fatal. Temporal's retry policy (MaximumAttempts = 2, trimmed
+    from the ingestion path's 3 because backfill is best-effort)
+    absorbs transient errors inside the activity boundary.
+  - Uses `ContinueAsNew` after `MaxPollIterationsBeforeContinueAsNew`
+    paging rounds (at `backfillAliasesBatchSize = 100` files per
+    progress-log cadence) so workflow history stays bounded on very
+    large KBs. The `Concurrency` param survives the restart.
+  - Never scheduled. Nothing in the hot path depends on it — freshly
+    ingested files produce aliases inline via `ProcessSummaryActivity`
+    → `parseSummaryEntities`, and the surface fix for bilingual
+    retrieval degrades gracefully when the backfill has not yet been
+    run.
+
+- **ARTIFACT-INV-MEDIA-DURATION-PROBE-FALLBACK.**
+  `probeMediaDuration` in
+  `pkg/worker/process_file_activity.go` MUST walk an ffprobe
+  fallback chain before giving up on a media file's duration:
+  `stream=duration` on `v:0` → `stream=duration` on `a:0` →
+  `format=duration`. The first positive, finite float wins; `N/A`,
+  empty output, and non-positive/NaN/Inf values are filtered by
+  `parseDurationLines` and fall through to the next query. A
+  single-shot `format=duration` probe is a regression — it returns
+  `"N/A"` for fragmented MP4, streaming MP4, certain browser-
+  recorded videos, and some remuxer outputs, even when per-stream
+  duration boxes are well-formed. This was the root cause of the
+  kb-2gNsSWakjs production incident, where 17 files were stuck
+  `FILE_PROCESS_STATUS_PROCESSING` (or `FAILED` with the generic
+  "interrupted" status_message) because `GetMediaDurationActivity`
+  blew up with `strconv.ParseFloat: parsing "N/A"` three retries in
+  a row.
+
+  **Error-typing contract.** `probeMediaDuration` returns the sentinel
+  `errMediaDurationUnprobable` in either of two content-intrinsic
+  shapes, both of which are non-retryable:
+
+  1. Every ffprobe fallback ran cleanly (exit 0) but produced `N/A`
+     or empty output (the original production bug — fragmented MP4,
+     MediaRecorder output, remuxed streams).
+  2. Every fallback failed with an `*exec.ExitError` (ffprobe parsed
+     the file but rejected each query with e.g. `Invalid data found…`
+     or `stream not found`). Retrying is pointless — the bytes are
+     fixed — so surfacing this as retryable would land the file back
+     in the original "swallow-and-route-to-single-shot" wedge. The
+     Go-level filter is `errors.As(err, &*exec.ExitError)` on every
+     failed query; the probe also records the first ~200 bytes of
+     stderr per query in the sentinel's wrapped error message so
+     operators can tell which diagnostic killed the probe without
+     re-running ffprobe by hand.
+
+  Transient failures (ffprobe binary missing from `$PATH`,
+  `context.Canceled` / deadline, I/O errors creating the temp file,
+  auth failures) MUST propagate as plain wrapped errors so Temporal's
+  default retry policy still absorbs them. Context errors surface
+  with the prefix `ffprobe canceled:`; other non-exec errors surface
+  with `ffprobe invocation failed on every query:`. The activity
+  wrapper (`GetMediaDurationActivity`) MUST detect the sentinel via
+  `errors.Is(err, errMediaDurationUnprobable)` and convert it to a
+  **non-retryable** Temporal `ApplicationError` of type
+  `mediaDurationUnprobableErrorType`
+  (string: `GetMediaDurationActivity:MEDIA_DURATION_UNPROBABLE`).
+  The type string is stable by contract because `ProcessFileWorkflow`
+  matches on it via
+  `errors.As(&applicationErr) && applicationErr.Type() == …`.
+
+  **Workflow fail-fast contract.** `ProcessFileWorkflow` in
+  `pkg/worker/process_file_workflow.go` MUST, on receiving
+  `MEDIA_DURATION_UNPROBABLE`, call `handleFileError(fileUID,
+  "probe media duration", err)` so the file transitions to
+  `FILE_PROCESS_STATUS_FAILED` with a deterministic
+  `status_message`, and mark the file in `filesCompleted` so the
+  cache-creation, content-, and summary-activity loops append-
+  filter it out. Silently `continue`-ing leaves
+  `fileDurationSec` / `longMediaFiles` unset for the file, which
+  routes a ~500 MB+ video through the non-long-media single-shot
+  path — that path wedges `ProcessContentActivity` /
+  `ProcessSummaryActivity` on the worker and the only recovery is
+  a worker restart.
+
+  **Test contract.** Unit tests in
+  `pkg/worker/process_file_activity_test.go` (`TestProbeMediaDuration_*`
+  and `TestParseDurationLines`) pin: each of the three fallback paths
+  that hit; the all-N/A sentinel path; the all-exit-err sentinel
+  path; the mixed exit-err + N/A sentinel path; the
+  ffprobe-missing / transient path that stays retryable; the
+  `context.Canceled` path that stays retryable; and the non-positive
+  / NaN / Inf filtering rules. Tests swap `ffprobeRun` via
+  `withFakeFFprobe(t, …)` so the fake doesn't depend on a real
+  ffprobe binary being present; that knob is a test-only var and
+  production callers MUST NOT reassign it.
+
+  The EE integration gate is
+  `artifact-backend-ee/integration-test/standalone-media-duration-probe.js`
+  (happy-path MP4 → `FILE_PROCESS_STATUS_COMPLETED` with non-zero
+  `File.length.coordinates[0]`; unprobable fixture →
+  `FILE_PROCESS_STATUS_FAILED` within 90 s with `status_message`
+  prefix `probe media duration:`). See
+  `artifact-backend-ee/AGENTS.md` →
+  `ARTIFACT-EE-INV-MEDIA-DURATION-REGRESSION-GATE` for the fixture
+  regeneration recipe and run instructions.
+
+  If you extend the fallback chain (e.g. adding
+  `-select_streams a:0?` or a subtitle-stream fallback), extend
+  `fakeFFprobeByQuery` accordingly, add a corresponding
+  `TestProbeMediaDuration_*` case, and re-run the EE k6 scenario
+  against a live stack to confirm the fixture still fails fast.
+
+- **ARTIFACT-INV-VIDEO-REMUX-FAIL-FAST.**
+  `remuxVideoToConvertedFolder` in
+  `pkg/worker/process_file_activity.go` MUST walk an ffmpeg fallback
+  chain — `fast remux` (`-c copy`) → `audio re-encode`
+  (`-c:v copy -c:a aac`) → `full re-encode` (`-c:v libx264 -c:a aac`)
+  — and only return `errVideoRemuxUnconvertable` when EVERY attempt
+  fails with an `*exec.ExitError`. If ANY attempt fails with a
+  non-exit error (ffmpeg missing from `$PATH`, MinIO I/O, context
+  cancellation, temp-file errors), the helper MUST return a plain
+  wrapped error so Temporal's default retry policy still absorbs it.
+  A bare first-attempt failure that short-circuits the chain is a
+  regression — it was the second retry-storm shape uncovered while
+  validating `ARTIFACT-INV-MEDIA-DURATION-PROBE-FALLBACK`: an
+  "unprobable" MP4 can actually survive the ffprobe duration check,
+  then wedge `StandardizeFileTypeActivity` on `invalid STSD entries
+  0` across three retries (~45 s each with the 5 s / 1.5× / 60 s
+  policy), producing a generic "File processing was interrupted or
+  terminated before completion" status_message on the file and an
+  opaque process_outcome.
+
+  **Error-typing contract.** `StandardizeFileTypeActivity` MUST detect
+  `errVideoRemuxUnconvertable` via `errors.Is(err, …)` and convert
+  it to a **non-retryable** Temporal `ApplicationError` of type
+  `videoRemuxUnconvertableErrorType`
+  (string: `StandardizeFileTypeActivity:VIDEO_REMUX_UNCONVERTABLE`).
+  The type string is stable by contract because operators and
+  alerting pipelines match on it to distinguish intrinsic file
+  malformation from transient ffmpeg/O&M failures.
+
+  **Workflow fail-fast contract.** `ProcessFileWorkflow` in
+  `pkg/worker/process_file_workflow.go` MUST, on receiving the
+  activity error, call `handleFileError(fm.fileUID, "file type
+  standardization", err)` AND mark the file in both `filesFailed`
+  AND `filesCompleted` BEFORE returning. The `filesCompleted[…] =
+  true` marker is non-negotiable: the workflow's deferred cleanup
+  (at the top of `ProcessFileWorkflow`) runs on every non-successful
+  exit and rewrites any file where `filesCompleted[fileUID]` is
+  still `false` with the generic "File processing was interrupted
+  or terminated before completion" status_message. That overwrite
+  silently clobbered the `VIDEO_REMUX_UNCONVERTABLE` fail-fast
+  signal — this was the third regression surface discovered during
+  the kb-2gNsSWakjs post-mortem. The same contract applies to the
+  `"get file status"` and `"get file metadata"` early-return paths
+  and to every `return handleFileError(…)` call that bypasses the
+  per-file `filesCompleted[…] = true` pattern used by the
+  post-standardization loops.
+
+  **Test contract.** The EE integration gate is
+  `artifact-backend-ee/integration-test/standalone-media-duration-probe.js`
+  — its fail-fast scenario now accepts EITHER `probe media duration:`
+  OR `file type standardization:` as the status_message prefix,
+  because `video-sample-unprobable.mp4` actually trips the remux
+  branch (ffprobe is tolerant enough to return a positive duration
+  from its `tkhd` / `mdhd` fallback before ffmpeg's stream-copy
+  rejects the zero-length `stsd`). Both prefixes are valid
+  non-retryable fail-fast signals; the invariant the test pins is
+  that structurally broken media reaches `FILE_PROCESS_STATUS_FAILED`
+  inside the 90 s budget, not that any one component is the first to
+  reject it.
+
 - **ARTIFACT-INV-CE-DOCS-SELF-CONTAINED.** Files under `docs/` in this
   repo are CE engineering documentation and MUST NOT reference
   EE-only repos (`artifact-backend-ee`, `agent-backend-ee`,

@@ -319,7 +319,15 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				filesCompleted[fileUID.String()] = true
 				continue
 			}
-			return handleFileError(fileUID, "get file status", err)
+			// Mark this file completed-with-error BEFORE returning so the
+			// deferred cleanup (see top of workflow, line ~230) does not
+			// overwrite the "<stage>: <err>" message we just wrote with
+			// the generic "File processing was interrupted or terminated
+			// before completion" fallback.
+			workflowErr := handleFileError(fileUID, "get file status", err)
+			filesFailed[fileUID.String()] = workflowErr
+			filesCompleted[fileUID.String()] = true
+			return workflowErr
 		}
 
 		// Get file metadata (needed before status decisions for patch detection)
@@ -328,7 +336,10 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			FileUID: fileUID,
 			KBUID:   kbUID,
 		}).Get(ctx, &metadata); err != nil {
-			return handleFileError(fileUID, "get file metadata", err)
+			workflowErr := handleFileError(fileUID, "get file metadata", err)
+			filesFailed[fileUID.String()] = workflowErr
+			filesCompleted[fileUID.String()] = true
+			return workflowErr
 		}
 
 		// Detect patch-only mode: file with x-instill-patch flag whose status
@@ -779,8 +790,21 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				RequesterUID:    param.RequesterUID, // Pass requester UID for permission checks
 			}).Get(stdCtx, &result); err != nil {
 				// File type standardization failure is fatal - fail the workflow immediately
-				// This prevents downstream AI processing failures when the format is not supported
-				return handleFileError(fm.fileUID, "file type standardization", err)
+				// This prevents downstream AI processing failures when the format is not supported.
+				//
+				// Mark this file completed-with-error BEFORE returning so
+				// the deferred cleanup (see top of workflow) does not
+				// overwrite the "file type standardization: <err>"
+				// message we just wrote with the generic "File processing
+				// was interrupted or terminated before completion"
+				// fallback — that overwrite is what made the
+				// non-retryable `VIDEO_REMUX_UNCONVERTABLE` fail-fast
+				// signal invisible to downstream observability
+				// (ARTIFACT-INV-VIDEO-REMUX-FAIL-FAST).
+				workflowErr := handleFileError(fm.fileUID, "file type standardization", err)
+				filesFailed[fm.fileUID.String()] = workflowErr
+				filesCompleted[fm.fileUID.String()] = true
+				return workflowErr
 			}
 
 			// Determine effective file location for caching and processing
@@ -883,7 +907,31 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				Destination: cr.effectiveDestination,
 				Metadata:    cr.fileMetadata.metadata.ExternalMetadata,
 			}).Get(ctx, &durResult); err != nil {
-				logger.Warn("Media duration probe failed, will rely on cache metadata",
+				// ARTIFACT-INV-MEDIA-DURATION-PROBE-FALLBACK: when every
+				// ffprobe fallback returned N/A the activity surfaces a
+				// non-retryable ApplicationError of type
+				// `mediaDurationUnprobableErrorType`. We MUST fail the
+				// file fast here — silently continuing leaves
+				// `fileDurationSec` / `longMediaFiles` unset for a
+				// ~500 MB+ video, which then falls through to the
+				// non-long-media single-shot path and wedges
+				// `ProcessContentActivity` / `ProcessSummaryActivity`
+				// until the worker is restarted (prod incident:
+				// kb-2gNsSWakjs, 17 rows stuck PROCESSING).
+				var applicationErr *temporal.ApplicationError
+				if errors.As(err, &applicationErr) && applicationErr.Type() == mediaDurationUnprobableErrorType {
+					logger.Warn("Media duration unprobable; marking file FAILED",
+						"fileUID", cr.fileUID.String(), "error", err)
+					filesFailed[cr.fileUID.String()] = handleFileError(cr.fileUID, "probe media duration", err)
+					filesCompleted[cr.fileUID.String()] = true
+					continue
+				}
+				// Transient failure (MinIO flake, auth error, etc.):
+				// keep the legacy warn-and-continue behavior so a
+				// Gemini-cacheable short file can still recover via
+				// cache metadata (see fileDurationSec population below
+				// from CacheFileContextActivityResult).
+				logger.Warn("Media duration probe failed (transient); will rely on cache metadata",
 					"fileUID", cr.fileUID.String(), "error", err)
 				continue
 			}
@@ -912,10 +960,22 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		// Long media files skip cache creation here — they'll be cached per-chunk later.
 		logger.Info("Starting cache creation and file processing", "fileCount", len(stdResults))
 
-		processingFutures := make([]fileProcessingFuture, len(stdResults))
+		// Skip files that already transitioned to FAILED in an earlier step
+		// (e.g. MEDIA-INV-DURATION-PROBE-FALLBACK above). We append instead
+		// of index-assigning so the per-file downstream loops
+		// (`workflowFutures`, cache collection, content/summary dispatch)
+		// never see a zero-value slot whose `conversionData` / `fileUID` are
+		// nil.
+		processingFutures := make([]fileProcessingFuture, 0, len(stdResults))
 
-		for i, cr := range stdResults {
+		for _, cr := range stdResults {
 			cr := cr
+
+			if filesCompleted[cr.fileUID.String()] {
+				logger.Info("Skipping cache/processing dispatch for already-completed file",
+					"fileUID", cr.fileUID.String())
+				continue
+			}
 
 			var fileCacheFuture workflow.Future
 
@@ -945,11 +1005,11 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				logger.Info("Skipping file cache creation (non-Gemini)", "fileUID", cr.fileUID.String())
 			}
 
-			processingFutures[i] = fileProcessingFuture{
+			processingFutures = append(processingFutures, fileProcessingFuture{
 				fileUID:         cr.fileUID,
 				fileCacheFuture: fileCacheFuture,
 				conversionData:  &cr,
-			}
+			})
 		}
 
 		workflowFutures := make([]fileWorkflowFutures, len(processingFutures))
@@ -1858,12 +1918,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			// If entity tags were extracted, create an augmented chunk and save entities.
 			if len(summaryResult.EntityTags) > 0 {
-				// Build comma-separated entity text for embedding + BM25 indexing.
-				var entityNames []string
-				for _, e := range summaryResult.EntityTags {
-					entityNames = append(entityNames, e.Name)
-				}
-				augmentedText := strings.Join(entityNames, ", ")
+				augmentedText := formatAugmentedEntities(summaryResult.EntityTags)
 
 				var augmentedChunks ChunkContentActivityResult
 				if err := workflow.ExecuteActivity(ctx, w.ChunkContentActivity, &ChunkContentActivityParam{

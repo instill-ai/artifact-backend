@@ -78,15 +78,16 @@ type BackfillThumbnailsWorkflowParam struct {
 }
 
 // BackfillThumbnailsWorkflowName is the registered Temporal workflow
-// name. Operators pass this to the `commander backfill-thumbnails`
-// helper (see `artifact-backend-ee/docs/runbook-backfill-thumbnails.md`
-// — the runbook lives in the EE repo because the backfill is an
-// operational task on EE deployments; the workflow code itself is CE).
+// name. Operator tooling pins this string — the workflow code itself
+// is CE but the backfill is an EE-operational task (the runbook lives
+// in the EE repo because CE deployments have no operator surface to
+// trigger it); renaming it is a wire break for any in-flight
+// invocations.
 const BackfillThumbnailsWorkflowName = "BackfillThumbnailsWorkflow"
 
 // backfillThumbnailsWorkflowStarter is the adapter used by callers
-// (handlers, tests, commander scripts) to enqueue the workflow through
-// the Temporal client without knowing the TaskQueue layout.
+// (handlers, tests, EE operator tooling) to enqueue the workflow
+// through the Temporal client without knowing the TaskQueue layout.
 type backfillThumbnailsWorkflowStarter struct {
 	temporalClient client.Client
 	worker         *Worker
