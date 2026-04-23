@@ -117,6 +117,20 @@ the EE-side authoring conventions.
 
 ## Invariants
 
+- **ARTIFACT-INV-LIST-FILES-PERMISSION-FILTER.** `PublicHandler.ListFiles`
+  delegates to `PublicHandler.ListFilesWithPermissionFilter(ctx, req, nil)`
+  — the latter is the actual implementation and the supported extension
+  point for callers (notably `artifact-backend-ee`) that need per-row
+  authorization in addition to namespace / KB ACL. The supplied
+  `*repository.FilePermissionFilter` is compiled into the same SQL `WHERE`
+  as namespace / KB / AIP-160 filters, which keeps `total_size` /
+  `next_page_token` accurate under filtering — a post-pagination filter
+  cannot achieve this and must not be reintroduced. The filter API is
+  intentionally generic (`TagsOverlap` / `UIDsIn` / `TagsLikeNone` /
+  `VisibilityIn` over opaque strings and UUIDs); the repository / handler
+  have zero semantic understanding of any tag value, which keeps EE
+  authorization concepts (collections, FGA, etc.) out of the OSS surface.
+
 - **ARTIFACT-INV-LIST-VIEW-FANOUT.** `PublicHandler.ListFiles` fans out
   per-row presigns through the shared `resolveDerivedResourceURI` helper
   (same code path as `GetFile`) via an `errgroup` with **bounded

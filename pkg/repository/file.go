@@ -570,6 +570,138 @@ type KnowledgeBaseFileListParams struct {
 	// Pagination
 	PageSize  int
 	PageToken string
+
+	// PermissionFilter optionally narrows the result to a caller-allowed set.
+	// When nil (or with no clauses), no permission filtering is applied — this
+	// is the CE default. Enterprise callers can supply this to push their
+	// authorization decision into the same SQL as pagination, which keeps
+	// `TotalCount` and `NextPageToken` correct under filtering.
+	//
+	// The repository has no semantic understanding of any tag value, UID, or
+	// LIKE pattern carried in the filter — they are opaque to this package.
+	PermissionFilter *FilePermissionFilter
+}
+
+// FilePermissionFilter narrows a file query to a caller-allowed set.
+//
+// The filter is a disjunction of clauses (`Clauses[i] OR Clauses[j] OR …`).
+// Within a single clause every populated dimension must hold (`AND`). An
+// empty filter or one with no clauses is a no-op and matches every row that
+// the surrounding query already selects.
+//
+// The repository compiles this struct directly into the SQL `WHERE` clause
+// alongside the existing namespace / KB / AIP-160 filter, so pagination
+// remains correct: `TotalCount` reflects the post-filter count, and
+// `NextPageToken` walks the post-filter result set.
+type FilePermissionFilter struct {
+	Clauses []FilePermissionClause
+}
+
+// FilePermissionClause is a single conjunction of dimensions that must all
+// hold for a file to be included by this clause. Each dimension is optional;
+// a clause with no populated dimensions matches every row (use sparingly —
+// effectively disables permission filtering for the query).
+type FilePermissionClause struct {
+	// TagsOverlap matches files whose `tags` array shares at least one element
+	// with the supplied set. Compiles to `file.tags && $1` (PostgreSQL array
+	// overlap operator). Empty slice = dimension not applied.
+	TagsOverlap []string
+
+	// UIDsIn matches files whose primary UID is in the supplied set. Compiles
+	// to `file.uid = ANY($1)`. Empty slice = dimension not applied.
+	UIDsIn []uuid.UUID
+
+	// TagsLikeNone matches files where no element of `tags` matches any of
+	// the supplied SQL `LIKE` patterns. Each pattern compiles to a
+	// `NOT EXISTS (SELECT 1 FROM unnest(file.tags) t WHERE t LIKE $1)`. Used
+	// to express "this file has no tag of shape X" (e.g. orphan-of-some-prefix
+	// reads). Empty slice = dimension not applied.
+	TagsLikeNone []string
+
+	// VisibilityIn matches files whose `visibility` column is in the supplied
+	// set. Compiles to `file.visibility = ANY($1)`. Empty slice = dimension
+	// not applied.
+	VisibilityIn []string
+}
+
+// isEmpty reports whether the clause would not constrain the query at all.
+// A clause with no populated dimensions is excluded from the compiled WHERE
+// (otherwise the disjunction would be `WHERE … OR TRUE` and silently match
+// every row, which is almost certainly not what the caller wanted).
+func (c FilePermissionClause) isEmpty() bool {
+	return len(c.TagsOverlap) == 0 &&
+		len(c.UIDsIn) == 0 &&
+		len(c.TagsLikeNone) == 0 &&
+		len(c.VisibilityIn) == 0
+}
+
+// compile builds the WHERE fragment + ordered bind args for one clause. The
+// returned fragment is wrapped in parentheses so it composes correctly inside
+// the disjunction. Returns ("", nil) for an empty clause; callers must drop
+// such clauses before composing the OR.
+func (c FilePermissionClause) compile() (string, []any) {
+	if c.isEmpty() {
+		return "", nil
+	}
+
+	var preds []string
+	var args []any
+
+	if len(c.TagsOverlap) > 0 {
+		preds = append(preds, "file.tags && ?")
+		args = append(args, pq.Array(c.TagsOverlap))
+	}
+	if len(c.UIDsIn) > 0 {
+		uidStrs := make([]string, len(c.UIDsIn))
+		for i, u := range c.UIDsIn {
+			uidStrs[i] = u.String()
+		}
+		preds = append(preds, "file.uid = ANY(?)")
+		args = append(args, pq.Array(uidStrs))
+	}
+	for _, pattern := range c.TagsLikeNone {
+		// One NOT EXISTS per pattern keeps the predicate index-friendly and
+		// avoids an unnest()-with-OR shape that PG would not be able to
+		// short-circuit cleanly.
+		preds = append(preds, "NOT EXISTS (SELECT 1 FROM unnest(file.tags) t WHERE t LIKE ?)")
+		args = append(args, pattern)
+	}
+	if len(c.VisibilityIn) > 0 {
+		preds = append(preds, "file.visibility = ANY(?)")
+		args = append(args, pq.Array(c.VisibilityIn))
+	}
+
+	return "(" + strings.Join(preds, " AND ") + ")", args
+}
+
+// compile builds the WHERE fragment + ordered bind args for the whole filter.
+// Clauses are joined with OR. Returns ("", nil) when there is nothing to
+// constrain (nil filter, empty Clauses, or every clause empty) so the caller
+// can skip adding a no-op WHERE term.
+func (f *FilePermissionFilter) compile() (string, []any) {
+	if f == nil || len(f.Clauses) == 0 {
+		return "", nil
+	}
+
+	var fragments []string
+	var args []any
+	for _, clause := range f.Clauses {
+		frag, clauseArgs := clause.compile()
+		if frag == "" {
+			continue
+		}
+		fragments = append(fragments, frag)
+		args = append(args, clauseArgs...)
+	}
+
+	if len(fragments) == 0 {
+		return "", nil
+	}
+
+	// A single clause is wrapped in parentheses by clause.compile(); joining
+	// multiple with OR is also wrapped so the term composes safely with
+	// surrounding `AND`s.
+	return "(" + strings.Join(fragments, " OR ") + ")", args
 }
 
 // FileList contains a list of files.
@@ -609,6 +741,14 @@ func (r *repository) ListFiles(ctx context.Context, params KnowledgeBaseFileList
 	if expr != nil {
 		// Apply the filter expression directly using Where with SQL and Vars
 		q = q.Where(expr.SQL, expr.Vars...)
+	}
+
+	// Apply caller-supplied permission filter, if any. Compiled into the same
+	// WHERE clause as namespace / KB / AIP-160 filters so pagination and
+	// `TotalCount` reflect the post-filter result set. Nil or no-op filters
+	// produce an empty fragment and leave the query unchanged.
+	if pfFrag, pfArgs := params.PermissionFilter.compile(); pfFrag != "" {
+		q = q.Where(pfFrag, pfArgs...)
 	}
 
 	// Count the total number of matching records

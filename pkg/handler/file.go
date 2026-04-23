@@ -687,9 +687,31 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	}, nil
 }
 
-// ListFiles lists files in a knowledge base with pagination and filtering (AIP-compliant version of ListKnowledgeBaseFiles).
-// Supports filtering by file IDs and process status, with token/chunk count enrichment.
+// ListFiles lists files in a knowledge base with pagination and filtering
+// (AIP-compliant version of ListKnowledgeBaseFiles). Supports filtering by
+// file IDs and process status, with token/chunk count enrichment.
+//
+// This is the standard CE entry point — it lists every file the surrounding
+// namespace / KB ACL grants the caller access to, with no per-row permission
+// filtering. Enterprise callers that need per-row authorization (e.g.
+// fine-grained file-level FGA grants on top of the namespace check) should
+// call ListFilesWithPermissionFilter directly with a pre-built filter.
 func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFilesRequest) (*artifactpb.ListFilesResponse, error) {
+	return ph.ListFilesWithPermissionFilter(ctx, req, nil)
+}
+
+// ListFilesWithPermissionFilter is the same as ListFiles but lets the caller
+// inject an optional permission filter that is compiled into the same SQL as
+// pagination. This keeps `total_size` / `next_page_token` correct under
+// per-row authorization, which a post-pagination filter (e.g. filtering
+// returned rows in handler code) cannot achieve.
+//
+// The filter is opaque to this handler and to CE in general: it only deals
+// in tag overlaps, UID lists, tag-prefix-absence, and visibility values. The
+// caller is responsible for translating whatever authorization model it uses
+// into the supplied predicate dimensions. Pass nil to skip permission
+// filtering entirely (this is what the regular ListFiles does).
+func (ph *PublicHandler) ListFilesWithPermissionFilter(ctx context.Context, req *artifactpb.ListFilesRequest, permissionFilter *repository.FilePermissionFilter) (*artifactpb.ListFilesResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 	authUID, err := getUserUIDFromContext(ctx)
 	if err != nil {
@@ -809,11 +831,12 @@ func (ph *PublicHandler) ListFiles(ctx context.Context, req *artifactpb.ListFile
 	}
 
 	kbFileList, err := ph.service.Repository().ListFiles(ctx, repository.KnowledgeBaseFileListParams{
-		OwnerUID:  ns.NsUID.String(),
-		KBUID:     kbUID,
-		PageSize:  int(req.GetPageSize()),
-		PageToken: req.GetPageToken(),
-		Filter:    parsedFilter,
+		OwnerUID:         ns.NsUID.String(),
+		KBUID:            kbUID,
+		PageSize:         int(req.GetPageSize()),
+		PageToken:        req.GetPageToken(),
+		Filter:           parsedFilter,
+		PermissionFilter: permissionFilter,
 	})
 	if err != nil {
 		return nil, errorsx.AddMessage(
