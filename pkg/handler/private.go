@@ -982,10 +982,10 @@ func (h *PrivateHandler) GetDefaultSystemAdmin(ctx context.Context, req *artifac
 	return resp, nil
 }
 
-// ListFilesAdmin lists files in a knowledge base without ACL filtering (admin only).
-// This delegates to the CE public ListFiles handler which handles all the DB queries,
-// filtering, and pagination. The admin endpoint bypasses the EE per-file FGA filtering
-// that wraps the public handler.
+// ListFilesAdmin lists files in a knowledge base (admin only).
+// When permission_clauses are supplied, they are compiled into the SQL WHERE
+// clause so that both the returned rows and total_size reflect only permitted
+// files. When absent, all files matching the AIP-160 filter are returned.
 // Used by internal services (e.g., agent-backend) for service-to-service file lookups.
 func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.ListFilesAdminRequest) (*artifactpb.ListFilesAdminResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
@@ -1040,17 +1040,39 @@ func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.Lis
 		publicReq.View = &view
 	}
 
-	// Create a public handler to reuse the existing ListFiles logic
+	// Convert proto permission clauses to repository-level filter.
+	var permFilter *repository.FilePermissionFilter
+	if clauses := req.GetPermissionClauses(); len(clauses) > 0 {
+		repoClauses := make([]repository.FilePermissionClause, 0, len(clauses))
+		for _, c := range clauses {
+			rc := repository.FilePermissionClause{
+				TagsOverlap:  c.GetTagsOverlap(),
+				TagsLikeNone: c.GetTagsLikeNone(),
+				VisibilityIn: c.GetVisibilityIn(),
+			}
+			if uids := c.GetUidsIn(); len(uids) > 0 {
+				parsed := make([]uuid.UUID, 0, len(uids))
+				for _, u := range uids {
+					uid, parseErr := uuid.FromString(u)
+					if parseErr != nil {
+						logger.Warn("ListFilesAdmin: skipping invalid UID in permission clause",
+							zap.String("uid", u), zap.Error(parseErr))
+						continue
+					}
+					parsed = append(parsed, uid)
+				}
+				rc.UIDsIn = parsed
+			}
+			repoClauses = append(repoClauses, rc)
+		}
+		permFilter = &repository.FilePermissionFilter{Clauses: repoClauses}
+	}
+
 	publicHandler := &PublicHandler{
 		service: h.service,
 	}
 
-	// Delegate to the CE public handler's ListFiles which handles:
-	// - AIP-160 filter parsing (file IDs, tags, process status)
-	// - Pagination with page token
-	// - Token/chunk count enrichment
-	// ACL checks are bypassed via the injected Instill-Backend header.
-	resp, err := publicHandler.ListFiles(ctx, publicReq)
+	resp, err := publicHandler.ListFilesWithPermissionFilter(ctx, publicReq, permFilter)
 	if err != nil {
 		logger.Error("ListFilesAdmin failed", zap.Error(err))
 		return nil, err
