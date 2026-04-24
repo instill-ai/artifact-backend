@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -21,6 +22,30 @@ import (
 
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
+)
+
+// Streaming upload tuning. These are package-scope so the matching unit
+// test in gcs_stream_test.go can reference them without duplicating magic
+// numbers. See ARTIFACT-INV-GCS-STREAM-RESUME in artifact-backend/AGENTS.md.
+const (
+	// maxStreamResumes caps how many times StreamCopy will reopen the
+	// source after a mid-stream truncation within a single call. Four or
+	// more sequential truncations still fall through to the caller's
+	// outer retry (e.g. Temporal) — an intentionally cheap degraded path
+	// over the more expensive alternative of persisting GCS session URIs
+	// across activity attempts.
+	maxStreamResumes = 3
+
+	// streamResumeGap is the cool-down between resumes. Long enough for a
+	// transient MinIO TCP / keep-alive hiccup to clear, short enough to
+	// stay inside any reasonable activity timeout. Tuned together with
+	// the uploadCtx timeout below; if you raise one, revisit the other.
+	streamResumeGap = 2 * time.Second
+
+	// gcsResumableChunkSize matches the existing UploadFromReader chunking
+	// (32 MiB per resumable upload chunk). Extracted as a named constant
+	// so StreamCopy and UploadFromReader stay in lockstep.
+	gcsResumableChunkSize = 32 * 1024 * 1024
 )
 
 // gcsStorage implements Storage interface for Google Cloud Storage
@@ -523,6 +548,14 @@ func (g *gcsStorage) UploadFromReader(ctx context.Context, bucket string, filePa
 	return nil
 }
 
+// GetFileReaderRange is not meaningful for a GCS destination in this
+// codebase: GCS here is write-only (content/summary outputs, VertexAI
+// caches), never the source side of a stream. The implementation exists
+// to satisfy the Storage interface.
+func (g *gcsStorage) GetFileReaderRange(_ context.Context, _ string, _ string, _ int64) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("gcsStorage.GetFileReaderRange: not implemented; GCS is write-only in this codebase")
+}
+
 // CopyObject copies an object from one location to another in GCS.
 func (g *gcsStorage) CopyObject(ctx context.Context, srcBucket, srcPath, dstBucket, dstPath string) error {
 	src := g.client.Bucket(srcBucket).Object(srcPath)
@@ -536,4 +569,220 @@ func (g *gcsStorage) CopyObject(ctx context.Context, srcBucket, srcPath, dstBuck
 // GetBucket returns the default GCS bucket name
 func (g *gcsStorage) GetBucket() string {
 	return g.bucket
+}
+
+// StreamCopy streams a known-size object to GCS via a caller-supplied
+// openAt factory, owning one resumable upload writer across the whole call
+// and transparently recovering from mid-stream MinIO body truncations.
+//
+// The outer shape is:
+//
+//  1. Create a single GCS resumable upload writer with a timeout that
+//     accommodates the full payload plus maxStreamResumes rounds of
+//     rewind-and-retry.
+//  2. Loop: openAt(copied) → io.Copy into the writer via a progressWriter
+//     that increments the cumulative counter and fires progressFn on
+//     every write (activities use this for Temporal heartbeats).
+//  3. If io.Copy ended with io.ErrUnexpectedEOF — or ended cleanly but
+//     short of size (the silent-truncation failure mode confirmed in
+//     minio-go: HTTP body EOF masked as nil) — treat it as a resumable
+//     truncation, close the stale reader, sleep streamResumeGap, and
+//     re-open at the new offset. After maxStreamResumes, give up and let
+//     the outer retry handle it.
+//  4. Any other error → abort (do not finalise the writer) and return.
+//  5. On success (copied == size with err == nil), writer.Close() sends
+//     the GCS finalize request.
+//
+// The resume path depends on the MinIO object being immutable for the
+// duration of the copy — a property the artifact-backend pipeline
+// already provides (standardized / KB file paths are write-once). If
+// that invariant is ever relaxed, the follow-up
+// ARTIFACT-INV-GCS-STREAM-RESUME-ETAG hardening (capture attrs.Etag at
+// first open, re-verify on each resume) becomes required.
+func (g *gcsStorage) StreamCopy(ctx context.Context, bucket string, filePath string, openAt func(offset int64) (io.ReadCloser, error), size int64, mimeType string, progressFn func(copied int64)) error {
+	if g.client == nil {
+		return fmt.Errorf("GCS client not initialized")
+	}
+	if bucket == "" {
+		bucket = g.bucket
+	}
+	if size < 0 {
+		return fmt.Errorf("gcsStorage.StreamCopy: size must be >= 0 (got %d); unknown-size uploads are not resumable", size)
+	}
+	if openAt == nil {
+		return fmt.Errorf("gcsStorage.StreamCopy: openAt factory is required")
+	}
+
+	sizeMB := size / (1024 * 1024)
+
+	// Timeout budget has to cover: (a) the baseline 15m + 2s/MB that
+	// UploadFromReader uses, plus (b) maxStreamResumes × (streamResumeGap
+	// + 5m) to accommodate re-reads of potentially the full remaining
+	// payload on each resume. Overshooting is cheap; undershooting
+	// truncates a legitimate resume mid-way and masks the fix.
+	timeout := 15*time.Minute +
+		time.Duration(sizeMB)*2*time.Second +
+		maxStreamResumes*(streamResumeGap+5*time.Minute)
+	uploadCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	log := g.logger.With(
+		zap.String("bucket", bucket),
+		zap.String("path", filePath),
+		zap.Int64("sizeMB", sizeMB),
+		zap.Duration("timeout", timeout),
+	)
+	log.Info("Starting streaming GCS upload with resume",
+		zap.Int("maxStreamResumes", maxStreamResumes),
+		zap.Duration("streamResumeGap", streamResumeGap))
+
+	obj := g.client.Bucket(bucket).Object(filePath)
+	writer := obj.NewWriter(uploadCtx)
+	writer.ContentType = mimeType
+	writer.ChunkSize = gcsResumableChunkSize
+	writer.Metadata = map[string]string{
+		"upload_time": time.Now().Format(time.RFC3339),
+		"source":      "artifact-backend",
+	}
+
+	// Defer-close protects against early returns that forget to abort
+	// the writer. On the happy path we call writer.Close() explicitly
+	// below and clear `writer` so this deferred close is a no-op.
+	var writerClosed bool
+	defer func() {
+		if !writerClosed {
+			// Best-effort abort. The GCS client elides resumable-upload
+			// finalisation when the ctx is cancelled (via `defer cancel()`
+			// above), so partial bytes never surface as a committed object.
+			_ = writer.Close()
+		}
+	}()
+
+	copied, resumes, err := streamCopyWithResume(
+		uploadCtx, writer, openAt, size, log, progressFn,
+		maxStreamResumes, streamResumeGap,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("finalizing GCS streaming upload: %w", err)
+	}
+	writerClosed = true
+
+	log.Info("Streaming GCS upload complete",
+		zap.Int64("bytes", copied),
+		zap.Int("resumes", resumes))
+
+	return nil
+}
+
+// streamCopyWithResume is the pure in-activity resume loop that
+// StreamCopy wires its GCS writer into. Split out from StreamCopy so
+// unit tests can exercise the loop end-to-end without standing up a
+// real GCS client — any `io.Writer` that counts bytes (a bytes.Buffer
+// suffices) is enough to pin the contract.
+//
+// Returns the cumulative bytes copied, the number of resumes actually
+// taken, and the terminal error (nil on success). The caller owns the
+// writer lifecycle: this helper never calls writer.Close() — even on
+// error paths — so StreamCopy can decide whether to finalise or abort.
+//
+// The loop invariants are:
+//   - Every openAt(offset) call gets the current `copied` value, and
+//     the reader it returns is always closed before the next iteration.
+//   - Exit path 1 (success): copyErr == nil AND copied == size.
+//   - Exit path 2 (silent truncation promoted): copyErr == nil AND
+//     copied < size — treated identically to ErrUnexpectedEOF so the
+//     minio-go "body EOF masked as nil" failure mode doesn't wedge
+//     uploads at sub-full copies.
+//   - Exit path 3 (resume): ErrUnexpectedEOF (real or promoted) and
+//     resumes ≤ maxResumes — sleep resumeGap (cancellable) and retry.
+//   - Exit path 4 (budget exhausted): more than maxResumes truncations
+//     — return the ErrUnexpectedEOF wrapped with the copied/size tally.
+//   - Exit path 5 (non-EOF error): return the error wrapped, let the
+//     caller decide retry strategy.
+func streamCopyWithResume(
+	ctx context.Context,
+	writer io.Writer,
+	openAt func(offset int64) (io.ReadCloser, error),
+	size int64,
+	log *zap.Logger,
+	progressFn func(copied int64),
+	maxResumes int,
+	resumeGap time.Duration,
+) (int64, int, error) {
+	copied := int64(0)
+	resumes := 0
+	progress := &progressWriter{w: writer, counter: &copied, fn: progressFn}
+
+	for {
+		reader, err := openAt(copied)
+		if err != nil {
+			return copied, resumes, fmt.Errorf("opening source at offset %d: %w", copied, err)
+		}
+
+		segmentStart := copied
+		_, copyErr := io.Copy(progress, reader)
+		_ = reader.Close()
+		segmentCopied := copied - segmentStart
+
+		if copyErr == nil && copied == size {
+			return copied, resumes, nil
+		}
+
+		if copyErr == nil && copied < size {
+			copyErr = io.ErrUnexpectedEOF
+		}
+
+		if errors.Is(copyErr, io.ErrUnexpectedEOF) {
+			resumes++
+			if resumes > maxResumes {
+				return copied, resumes, fmt.Errorf("streaming to GCS: %w after %d resumes (copied %d of %d bytes)",
+					io.ErrUnexpectedEOF, maxResumes, copied, size)
+			}
+			if log != nil {
+				log.Warn("Resuming MinIO stream after truncation",
+					zap.Int64("copied", copied),
+					zap.Int64("size", size),
+					zap.Int64("segmentCopied", segmentCopied),
+					zap.Int("resume", resumes))
+			}
+			// Cancellable sleep so a context cancellation here doesn't
+			// waste the full gap before we notice.
+			select {
+			case <-ctx.Done():
+				return copied, resumes, fmt.Errorf("streaming to GCS: context cancelled during resume backoff: %w", ctx.Err())
+			case <-time.After(resumeGap):
+			}
+			continue
+		}
+
+		return copied, resumes, fmt.Errorf("streaming to GCS: %w", copyErr)
+	}
+}
+
+// progressWriter wraps the GCS resumable Writer so StreamCopy can
+// accumulate the cumulative byte count across resume iterations and fire
+// the caller-provided progressFn on every inner Write — frequent enough
+// to keep Temporal heartbeats alive on any reasonable heartbeat timeout.
+// The counter pointer is shared with the outer StreamCopy loop so the
+// truncation-detection logic (err==nil && copied<size) can read the
+// up-to-date total without racing.
+type progressWriter struct {
+	w       io.Writer
+	counter *int64
+	fn      func(copied int64)
+}
+
+func (p *progressWriter) Write(b []byte) (int, error) {
+	n, err := p.w.Write(b)
+	if n > 0 {
+		*p.counter += int64(n)
+		if p.fn != nil {
+			p.fn(*p.counter)
+		}
+	}
+	return n, err
 }

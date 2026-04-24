@@ -63,6 +63,13 @@ type StorageMock struct {
 	beforeGetFileReaderCounter uint64
 	GetFileReaderMock          mStorageMockGetFileReader
 
+	funcGetFileReaderRange          func(ctx context.Context, bucket string, filePath string, offset int64) (r1 io.ReadCloser, err error)
+	funcGetFileReaderRangeOrigin    string
+	inspectFuncGetFileReaderRange   func(ctx context.Context, bucket string, filePath string, offset int64)
+	afterGetFileReaderRangeCounter  uint64
+	beforeGetFileReaderRangeCounter uint64
+	GetFileReaderRangeMock          mStorageMockGetFileReaderRange
+
 	funcGetPresignedURLForDownload          func(ctx context.Context, bucket string, objectPath string, filename string, contentType string, expiration time.Duration) (up1 *url.URL, err error)
 	funcGetPresignedURLForDownloadOrigin    string
 	inspectFuncGetPresignedURLForDownload   func(ctx context.Context, bucket string, objectPath string, filename string, contentType string, expiration time.Duration)
@@ -112,6 +119,13 @@ type StorageMock struct {
 	beforeSaveConvertedFileCounter uint64
 	SaveConvertedFileMock          mStorageMockSaveConvertedFile
 
+	funcStreamCopy          func(ctx context.Context, bucket string, filePath string, openAt func(offset int64) (io.ReadCloser, error), size int64, fileMimeType string, progressFn func(copied int64)) (err error)
+	funcStreamCopyOrigin    string
+	inspectFuncStreamCopy   func(ctx context.Context, bucket string, filePath string, openAt func(offset int64) (io.ReadCloser, error), size int64, fileMimeType string, progressFn func(copied int64))
+	afterStreamCopyCounter  uint64
+	beforeStreamCopyCounter uint64
+	StreamCopyMock          mStorageMockStreamCopy
+
 	funcUploadBase64File          func(ctx context.Context, bucket string, filePath string, base64Content string, fileMimeType string) (err error)
 	funcUploadBase64FileOrigin    string
 	inspectFuncUploadBase64File   func(ctx context.Context, bucket string, filePath string, base64Content string, fileMimeType string)
@@ -159,6 +173,9 @@ func NewStorageMock(t minimock.Tester) *StorageMock {
 	m.GetFileReaderMock = mStorageMockGetFileReader{mock: m}
 	m.GetFileReaderMock.callArgs = []*StorageMockGetFileReaderParams{}
 
+	m.GetFileReaderRangeMock = mStorageMockGetFileReaderRange{mock: m}
+	m.GetFileReaderRangeMock.callArgs = []*StorageMockGetFileReaderRangeParams{}
+
 	m.GetPresignedURLForDownloadMock = mStorageMockGetPresignedURLForDownload{mock: m}
 	m.GetPresignedURLForDownloadMock.callArgs = []*StorageMockGetPresignedURLForDownloadParams{}
 
@@ -179,6 +196,9 @@ func NewStorageMock(t minimock.Tester) *StorageMock {
 
 	m.SaveConvertedFileMock = mStorageMockSaveConvertedFile{mock: m}
 	m.SaveConvertedFileMock.callArgs = []*StorageMockSaveConvertedFileParams{}
+
+	m.StreamCopyMock = mStorageMockStreamCopy{mock: m}
+	m.StreamCopyMock.callArgs = []*StorageMockStreamCopyParams{}
 
 	m.UploadBase64FileMock = mStorageMockUploadBase64File{mock: m}
 	m.UploadBase64FileMock.callArgs = []*StorageMockUploadBase64FileParams{}
@@ -2308,6 +2328,411 @@ func (m *StorageMock) MinimockGetFileReaderInspect() {
 	if !m.GetFileReaderMock.invocationsDone() && afterGetFileReaderCounter > 0 {
 		m.t.Errorf("Expected %d calls to StorageMock.GetFileReader at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetFileReaderMock.expectedInvocations), m.GetFileReaderMock.expectedInvocationsOrigin, afterGetFileReaderCounter)
+	}
+}
+
+type mStorageMockGetFileReaderRange struct {
+	optional           bool
+	mock               *StorageMock
+	defaultExpectation *StorageMockGetFileReaderRangeExpectation
+	expectations       []*StorageMockGetFileReaderRangeExpectation
+
+	callArgs []*StorageMockGetFileReaderRangeParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// StorageMockGetFileReaderRangeExpectation specifies expectation struct of the Storage.GetFileReaderRange
+type StorageMockGetFileReaderRangeExpectation struct {
+	mock               *StorageMock
+	params             *StorageMockGetFileReaderRangeParams
+	paramPtrs          *StorageMockGetFileReaderRangeParamPtrs
+	expectationOrigins StorageMockGetFileReaderRangeExpectationOrigins
+	results            *StorageMockGetFileReaderRangeResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// StorageMockGetFileReaderRangeParams contains parameters of the Storage.GetFileReaderRange
+type StorageMockGetFileReaderRangeParams struct {
+	ctx      context.Context
+	bucket   string
+	filePath string
+	offset   int64
+}
+
+// StorageMockGetFileReaderRangeParamPtrs contains pointers to parameters of the Storage.GetFileReaderRange
+type StorageMockGetFileReaderRangeParamPtrs struct {
+	ctx      *context.Context
+	bucket   *string
+	filePath *string
+	offset   *int64
+}
+
+// StorageMockGetFileReaderRangeResults contains results of the Storage.GetFileReaderRange
+type StorageMockGetFileReaderRangeResults struct {
+	r1  io.ReadCloser
+	err error
+}
+
+// StorageMockGetFileReaderRangeOrigins contains origins of expectations of the Storage.GetFileReaderRange
+type StorageMockGetFileReaderRangeExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originBucket   string
+	originFilePath string
+	originOffset   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) Optional() *mStorageMockGetFileReaderRange {
+	mmGetFileReaderRange.optional = true
+	return mmGetFileReaderRange
+}
+
+// Expect sets up expected params for Storage.GetFileReaderRange
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) Expect(ctx context.Context, bucket string, filePath string, offset int64) *mStorageMockGetFileReaderRange {
+	if mmGetFileReaderRange.mock.funcGetFileReaderRange != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Set")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation == nil {
+		mmGetFileReaderRange.defaultExpectation = &StorageMockGetFileReaderRangeExpectation{}
+	}
+
+	if mmGetFileReaderRange.defaultExpectation.paramPtrs != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by ExpectParams functions")
+	}
+
+	mmGetFileReaderRange.defaultExpectation.params = &StorageMockGetFileReaderRangeParams{ctx, bucket, filePath, offset}
+	mmGetFileReaderRange.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetFileReaderRange.expectations {
+		if minimock.Equal(e.params, mmGetFileReaderRange.defaultExpectation.params) {
+			mmGetFileReaderRange.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetFileReaderRange.defaultExpectation.params)
+		}
+	}
+
+	return mmGetFileReaderRange
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Storage.GetFileReaderRange
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) ExpectCtxParam1(ctx context.Context) *mStorageMockGetFileReaderRange {
+	if mmGetFileReaderRange.mock.funcGetFileReaderRange != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Set")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation == nil {
+		mmGetFileReaderRange.defaultExpectation = &StorageMockGetFileReaderRangeExpectation{}
+	}
+
+	if mmGetFileReaderRange.defaultExpectation.params != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Expect")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation.paramPtrs == nil {
+		mmGetFileReaderRange.defaultExpectation.paramPtrs = &StorageMockGetFileReaderRangeParamPtrs{}
+	}
+	mmGetFileReaderRange.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetFileReaderRange.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetFileReaderRange
+}
+
+// ExpectBucketParam2 sets up expected param bucket for Storage.GetFileReaderRange
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) ExpectBucketParam2(bucket string) *mStorageMockGetFileReaderRange {
+	if mmGetFileReaderRange.mock.funcGetFileReaderRange != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Set")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation == nil {
+		mmGetFileReaderRange.defaultExpectation = &StorageMockGetFileReaderRangeExpectation{}
+	}
+
+	if mmGetFileReaderRange.defaultExpectation.params != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Expect")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation.paramPtrs == nil {
+		mmGetFileReaderRange.defaultExpectation.paramPtrs = &StorageMockGetFileReaderRangeParamPtrs{}
+	}
+	mmGetFileReaderRange.defaultExpectation.paramPtrs.bucket = &bucket
+	mmGetFileReaderRange.defaultExpectation.expectationOrigins.originBucket = minimock.CallerInfo(1)
+
+	return mmGetFileReaderRange
+}
+
+// ExpectFilePathParam3 sets up expected param filePath for Storage.GetFileReaderRange
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) ExpectFilePathParam3(filePath string) *mStorageMockGetFileReaderRange {
+	if mmGetFileReaderRange.mock.funcGetFileReaderRange != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Set")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation == nil {
+		mmGetFileReaderRange.defaultExpectation = &StorageMockGetFileReaderRangeExpectation{}
+	}
+
+	if mmGetFileReaderRange.defaultExpectation.params != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Expect")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation.paramPtrs == nil {
+		mmGetFileReaderRange.defaultExpectation.paramPtrs = &StorageMockGetFileReaderRangeParamPtrs{}
+	}
+	mmGetFileReaderRange.defaultExpectation.paramPtrs.filePath = &filePath
+	mmGetFileReaderRange.defaultExpectation.expectationOrigins.originFilePath = minimock.CallerInfo(1)
+
+	return mmGetFileReaderRange
+}
+
+// ExpectOffsetParam4 sets up expected param offset for Storage.GetFileReaderRange
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) ExpectOffsetParam4(offset int64) *mStorageMockGetFileReaderRange {
+	if mmGetFileReaderRange.mock.funcGetFileReaderRange != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Set")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation == nil {
+		mmGetFileReaderRange.defaultExpectation = &StorageMockGetFileReaderRangeExpectation{}
+	}
+
+	if mmGetFileReaderRange.defaultExpectation.params != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Expect")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation.paramPtrs == nil {
+		mmGetFileReaderRange.defaultExpectation.paramPtrs = &StorageMockGetFileReaderRangeParamPtrs{}
+	}
+	mmGetFileReaderRange.defaultExpectation.paramPtrs.offset = &offset
+	mmGetFileReaderRange.defaultExpectation.expectationOrigins.originOffset = minimock.CallerInfo(1)
+
+	return mmGetFileReaderRange
+}
+
+// Inspect accepts an inspector function that has same arguments as the Storage.GetFileReaderRange
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) Inspect(f func(ctx context.Context, bucket string, filePath string, offset int64)) *mStorageMockGetFileReaderRange {
+	if mmGetFileReaderRange.mock.inspectFuncGetFileReaderRange != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("Inspect function is already set for StorageMock.GetFileReaderRange")
+	}
+
+	mmGetFileReaderRange.mock.inspectFuncGetFileReaderRange = f
+
+	return mmGetFileReaderRange
+}
+
+// Return sets up results that will be returned by Storage.GetFileReaderRange
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) Return(r1 io.ReadCloser, err error) *StorageMock {
+	if mmGetFileReaderRange.mock.funcGetFileReaderRange != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Set")
+	}
+
+	if mmGetFileReaderRange.defaultExpectation == nil {
+		mmGetFileReaderRange.defaultExpectation = &StorageMockGetFileReaderRangeExpectation{mock: mmGetFileReaderRange.mock}
+	}
+	mmGetFileReaderRange.defaultExpectation.results = &StorageMockGetFileReaderRangeResults{r1, err}
+	mmGetFileReaderRange.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetFileReaderRange.mock
+}
+
+// Set uses given function f to mock the Storage.GetFileReaderRange method
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) Set(f func(ctx context.Context, bucket string, filePath string, offset int64) (r1 io.ReadCloser, err error)) *StorageMock {
+	if mmGetFileReaderRange.defaultExpectation != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("Default expectation is already set for the Storage.GetFileReaderRange method")
+	}
+
+	if len(mmGetFileReaderRange.expectations) > 0 {
+		mmGetFileReaderRange.mock.t.Fatalf("Some expectations are already set for the Storage.GetFileReaderRange method")
+	}
+
+	mmGetFileReaderRange.mock.funcGetFileReaderRange = f
+	mmGetFileReaderRange.mock.funcGetFileReaderRangeOrigin = minimock.CallerInfo(1)
+	return mmGetFileReaderRange.mock
+}
+
+// When sets expectation for the Storage.GetFileReaderRange which will trigger the result defined by the following
+// Then helper
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) When(ctx context.Context, bucket string, filePath string, offset int64) *StorageMockGetFileReaderRangeExpectation {
+	if mmGetFileReaderRange.mock.funcGetFileReaderRange != nil {
+		mmGetFileReaderRange.mock.t.Fatalf("StorageMock.GetFileReaderRange mock is already set by Set")
+	}
+
+	expectation := &StorageMockGetFileReaderRangeExpectation{
+		mock:               mmGetFileReaderRange.mock,
+		params:             &StorageMockGetFileReaderRangeParams{ctx, bucket, filePath, offset},
+		expectationOrigins: StorageMockGetFileReaderRangeExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetFileReaderRange.expectations = append(mmGetFileReaderRange.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Storage.GetFileReaderRange return parameters for the expectation previously defined by the When method
+func (e *StorageMockGetFileReaderRangeExpectation) Then(r1 io.ReadCloser, err error) *StorageMock {
+	e.results = &StorageMockGetFileReaderRangeResults{r1, err}
+	return e.mock
+}
+
+// Times sets number of times Storage.GetFileReaderRange should be invoked
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) Times(n uint64) *mStorageMockGetFileReaderRange {
+	if n == 0 {
+		mmGetFileReaderRange.mock.t.Fatalf("Times of StorageMock.GetFileReaderRange mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetFileReaderRange.expectedInvocations, n)
+	mmGetFileReaderRange.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetFileReaderRange
+}
+
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) invocationsDone() bool {
+	if len(mmGetFileReaderRange.expectations) == 0 && mmGetFileReaderRange.defaultExpectation == nil && mmGetFileReaderRange.mock.funcGetFileReaderRange == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetFileReaderRange.mock.afterGetFileReaderRangeCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetFileReaderRange.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetFileReaderRange implements mm_object.Storage
+func (mmGetFileReaderRange *StorageMock) GetFileReaderRange(ctx context.Context, bucket string, filePath string, offset int64) (r1 io.ReadCloser, err error) {
+	mm_atomic.AddUint64(&mmGetFileReaderRange.beforeGetFileReaderRangeCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetFileReaderRange.afterGetFileReaderRangeCounter, 1)
+
+	mmGetFileReaderRange.t.Helper()
+
+	if mmGetFileReaderRange.inspectFuncGetFileReaderRange != nil {
+		mmGetFileReaderRange.inspectFuncGetFileReaderRange(ctx, bucket, filePath, offset)
+	}
+
+	mm_params := StorageMockGetFileReaderRangeParams{ctx, bucket, filePath, offset}
+
+	// Record call args
+	mmGetFileReaderRange.GetFileReaderRangeMock.mutex.Lock()
+	mmGetFileReaderRange.GetFileReaderRangeMock.callArgs = append(mmGetFileReaderRange.GetFileReaderRangeMock.callArgs, &mm_params)
+	mmGetFileReaderRange.GetFileReaderRangeMock.mutex.Unlock()
+
+	for _, e := range mmGetFileReaderRange.GetFileReaderRangeMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.r1, e.results.err
+		}
+	}
+
+	if mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation.params
+		mm_want_ptrs := mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation.paramPtrs
+
+		mm_got := StorageMockGetFileReaderRangeParams{ctx, bucket, filePath, offset}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetFileReaderRange.t.Errorf("StorageMock.GetFileReaderRange got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.bucket != nil && !minimock.Equal(*mm_want_ptrs.bucket, mm_got.bucket) {
+				mmGetFileReaderRange.t.Errorf("StorageMock.GetFileReaderRange got unexpected parameter bucket, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation.expectationOrigins.originBucket, *mm_want_ptrs.bucket, mm_got.bucket, minimock.Diff(*mm_want_ptrs.bucket, mm_got.bucket))
+			}
+
+			if mm_want_ptrs.filePath != nil && !minimock.Equal(*mm_want_ptrs.filePath, mm_got.filePath) {
+				mmGetFileReaderRange.t.Errorf("StorageMock.GetFileReaderRange got unexpected parameter filePath, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation.expectationOrigins.originFilePath, *mm_want_ptrs.filePath, mm_got.filePath, minimock.Diff(*mm_want_ptrs.filePath, mm_got.filePath))
+			}
+
+			if mm_want_ptrs.offset != nil && !minimock.Equal(*mm_want_ptrs.offset, mm_got.offset) {
+				mmGetFileReaderRange.t.Errorf("StorageMock.GetFileReaderRange got unexpected parameter offset, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation.expectationOrigins.originOffset, *mm_want_ptrs.offset, mm_got.offset, minimock.Diff(*mm_want_ptrs.offset, mm_got.offset))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetFileReaderRange.t.Errorf("StorageMock.GetFileReaderRange got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetFileReaderRange.GetFileReaderRangeMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetFileReaderRange.t.Fatal("No results are set for the StorageMock.GetFileReaderRange")
+		}
+		return (*mm_results).r1, (*mm_results).err
+	}
+	if mmGetFileReaderRange.funcGetFileReaderRange != nil {
+		return mmGetFileReaderRange.funcGetFileReaderRange(ctx, bucket, filePath, offset)
+	}
+	mmGetFileReaderRange.t.Fatalf("Unexpected call to StorageMock.GetFileReaderRange. %v %v %v %v", ctx, bucket, filePath, offset)
+	return
+}
+
+// GetFileReaderRangeAfterCounter returns a count of finished StorageMock.GetFileReaderRange invocations
+func (mmGetFileReaderRange *StorageMock) GetFileReaderRangeAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFileReaderRange.afterGetFileReaderRangeCounter)
+}
+
+// GetFileReaderRangeBeforeCounter returns a count of StorageMock.GetFileReaderRange invocations
+func (mmGetFileReaderRange *StorageMock) GetFileReaderRangeBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetFileReaderRange.beforeGetFileReaderRangeCounter)
+}
+
+// Calls returns a list of arguments used in each call to StorageMock.GetFileReaderRange.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetFileReaderRange *mStorageMockGetFileReaderRange) Calls() []*StorageMockGetFileReaderRangeParams {
+	mmGetFileReaderRange.mutex.RLock()
+
+	argCopy := make([]*StorageMockGetFileReaderRangeParams, len(mmGetFileReaderRange.callArgs))
+	copy(argCopy, mmGetFileReaderRange.callArgs)
+
+	mmGetFileReaderRange.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetFileReaderRangeDone returns true if the count of the GetFileReaderRange invocations corresponds
+// the number of defined expectations
+func (m *StorageMock) MinimockGetFileReaderRangeDone() bool {
+	if m.GetFileReaderRangeMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetFileReaderRangeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetFileReaderRangeMock.invocationsDone()
+}
+
+// MinimockGetFileReaderRangeInspect logs each unmet expectation
+func (m *StorageMock) MinimockGetFileReaderRangeInspect() {
+	for _, e := range m.GetFileReaderRangeMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to StorageMock.GetFileReaderRange at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetFileReaderRangeCounter := mm_atomic.LoadUint64(&m.afterGetFileReaderRangeCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetFileReaderRangeMock.defaultExpectation != nil && afterGetFileReaderRangeCounter < 1 {
+		if m.GetFileReaderRangeMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to StorageMock.GetFileReaderRange at\n%s", m.GetFileReaderRangeMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to StorageMock.GetFileReaderRange at\n%s with params: %#v", m.GetFileReaderRangeMock.defaultExpectation.expectationOrigins.origin, *m.GetFileReaderRangeMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetFileReaderRange != nil && afterGetFileReaderRangeCounter < 1 {
+		m.t.Errorf("Expected call to StorageMock.GetFileReaderRange at\n%s", m.funcGetFileReaderRangeOrigin)
+	}
+
+	if !m.GetFileReaderRangeMock.invocationsDone() && afterGetFileReaderRangeCounter > 0 {
+		m.t.Errorf("Expected %d calls to StorageMock.GetFileReaderRange at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetFileReaderRangeMock.expectedInvocations), m.GetFileReaderRangeMock.expectedInvocationsOrigin, afterGetFileReaderRangeCounter)
 	}
 }
 
@@ -5146,6 +5571,503 @@ func (m *StorageMock) MinimockSaveConvertedFileInspect() {
 	}
 }
 
+type mStorageMockStreamCopy struct {
+	optional           bool
+	mock               *StorageMock
+	defaultExpectation *StorageMockStreamCopyExpectation
+	expectations       []*StorageMockStreamCopyExpectation
+
+	callArgs []*StorageMockStreamCopyParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// StorageMockStreamCopyExpectation specifies expectation struct of the Storage.StreamCopy
+type StorageMockStreamCopyExpectation struct {
+	mock               *StorageMock
+	params             *StorageMockStreamCopyParams
+	paramPtrs          *StorageMockStreamCopyParamPtrs
+	expectationOrigins StorageMockStreamCopyExpectationOrigins
+	results            *StorageMockStreamCopyResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// StorageMockStreamCopyParams contains parameters of the Storage.StreamCopy
+type StorageMockStreamCopyParams struct {
+	ctx          context.Context
+	bucket       string
+	filePath     string
+	openAt       func(offset int64) (io.ReadCloser, error)
+	size         int64
+	fileMimeType string
+	progressFn   func(copied int64)
+}
+
+// StorageMockStreamCopyParamPtrs contains pointers to parameters of the Storage.StreamCopy
+type StorageMockStreamCopyParamPtrs struct {
+	ctx          *context.Context
+	bucket       *string
+	filePath     *string
+	openAt       *func(offset int64) (io.ReadCloser, error)
+	size         *int64
+	fileMimeType *string
+	progressFn   *func(copied int64)
+}
+
+// StorageMockStreamCopyResults contains results of the Storage.StreamCopy
+type StorageMockStreamCopyResults struct {
+	err error
+}
+
+// StorageMockStreamCopyOrigins contains origins of expectations of the Storage.StreamCopy
+type StorageMockStreamCopyExpectationOrigins struct {
+	origin             string
+	originCtx          string
+	originBucket       string
+	originFilePath     string
+	originOpenAt       string
+	originSize         string
+	originFileMimeType string
+	originProgressFn   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmStreamCopy *mStorageMockStreamCopy) Optional() *mStorageMockStreamCopy {
+	mmStreamCopy.optional = true
+	return mmStreamCopy
+}
+
+// Expect sets up expected params for Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) Expect(ctx context.Context, bucket string, filePath string, openAt func(offset int64) (io.ReadCloser, error), size int64, fileMimeType string, progressFn func(copied int64)) *mStorageMockStreamCopy {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	if mmStreamCopy.defaultExpectation == nil {
+		mmStreamCopy.defaultExpectation = &StorageMockStreamCopyExpectation{}
+	}
+
+	if mmStreamCopy.defaultExpectation.paramPtrs != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by ExpectParams functions")
+	}
+
+	mmStreamCopy.defaultExpectation.params = &StorageMockStreamCopyParams{ctx, bucket, filePath, openAt, size, fileMimeType, progressFn}
+	mmStreamCopy.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmStreamCopy.expectations {
+		if minimock.Equal(e.params, mmStreamCopy.defaultExpectation.params) {
+			mmStreamCopy.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmStreamCopy.defaultExpectation.params)
+		}
+	}
+
+	return mmStreamCopy
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) ExpectCtxParam1(ctx context.Context) *mStorageMockStreamCopy {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	if mmStreamCopy.defaultExpectation == nil {
+		mmStreamCopy.defaultExpectation = &StorageMockStreamCopyExpectation{}
+	}
+
+	if mmStreamCopy.defaultExpectation.params != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Expect")
+	}
+
+	if mmStreamCopy.defaultExpectation.paramPtrs == nil {
+		mmStreamCopy.defaultExpectation.paramPtrs = &StorageMockStreamCopyParamPtrs{}
+	}
+	mmStreamCopy.defaultExpectation.paramPtrs.ctx = &ctx
+	mmStreamCopy.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmStreamCopy
+}
+
+// ExpectBucketParam2 sets up expected param bucket for Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) ExpectBucketParam2(bucket string) *mStorageMockStreamCopy {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	if mmStreamCopy.defaultExpectation == nil {
+		mmStreamCopy.defaultExpectation = &StorageMockStreamCopyExpectation{}
+	}
+
+	if mmStreamCopy.defaultExpectation.params != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Expect")
+	}
+
+	if mmStreamCopy.defaultExpectation.paramPtrs == nil {
+		mmStreamCopy.defaultExpectation.paramPtrs = &StorageMockStreamCopyParamPtrs{}
+	}
+	mmStreamCopy.defaultExpectation.paramPtrs.bucket = &bucket
+	mmStreamCopy.defaultExpectation.expectationOrigins.originBucket = minimock.CallerInfo(1)
+
+	return mmStreamCopy
+}
+
+// ExpectFilePathParam3 sets up expected param filePath for Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) ExpectFilePathParam3(filePath string) *mStorageMockStreamCopy {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	if mmStreamCopy.defaultExpectation == nil {
+		mmStreamCopy.defaultExpectation = &StorageMockStreamCopyExpectation{}
+	}
+
+	if mmStreamCopy.defaultExpectation.params != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Expect")
+	}
+
+	if mmStreamCopy.defaultExpectation.paramPtrs == nil {
+		mmStreamCopy.defaultExpectation.paramPtrs = &StorageMockStreamCopyParamPtrs{}
+	}
+	mmStreamCopy.defaultExpectation.paramPtrs.filePath = &filePath
+	mmStreamCopy.defaultExpectation.expectationOrigins.originFilePath = minimock.CallerInfo(1)
+
+	return mmStreamCopy
+}
+
+// ExpectOpenAtParam4 sets up expected param openAt for Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) ExpectOpenAtParam4(openAt func(offset int64) (io.ReadCloser, error)) *mStorageMockStreamCopy {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	if mmStreamCopy.defaultExpectation == nil {
+		mmStreamCopy.defaultExpectation = &StorageMockStreamCopyExpectation{}
+	}
+
+	if mmStreamCopy.defaultExpectation.params != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Expect")
+	}
+
+	if mmStreamCopy.defaultExpectation.paramPtrs == nil {
+		mmStreamCopy.defaultExpectation.paramPtrs = &StorageMockStreamCopyParamPtrs{}
+	}
+	mmStreamCopy.defaultExpectation.paramPtrs.openAt = &openAt
+	mmStreamCopy.defaultExpectation.expectationOrigins.originOpenAt = minimock.CallerInfo(1)
+
+	return mmStreamCopy
+}
+
+// ExpectSizeParam5 sets up expected param size for Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) ExpectSizeParam5(size int64) *mStorageMockStreamCopy {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	if mmStreamCopy.defaultExpectation == nil {
+		mmStreamCopy.defaultExpectation = &StorageMockStreamCopyExpectation{}
+	}
+
+	if mmStreamCopy.defaultExpectation.params != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Expect")
+	}
+
+	if mmStreamCopy.defaultExpectation.paramPtrs == nil {
+		mmStreamCopy.defaultExpectation.paramPtrs = &StorageMockStreamCopyParamPtrs{}
+	}
+	mmStreamCopy.defaultExpectation.paramPtrs.size = &size
+	mmStreamCopy.defaultExpectation.expectationOrigins.originSize = minimock.CallerInfo(1)
+
+	return mmStreamCopy
+}
+
+// ExpectFileMimeTypeParam6 sets up expected param fileMimeType for Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) ExpectFileMimeTypeParam6(fileMimeType string) *mStorageMockStreamCopy {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	if mmStreamCopy.defaultExpectation == nil {
+		mmStreamCopy.defaultExpectation = &StorageMockStreamCopyExpectation{}
+	}
+
+	if mmStreamCopy.defaultExpectation.params != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Expect")
+	}
+
+	if mmStreamCopy.defaultExpectation.paramPtrs == nil {
+		mmStreamCopy.defaultExpectation.paramPtrs = &StorageMockStreamCopyParamPtrs{}
+	}
+	mmStreamCopy.defaultExpectation.paramPtrs.fileMimeType = &fileMimeType
+	mmStreamCopy.defaultExpectation.expectationOrigins.originFileMimeType = minimock.CallerInfo(1)
+
+	return mmStreamCopy
+}
+
+// ExpectProgressFnParam7 sets up expected param progressFn for Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) ExpectProgressFnParam7(progressFn func(copied int64)) *mStorageMockStreamCopy {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	if mmStreamCopy.defaultExpectation == nil {
+		mmStreamCopy.defaultExpectation = &StorageMockStreamCopyExpectation{}
+	}
+
+	if mmStreamCopy.defaultExpectation.params != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Expect")
+	}
+
+	if mmStreamCopy.defaultExpectation.paramPtrs == nil {
+		mmStreamCopy.defaultExpectation.paramPtrs = &StorageMockStreamCopyParamPtrs{}
+	}
+	mmStreamCopy.defaultExpectation.paramPtrs.progressFn = &progressFn
+	mmStreamCopy.defaultExpectation.expectationOrigins.originProgressFn = minimock.CallerInfo(1)
+
+	return mmStreamCopy
+}
+
+// Inspect accepts an inspector function that has same arguments as the Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) Inspect(f func(ctx context.Context, bucket string, filePath string, openAt func(offset int64) (io.ReadCloser, error), size int64, fileMimeType string, progressFn func(copied int64))) *mStorageMockStreamCopy {
+	if mmStreamCopy.mock.inspectFuncStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("Inspect function is already set for StorageMock.StreamCopy")
+	}
+
+	mmStreamCopy.mock.inspectFuncStreamCopy = f
+
+	return mmStreamCopy
+}
+
+// Return sets up results that will be returned by Storage.StreamCopy
+func (mmStreamCopy *mStorageMockStreamCopy) Return(err error) *StorageMock {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	if mmStreamCopy.defaultExpectation == nil {
+		mmStreamCopy.defaultExpectation = &StorageMockStreamCopyExpectation{mock: mmStreamCopy.mock}
+	}
+	mmStreamCopy.defaultExpectation.results = &StorageMockStreamCopyResults{err}
+	mmStreamCopy.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmStreamCopy.mock
+}
+
+// Set uses given function f to mock the Storage.StreamCopy method
+func (mmStreamCopy *mStorageMockStreamCopy) Set(f func(ctx context.Context, bucket string, filePath string, openAt func(offset int64) (io.ReadCloser, error), size int64, fileMimeType string, progressFn func(copied int64)) (err error)) *StorageMock {
+	if mmStreamCopy.defaultExpectation != nil {
+		mmStreamCopy.mock.t.Fatalf("Default expectation is already set for the Storage.StreamCopy method")
+	}
+
+	if len(mmStreamCopy.expectations) > 0 {
+		mmStreamCopy.mock.t.Fatalf("Some expectations are already set for the Storage.StreamCopy method")
+	}
+
+	mmStreamCopy.mock.funcStreamCopy = f
+	mmStreamCopy.mock.funcStreamCopyOrigin = minimock.CallerInfo(1)
+	return mmStreamCopy.mock
+}
+
+// When sets expectation for the Storage.StreamCopy which will trigger the result defined by the following
+// Then helper
+func (mmStreamCopy *mStorageMockStreamCopy) When(ctx context.Context, bucket string, filePath string, openAt func(offset int64) (io.ReadCloser, error), size int64, fileMimeType string, progressFn func(copied int64)) *StorageMockStreamCopyExpectation {
+	if mmStreamCopy.mock.funcStreamCopy != nil {
+		mmStreamCopy.mock.t.Fatalf("StorageMock.StreamCopy mock is already set by Set")
+	}
+
+	expectation := &StorageMockStreamCopyExpectation{
+		mock:               mmStreamCopy.mock,
+		params:             &StorageMockStreamCopyParams{ctx, bucket, filePath, openAt, size, fileMimeType, progressFn},
+		expectationOrigins: StorageMockStreamCopyExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmStreamCopy.expectations = append(mmStreamCopy.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Storage.StreamCopy return parameters for the expectation previously defined by the When method
+func (e *StorageMockStreamCopyExpectation) Then(err error) *StorageMock {
+	e.results = &StorageMockStreamCopyResults{err}
+	return e.mock
+}
+
+// Times sets number of times Storage.StreamCopy should be invoked
+func (mmStreamCopy *mStorageMockStreamCopy) Times(n uint64) *mStorageMockStreamCopy {
+	if n == 0 {
+		mmStreamCopy.mock.t.Fatalf("Times of StorageMock.StreamCopy mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmStreamCopy.expectedInvocations, n)
+	mmStreamCopy.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmStreamCopy
+}
+
+func (mmStreamCopy *mStorageMockStreamCopy) invocationsDone() bool {
+	if len(mmStreamCopy.expectations) == 0 && mmStreamCopy.defaultExpectation == nil && mmStreamCopy.mock.funcStreamCopy == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmStreamCopy.mock.afterStreamCopyCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmStreamCopy.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// StreamCopy implements mm_object.Storage
+func (mmStreamCopy *StorageMock) StreamCopy(ctx context.Context, bucket string, filePath string, openAt func(offset int64) (io.ReadCloser, error), size int64, fileMimeType string, progressFn func(copied int64)) (err error) {
+	mm_atomic.AddUint64(&mmStreamCopy.beforeStreamCopyCounter, 1)
+	defer mm_atomic.AddUint64(&mmStreamCopy.afterStreamCopyCounter, 1)
+
+	mmStreamCopy.t.Helper()
+
+	if mmStreamCopy.inspectFuncStreamCopy != nil {
+		mmStreamCopy.inspectFuncStreamCopy(ctx, bucket, filePath, openAt, size, fileMimeType, progressFn)
+	}
+
+	mm_params := StorageMockStreamCopyParams{ctx, bucket, filePath, openAt, size, fileMimeType, progressFn}
+
+	// Record call args
+	mmStreamCopy.StreamCopyMock.mutex.Lock()
+	mmStreamCopy.StreamCopyMock.callArgs = append(mmStreamCopy.StreamCopyMock.callArgs, &mm_params)
+	mmStreamCopy.StreamCopyMock.mutex.Unlock()
+
+	for _, e := range mmStreamCopy.StreamCopyMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmStreamCopy.StreamCopyMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmStreamCopy.StreamCopyMock.defaultExpectation.Counter, 1)
+		mm_want := mmStreamCopy.StreamCopyMock.defaultExpectation.params
+		mm_want_ptrs := mmStreamCopy.StreamCopyMock.defaultExpectation.paramPtrs
+
+		mm_got := StorageMockStreamCopyParams{ctx, bucket, filePath, openAt, size, fileMimeType, progressFn}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmStreamCopy.t.Errorf("StorageMock.StreamCopy got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmStreamCopy.StreamCopyMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.bucket != nil && !minimock.Equal(*mm_want_ptrs.bucket, mm_got.bucket) {
+				mmStreamCopy.t.Errorf("StorageMock.StreamCopy got unexpected parameter bucket, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmStreamCopy.StreamCopyMock.defaultExpectation.expectationOrigins.originBucket, *mm_want_ptrs.bucket, mm_got.bucket, minimock.Diff(*mm_want_ptrs.bucket, mm_got.bucket))
+			}
+
+			if mm_want_ptrs.filePath != nil && !minimock.Equal(*mm_want_ptrs.filePath, mm_got.filePath) {
+				mmStreamCopy.t.Errorf("StorageMock.StreamCopy got unexpected parameter filePath, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmStreamCopy.StreamCopyMock.defaultExpectation.expectationOrigins.originFilePath, *mm_want_ptrs.filePath, mm_got.filePath, minimock.Diff(*mm_want_ptrs.filePath, mm_got.filePath))
+			}
+
+			if mm_want_ptrs.openAt != nil && !minimock.Equal(*mm_want_ptrs.openAt, mm_got.openAt) {
+				mmStreamCopy.t.Errorf("StorageMock.StreamCopy got unexpected parameter openAt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmStreamCopy.StreamCopyMock.defaultExpectation.expectationOrigins.originOpenAt, *mm_want_ptrs.openAt, mm_got.openAt, minimock.Diff(*mm_want_ptrs.openAt, mm_got.openAt))
+			}
+
+			if mm_want_ptrs.size != nil && !minimock.Equal(*mm_want_ptrs.size, mm_got.size) {
+				mmStreamCopy.t.Errorf("StorageMock.StreamCopy got unexpected parameter size, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmStreamCopy.StreamCopyMock.defaultExpectation.expectationOrigins.originSize, *mm_want_ptrs.size, mm_got.size, minimock.Diff(*mm_want_ptrs.size, mm_got.size))
+			}
+
+			if mm_want_ptrs.fileMimeType != nil && !minimock.Equal(*mm_want_ptrs.fileMimeType, mm_got.fileMimeType) {
+				mmStreamCopy.t.Errorf("StorageMock.StreamCopy got unexpected parameter fileMimeType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmStreamCopy.StreamCopyMock.defaultExpectation.expectationOrigins.originFileMimeType, *mm_want_ptrs.fileMimeType, mm_got.fileMimeType, minimock.Diff(*mm_want_ptrs.fileMimeType, mm_got.fileMimeType))
+			}
+
+			if mm_want_ptrs.progressFn != nil && !minimock.Equal(*mm_want_ptrs.progressFn, mm_got.progressFn) {
+				mmStreamCopy.t.Errorf("StorageMock.StreamCopy got unexpected parameter progressFn, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmStreamCopy.StreamCopyMock.defaultExpectation.expectationOrigins.originProgressFn, *mm_want_ptrs.progressFn, mm_got.progressFn, minimock.Diff(*mm_want_ptrs.progressFn, mm_got.progressFn))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmStreamCopy.t.Errorf("StorageMock.StreamCopy got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmStreamCopy.StreamCopyMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmStreamCopy.StreamCopyMock.defaultExpectation.results
+		if mm_results == nil {
+			mmStreamCopy.t.Fatal("No results are set for the StorageMock.StreamCopy")
+		}
+		return (*mm_results).err
+	}
+	if mmStreamCopy.funcStreamCopy != nil {
+		return mmStreamCopy.funcStreamCopy(ctx, bucket, filePath, openAt, size, fileMimeType, progressFn)
+	}
+	mmStreamCopy.t.Fatalf("Unexpected call to StorageMock.StreamCopy. %v %v %v %v %v %v %v", ctx, bucket, filePath, openAt, size, fileMimeType, progressFn)
+	return
+}
+
+// StreamCopyAfterCounter returns a count of finished StorageMock.StreamCopy invocations
+func (mmStreamCopy *StorageMock) StreamCopyAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmStreamCopy.afterStreamCopyCounter)
+}
+
+// StreamCopyBeforeCounter returns a count of StorageMock.StreamCopy invocations
+func (mmStreamCopy *StorageMock) StreamCopyBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmStreamCopy.beforeStreamCopyCounter)
+}
+
+// Calls returns a list of arguments used in each call to StorageMock.StreamCopy.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmStreamCopy *mStorageMockStreamCopy) Calls() []*StorageMockStreamCopyParams {
+	mmStreamCopy.mutex.RLock()
+
+	argCopy := make([]*StorageMockStreamCopyParams, len(mmStreamCopy.callArgs))
+	copy(argCopy, mmStreamCopy.callArgs)
+
+	mmStreamCopy.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockStreamCopyDone returns true if the count of the StreamCopy invocations corresponds
+// the number of defined expectations
+func (m *StorageMock) MinimockStreamCopyDone() bool {
+	if m.StreamCopyMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.StreamCopyMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.StreamCopyMock.invocationsDone()
+}
+
+// MinimockStreamCopyInspect logs each unmet expectation
+func (m *StorageMock) MinimockStreamCopyInspect() {
+	for _, e := range m.StreamCopyMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to StorageMock.StreamCopy at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterStreamCopyCounter := mm_atomic.LoadUint64(&m.afterStreamCopyCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.StreamCopyMock.defaultExpectation != nil && afterStreamCopyCounter < 1 {
+		if m.StreamCopyMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to StorageMock.StreamCopy at\n%s", m.StreamCopyMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to StorageMock.StreamCopy at\n%s with params: %#v", m.StreamCopyMock.defaultExpectation.expectationOrigins.origin, *m.StreamCopyMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcStreamCopy != nil && afterStreamCopyCounter < 1 {
+		m.t.Errorf("Expected call to StorageMock.StreamCopy at\n%s", m.funcStreamCopyOrigin)
+	}
+
+	if !m.StreamCopyMock.invocationsDone() && afterStreamCopyCounter > 0 {
+		m.t.Errorf("Expected %d calls to StorageMock.StreamCopy at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.StreamCopyMock.expectedInvocations), m.StreamCopyMock.expectedInvocationsOrigin, afterStreamCopyCounter)
+	}
+}
+
 type mStorageMockUploadBase64File struct {
 	optional           bool
 	mock               *StorageMock
@@ -6498,6 +7420,8 @@ func (m *StorageMock) MinimockFinish() {
 
 			m.MinimockGetFileReaderInspect()
 
+			m.MinimockGetFileReaderRangeInspect()
+
 			m.MinimockGetPresignedURLForDownloadInspect()
 
 			m.MinimockGetPresignedURLForUploadInspect()
@@ -6511,6 +7435,8 @@ func (m *StorageMock) MinimockFinish() {
 			m.MinimockListTextChunksByFileUIDInspect()
 
 			m.MinimockSaveConvertedFileInspect()
+
+			m.MinimockStreamCopyInspect()
 
 			m.MinimockUploadBase64FileInspect()
 
@@ -6546,6 +7472,7 @@ func (m *StorageMock) minimockDone() bool {
 		m.MinimockGetFileDone() &&
 		m.MinimockGetFileMetadataDone() &&
 		m.MinimockGetFileReaderDone() &&
+		m.MinimockGetFileReaderRangeDone() &&
 		m.MinimockGetPresignedURLForDownloadDone() &&
 		m.MinimockGetPresignedURLForUploadDone() &&
 		m.MinimockListConvertedFilesByFileUIDDone() &&
@@ -6553,6 +7480,7 @@ func (m *StorageMock) minimockDone() bool {
 		m.MinimockListKnowledgeBaseFilePathsDone() &&
 		m.MinimockListTextChunksByFileUIDDone() &&
 		m.MinimockSaveConvertedFileDone() &&
+		m.MinimockStreamCopyDone() &&
 		m.MinimockUploadBase64FileDone() &&
 		m.MinimockUploadFileDone() &&
 		m.MinimockUploadFromReaderDone()

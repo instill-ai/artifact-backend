@@ -64,9 +64,52 @@ type Storage interface {
 	// This avoids loading entire files into memory for large-file operations.
 	GetFileReader(ctx context.Context, bucket string, filePath string) (io.ReadCloser, int64, error)
 
+	// GetFileReaderRange returns a streaming reader for a file starting at
+	// byte offset. Callers must close the returned ReadCloser when done and
+	// must fetch total size via GetFileMetadata separately (a ranged Stat
+	// reports the range length, not the object length).
+	//
+	// Semantics:
+	//   - offset == 0 → read the full object from byte 0 (implementations
+	//     MUST NOT set an HTTP Range header in this case; MinIO's
+	//     SetRange(0, 0) is a footgun that asks for a single byte).
+	//   - offset >  0 → read from byte offset to end of object (HTTP
+	//     Range: bytes=N-).
+	//
+	// Primary caller is the in-activity MinIO → GCS stream resume loop
+	// (see ARTIFACT-INV-GCS-STREAM-RESUME): when MinIO's HTTP body is
+	// truncated mid-stream, the caller reopens at the already-copied
+	// offset and keeps writing to the same GCS resumable writer without
+	// re-streaming the bytes already committed.
+	GetFileReaderRange(ctx context.Context, bucket string, filePath string, offset int64) (io.ReadCloser, error)
+
 	// UploadFromReader streams data from a reader to storage without buffering
 	// the entire content in memory. The size parameter must reflect the total
 	// number of bytes that will be read; pass -1 if unknown (not all backends
 	// support unknown size).
 	UploadFromReader(ctx context.Context, bucket string, filePath string, reader io.Reader, size int64, fileMimeType string) error
+
+	// StreamCopy streams a known-size object to storage using a caller-
+	// supplied openAt factory that can (re)open the source at an arbitrary
+	// offset. StreamCopy owns one resumable upload writer for the life of
+	// the call and transparently resumes on mid-stream truncations up to a
+	// backend-defined budget; callers never see io.ErrUnexpectedEOF unless
+	// the budget is exhausted.
+	//
+	// Contract:
+	//   - size MUST be the full object length in bytes. The writer is
+	//     closed (finalised) iff exactly size bytes have been copied.
+	//   - openAt(offset) MUST return a fresh reader positioned at offset
+	//     in the source object; closing that reader MUST NOT affect
+	//     subsequent opens. The caller is responsible for closing each
+	//     returned reader; implementations MUST close readers between
+	//     resume attempts.
+	//   - progressFn, if non-nil, is invoked after every successful chunk
+	//     write with the cumulative copied byte count. Activities use this
+	//     to drive Temporal heartbeats.
+	//
+	// Not every backend supports resumable streaming; backends that don't
+	// (e.g. MinIO as a destination) MUST return a clear "not implemented"
+	// error so misuse fails loudly at first call.
+	StreamCopy(ctx context.Context, bucket string, filePath string, openAt func(offset int64) (io.ReadCloser, error), size int64, fileMimeType string, progressFn func(copied int64)) error
 }

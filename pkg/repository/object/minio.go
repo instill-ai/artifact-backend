@@ -426,6 +426,38 @@ func (m *minioStorage) GetFileReader(ctx context.Context, bucketName string, obj
 	return object, info.Size, nil
 }
 
+// GetFileReaderRange returns a streaming reader positioned at the requested
+// byte offset. See the Storage interface docstring for the offset==0 vs
+// offset>0 contract; the implementation lives in gcs-2-minio-range.
+func (m *minioStorage) GetFileReaderRange(ctx context.Context, bucketName string, objectName string, offset int64) (io.ReadCloser, error) {
+	opts := minio.GetObjectOptions{}
+	opts.Set(miniox.MinIOHeaderUserUID, m.authenticatedUser(ctx))
+
+	// Only apply SetRange when we actually want to skip bytes. minio-go's
+	// SetRange(0, 0) expands to HTTP Range: bytes=0-0 (a one-byte request),
+	// not "whole object", so offset==0 MUST fall through to the unranged
+	// GetObject path.
+	if offset > 0 {
+		if err := opts.SetRange(offset, 0); err != nil {
+			return nil, fmt.Errorf("setting MinIO range (offset=%d): %w", offset, err)
+		}
+	}
+
+	object, err := m.client.GetObject(ctx, bucketName, objectName, opts)
+	if err != nil {
+		return nil, fmt.Errorf("opening MinIO ranged object stream (offset=%d): %w", offset, err)
+	}
+	return object, nil
+}
+
+// StreamCopy is not supported for MinIO as a destination. Resumable streaming
+// is a GCS-only concern in this codebase; the MinIO-side implementation
+// exists solely to satisfy the Storage interface. Callers that reach this
+// path have mis-wired their plumbing and should fail loudly.
+func (m *minioStorage) StreamCopy(_ context.Context, _ string, _ string, _ func(offset int64) (io.ReadCloser, error), _ int64, _ string, _ func(copied int64)) error {
+	return errors.New("minioStorage.StreamCopy: not implemented; use UploadFromReader for MinIO destinations")
+}
+
 // UploadFromReader streams data from a reader to MinIO without buffering
 // the entire content in memory.
 func (m *minioStorage) UploadFromReader(ctx context.Context, bucket string, filePathName string, reader io.Reader, size int64, fileMimeType string) error {
