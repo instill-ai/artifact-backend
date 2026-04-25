@@ -234,10 +234,7 @@ Consequences for consumers:
   `derivedResourceUri` responses cheaply via `If-None-Match`.
 
 This contract is guarded by `api-gateway/plugins/blob/main_test.go`
-(invariant `BLOB-INV-RANGE` — see `api-gateway/AGENTS.md`) and by
-`artifact-backend-ee/integration-test/standalone-blob-range.js`, which
-uploads a small MP4 and asserts the protocol end-to-end through the live
-gateway.
+(invariant `BLOB-INV-RANGE` — see `api-gateway/AGENTS.md`).
 
 ## Security Considerations
 
@@ -288,29 +285,23 @@ video rows while remaining absent for non-thumbnailable types (see
 
 > **`view` propagation gotcha (Phase 2b regression, fixed April 2026):**
 > The `view` query parameter must survive *every* hop from the browser to
-> this handler for Phase 2b fan-out to trigger. We've been bitten once by
-> Krakend's `input_query_strings` allow-list in `api-gateway-ee` being
-> stale (the rendered `krakend.json` shipped without `"view"` on
-> `GET /v1alpha/namespaces/{namespace_id}/files`, even though
-> `endpoints.json` had it), which silently dropped the param at the edge
-> and caused the Files page to render as if every row were a
-> non-standardizable type. The contract is:
+> this handler for Phase 2b fan-out to trigger. A stale gateway query-
+> string allow-list silently dropped `"view"` at the edge once and made
+> the Files page render as if every row were a non-standardizable type.
+> The contract callers downstream of CE must uphold:
 >
-> 1. `api-gateway-ee` must re-render `krakend.json` from `endpoints.json`
->    whenever the allow-list for list endpoints changes — restart the
->    gateway after editing `config/settings-env/endpoints.json` so the
->    rendered config picks up the new allow-list entries.
-> 2. `agent-backend-ee/pkg/handler/file.go` `ListFiles` MUST forward
->    `req.View` (including the unset sentinel) to
->    `ListKnowledgeBaseFilesWithPagination`, which in turn passes it to
->    `ListFilesAdmin` verbatim — never zero it out in the translation
->    layer.
-> 3. The CE regression test
->    `integration-test/rest-file-type.js` (in the per-type group) and the
->    EE regression in
->    `agent-backend-ee/integration-test/rest-file.js` (the
->    "File Processing Sanity: PDF file" group) both call
->    `ListFiles(view=VIEW_STANDARD_FILE_TYPE)` and assert that
->    `derivedResourceUri` is non-empty for the standardizable row — this
->    is the canary that catches a dropped `view` at either the Krakend
->    hop or the grpc-gateway/client translation hop.
+> 1. Any reverse-proxy / API-gateway query-string allow-list in front of
+>    `GET /v1alpha/namespaces/{namespace_id}/files` MUST include
+>    `"view"`. If the allow-list is rendered from a higher-level config
+>    file, re-render and reload the gateway whenever the list endpoint's
+>    allow-list changes.
+> 2. Any intermediate admin / S2S handler that re-issues `ListFiles`
+>    against this service MUST forward `req.View` (including the unset
+>    sentinel) to `ListFilesAdmin` verbatim — never zero it out in the
+>    translation layer.
+> 3. The CE regression `integration-test/rest-file-type.js` (the per-type
+>    group) calls `ListFiles(view=VIEW_STANDARD_FILE_TYPE)` and asserts
+>    that `derivedResourceUri` is non-empty for the standardizable row —
+>    this is the CE-side canary that catches a dropped `view` at the
+>    grpc-gateway/client translation hop. Downstream consumers SHOULD pin
+>    an analogous gateway-level assertion in their own test surface.

@@ -1,0 +1,17 @@
+# Entity-alias backfill
+
+**ARTIFACT-INV-ALIAS-BACKFILL.** `BackfillEntityAliasesWorkflow` in `pkg/worker/backfill_alias_activity.go` is an operator-admin-only counterpart to the in-pipeline alias rewrite. It walks every file in a single KB that already has kb_entity links, regenerates the entity list through Gemini with the alias-aware summary prompt, union-merges aliases into `kb_entity.aliases`, and rewrites the file's TYPE_AUGMENTED chunk so BM25 can bridge bilingual / synonym surface forms (e.g. `chicken` → `雞`).
+
+## Registration surface
+
+The workflow and its activities live in this CE package for reuse, but the CE worker binary (`cmd/worker/main.go`) MUST NOT call `RegisterWorkflow` / `RegisterActivity` for them. CE ships an OSS stack with no operator path to trigger an admin backfill; advertising the workflow types from a CE worker is a leak in two directions (CE OSS users see workflow signatures they cannot invoke, and CE prose acquires implicit knowledge of operator-only tooling). This is the common-code-in-CE / operator-only-registration pattern also used by the thumbnail backfill.
+
+## Contract
+
+- Scoped per `KBUID` — there is no "backfill every KB" mode. Each invocation opts in per KB because the rewrite spends Gemini credits.
+- Idempotent via the content marker: a TYPE_AUGMENTED chunk whose MinIO body contains the literal `" ("` sequence has already been written by the alias-aware `formatAugmentedEntities`, so the file is skipped. Re-running the workflow on a drained KB completes in seconds.
+- Snapshot-paged: the workflow pulls the full eligible file-UID slice once via `repository.ListFileUIDsWithEntitiesByKB` and then fans it out to a pool of per-file coroutines. Default concurrency is `defaultBackfillConcurrency = 4`; the knob is exposed via `BackfillEntityAliasesWorkflowParam.Concurrency` and preserved across `ContinueAsNew`. At ~30–60 s per Gemini summary call this peaks at ~4–8 RPM, two orders of magnitude under every paid-tier Gemini quota, so operators can raise it (to 8 or 16) in quota-rich deployments. Bounded-parallel writes to `kb_entity` are safe because `UpsertEntities` serializes at the Postgres row level under ON CONFLICT and `LinkEntityFile` uses disjoint `(entity, file)` tuples across coroutines. The workflow MUST drain every in-flight coroutine before `ContinueAsNew` (and before returning): restarting history without draining would orphan running activities and silently lose work.
+- `kb_entity.aliases` is `TEXT[] NOT NULL DEFAULT '{}'` with a GIN index (migration 000069). The ON CONFLICT branch of `repository.UpsertEntities` union-merges the existing array with the new aliases via `SELECT ARRAY(SELECT DISTINCT UNNEST(kb_entity.aliases || EXCLUDED.aliases))` so re-running the workflow never shrinks the alias set.
+- Per-file failures are logged and skipped; the workflow is non-fatal. Temporal's retry policy (`MaximumAttempts = 2`, trimmed from the ingestion path's 3 because backfill is best-effort) absorbs transient errors inside the activity boundary.
+- Uses `ContinueAsNew` after `MaxPollIterationsBeforeContinueAsNew` paging rounds (at `backfillAliasesBatchSize = 100` files per progress-log cadence) so workflow history stays bounded on very large KBs. The `Concurrency` param survives the restart.
+- Never scheduled. Nothing in the hot path depends on it — freshly ingested files produce aliases inline via `ProcessSummaryActivity` → `parseSummaryEntities`, and the surface fix for bilingual retrieval degrades gracefully when the backfill has not yet been run.

@@ -40,9 +40,9 @@ func IsTrustedBackendRequest(ctx context.Context) bool {
 //     namespaces).
 //
 // Note: authenticated users accessing OTHER namespaces via capability tokens
-// (cross-workspace share links) are handled by agent-backend-ee's
-// GetCapabilityContext + CheckShareLinkPermission flow. artifact-backend
-// receives these as trusted S2S calls (case 1).
+// (cross-workspace share links) are handled upstream by the share-link /
+// capability-context flow. artifact-backend receives those requests as
+// trusted S2S calls (case 1).
 func (s *service) CheckNamespacePermission(ctx context.Context, ns *resource.Namespace) error {
 	if IsTrustedBackendRequest(ctx) {
 		return nil
