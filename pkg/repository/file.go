@@ -31,6 +31,21 @@ const (
 	FileTableName = "file"
 )
 
+// ErrDuplicateContentSHA256 is returned when a file with the same content hash
+// already exists in the target knowledge base. Callers should map this to a
+// gRPC AlreadyExists status with DUPLICATE_FILE_CONTENT error detail.
+var ErrDuplicateContentSHA256 = errors.New("duplicate content SHA256 in knowledge base")
+
+// isDuplicateContentSHA256Error checks whether a GORM error is a PostgreSQL
+// unique-violation on the idx_file_kb_unique_content_sha256 index.
+func isDuplicateContentSHA256Error(err error) bool {
+	var pgErr *pq.Error
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505" && strings.Contains(pgErr.Constraint, "content_sha256")
+	}
+	return false
+}
+
 // File interface defines the methods for the file table
 type File interface {
 	// CreateFile creates a new file and associates it with a knowledge base.
@@ -203,9 +218,10 @@ func (FileModel) TableName() string {
 
 // FileKnowledgeBase represents the many-to-many relationship between files and knowledge bases
 type FileKnowledgeBase struct {
-	FileUID   types.FileUIDType          `gorm:"column:file_uid;type:uuid;primaryKey" json:"file_uid"`
-	KBUID     types.KnowledgeBaseUIDType `gorm:"column:kb_uid;type:uuid;primaryKey" json:"kb_uid"`
-	CreatedAt time.Time                  `gorm:"column:created_at;not null;default:now()" json:"created_at"`
+	FileUID       types.FileUIDType          `gorm:"column:file_uid;type:uuid;primaryKey" json:"file_uid"`
+	KBUID         types.KnowledgeBaseUIDType `gorm:"column:kb_uid;type:uuid;primaryKey" json:"kb_uid"`
+	ContentSHA256 string                     `gorm:"column:content_sha256;type:varchar(64)" json:"content_sha256"`
+	CreatedAt     time.Time                  `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 }
 
 // TableName overrides the default table name for GORM
@@ -502,12 +518,18 @@ func (r *repository) CreateFile(ctx context.Context, file FileModel, kbUID types
 			return err
 		}
 
-		// Create the file-KB association in the junction table
+		// Create the file-KB association in the junction table.
+		// ContentSHA256 is denormalized here for the per-KB unique constraint
+		// (idx_file_kb_unique_content_sha256).
 		association := FileKnowledgeBase{
-			FileUID: file.UID,
-			KBUID:   kbUID,
+			FileUID:       file.UID,
+			KBUID:         kbUID,
+			ContentSHA256: file.ContentSHA256,
 		}
 		if err := tx.Create(&association).Error; err != nil {
+			if isDuplicateContentSHA256Error(err) {
+				return ErrDuplicateContentSHA256
+			}
 			return fmt.Errorf("creating file-kb association: %w", err)
 		}
 
@@ -543,10 +565,14 @@ func (r *repository) CreateFileAdmin(ctx context.Context, file FileModel, kbUID 
 		}
 
 		association := FileKnowledgeBase{
-			FileUID: file.UID,
-			KBUID:   kbUID,
+			FileUID:       file.UID,
+			KBUID:         kbUID,
+			ContentSHA256: file.ContentSHA256,
 		}
 		if err := tx.Create(&association).Error; err != nil {
+			if isDuplicateContentSHA256Error(err) {
+				return ErrDuplicateContentSHA256
+			}
 			return fmt.Errorf("creating file-kb association: %w", err)
 		}
 

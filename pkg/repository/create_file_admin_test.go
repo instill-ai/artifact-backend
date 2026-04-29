@@ -55,6 +55,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		`CREATE TABLE file_knowledge_base (
 			file_uid TEXT NOT NULL,
 			kb_uid TEXT NOT NULL,
+			content_sha256 TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY (file_uid, kb_uid)
 		)`,

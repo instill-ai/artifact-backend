@@ -451,6 +451,25 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 	// and knowledge base usage increment in a single transaction
 	res, err := ph.service.Repository().CreateFile(ctx, kbFile, kb.UID, nil)
 	if err != nil {
+		if errors.Is(err, repository.ErrDuplicateContentSHA256) {
+			existing, lookupErr := ph.service.Repository().GetFileByContentSHA256InKB(ctx, kb.UID, kbFile.ContentSHA256)
+			if lookupErr == nil && existing != nil {
+				st := status.New(codes.AlreadyExists, "A file with identical content already exists. Duplicate uploads are not allowed.")
+				st, _ = st.WithDetails(&errdetails.ErrorInfo{
+					Reason: "DUPLICATE_FILE_CONTENT",
+					Domain: "artifact.instill.tech",
+					Metadata: map[string]string{
+						"existing_file_name":         existing.DisplayName,
+						"existing_file_id":           existing.ID,
+						"existing_namespace_id":      namespaceID,
+						"existing_knowledge_base_id": kb.ID,
+					},
+				})
+				return nil, st.Err()
+			}
+			st := status.New(codes.AlreadyExists, "A file with identical content already exists in this knowledge base.")
+			return nil, st.Err()
+		}
 		return nil, errorsx.AddMessage(
 			fmt.Errorf("creating knowledge base file: %w", err),
 			"Unable to add file to knowledge base. Please try again.",
