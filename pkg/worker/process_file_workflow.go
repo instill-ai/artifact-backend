@@ -360,6 +360,29 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				"fileUID", fileUID.String(),
 				"previousStatus", startStatus.String())
 			startStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING
+
+			// Persist PROCESSING immediately so callers that derive UI state
+			// from file.process_status (e.g. cell-status derivation in
+			// downstream consumers) never observe a stale FAILED/COMPLETED
+			// row while the auto-reprocess is in flight. Without this, the
+			// DB stays on the previous status until the first stage-level
+			// activity runs and writes its own status update — that gap is
+			// observed in the UI as a transient "Processing failed" /
+			// stale-COMPLETED flicker before the new pipeline lands.
+			//
+			// The activity is fire-and-forget on failure: a missed status
+			// write degrades gracefully back to the pre-fix flicker rather
+			// than blocking the reprocess. See
+			// ARTIFACT-INV-reprocess-status-flicker-elimination in
+			// docs/invariants/reprocess-status.md.
+			if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
+				FileUID: fileUID,
+				Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING,
+				Message: "",
+			}).Get(ctx, nil); err != nil {
+				logger.Warn("Failed to persist PROCESSING status on auto-reprocess",
+					"fileUID", fileUID.String(), "error", err)
+			}
 		}
 
 		bucket := object.BucketFromDestination(metadata.File.StoragePath)

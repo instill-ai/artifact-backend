@@ -1,0 +1,24 @@
+# Reprocess status invariants
+
+## Reprocess-status flicker elimination (`ARTIFACT-INV-reprocess-status-flicker-elimination`)
+
+`file.process_status` is the single observable handle that downstream consumers (the console, downstream services that derive cell/preview status, anything paginating `ListFiles` with status filters) use to render whether a file is currently being processed. When `ProcessFileWorkflow` is restarted on a file whose persisted status is `FILE_PROCESS_STATUS_FAILED` or `FILE_PROCESS_STATUS_COMPLETED` — the auto-reprocess branch — the workflow MUST persist `FILE_PROCESS_STATUS_PROCESSING` to the database **before any stage-level activity runs**. Otherwise the gap between "the workflow has decided to reprocess" and "the next stage activity writes its own status" is an observable window where the UI re-reads the stale `FAILED` (or `COMPLETED`) row and surfaces a transient "Processing failed" badge / stale-completed thumbnail before the new pipeline lands.
+
+**Non-negotiable rules** (`pkg/worker/process_file_workflow.go`, `pkg/worker/status_activity.go`):
+
+1. **The auto-reprocess detection block persists immediately.** When the metadata-evaluation loop observes `startStatus ∈ {COMPLETED, FAILED}` and locally promotes it to `PROCESSING`, the workflow MUST execute `UpdateFileStatusActivity{Status: PROCESSING, Message: ""}` before returning to the loop or proceeding to Step 2. The local field assignment alone (`startStatus = PROCESSING`) is invisible to consumers — only the activity write is.
+2. **The persistence is fire-and-forget on failure.** The workflow MUST log a `Warn` and continue if the persistence call errors. A missed write degrades gracefully back to the pre-fix flicker (Step 2a's later persistence still fires); blocking the reprocess on this write would replace a UX flicker with an outage.
+3. **Step 2a's `UpdateFileStatusActivity(PROCESSING)` stays.** The new persistence is additive: Step 2a's per-file write at the start of full-processing remains, both because it covers the originally-`NOTSTARTED` / `PROCESSING` cases (which never enter the auto-reprocess detection block) and because it is the structural marker that "Step 2 is starting." Removing it would re-introduce the flicker for non-auto-reprocess paths.
+4. **Activity ordering is enforced by test, not by comment.** The deterministic Temporal `WorkflowEnvironment` test `TestProcessFileWorkflow_AutoReprocessFromFailed_PersistsProcessingBeforeAnyOtherActivity` counts `UpdateFileStatusActivity` calls before the first `DeleteOldConvertedFilesActivity` (the first stage activity in Step 2b). Pre-fix the count is 1 (Step 2a); post-fix the count is 2 (auto-reprocess persistence + Step 2a). The test asserts `>= 2` and freezes the contract — removing the new persistence drops the count back to 1 and turns the test red.
+
+**Why this fix is elegant, robust, and future-proof:**
+
+- **Elegant** — single insertion point inside the existing auto-reprocess detection block. No new activities, no new RPC, no new state machine. Reuses the activity that every other status transition in this file already calls.
+- **Robust** — handles all auto-reprocess paths uniformly because the detection block is the single gate (`startStatus ∈ {COMPLETED, FAILED}`). The fire-and-forget envelope means a transient DB error degrades to the pre-fix flicker rather than to a stuck file.
+- **Future-proof** — every future starting status that enters the auto-reprocess branch (e.g. a hypothetical `PARTIAL_FAILURE` added to `FileProcessStatus`) inherits the persistence behaviour for free; the rule is "if the local mutation runs, the activity runs."
+
+**Regression case:** auto-reprocess of an image cell whose initial run had failed produced a transient "Processing failed" badge in the cell card before the regenerated image rendered. Pre-fix: the workflow's metadata loop ran `GetFileStatus` → `GetFileMetadata` → set `startStatus = PROCESSING` (locally only) → exited the loop → entered Step 2 → Step 2a's `UpdateFileStatusActivity(PROCESSING)` was the first DB write of `PROCESSING`. The console's polling read of `file.process_status` between the metadata loop ending and Step 2a starting saw `FAILED`, rendered the "Processing failed" cell, and only later (after Step 2a's write reached the DB) re-rendered with the regenerated image.
+
+**Tests pinning this invariant:**
+
+- `pkg/worker/process_file_workflow_test.go::TestProcessFileWorkflow_AutoReprocessFromFailed_PersistsProcessingBeforeAnyOtherActivity` — Temporal `testsuite.WorkflowEnvironment` + `OnActivity` recorder. Mocks a file with `ProcessStatus = FILE_PROCESS_STATUS_FAILED`; asserts `>= 2` `UpdateFileStatusActivity` calls before the first `DeleteOldConvertedFilesActivity`, and that every status persisted in that window is `PROCESSING`.
