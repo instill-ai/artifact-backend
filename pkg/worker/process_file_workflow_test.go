@@ -1,11 +1,14 @@
 package worker
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/gofrs/uuid"
 	"github.com/gojuno/minimock/v3"
+	tmock "github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/testsuite"
 	"go.uber.org/zap"
 
@@ -13,6 +16,8 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/worker/mock"
+
+	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 )
 
 func TestProcessFileWorkflowParam_Validation(t *testing.T) {
@@ -333,5 +338,146 @@ func TestProcessFileWorkflow_GetFileMetadataSuccess(t *testing.T) {
 		// Expected - workflow fails at processing stages due to missing mocks
 		// As long as it's not an ActivityNotRegisteredError, the test validates what we need
 		c.Logf("Workflow failed as expected at processing stages: %v", err)
+	}
+}
+
+// TestProcessFileWorkflow_AutoReprocessFromFailed_PersistsProcessingBeforeAnyOtherActivity
+// pins ARTIFACT-INV-reprocess-status-flicker-elimination
+// (docs/invariants/reprocess-status.md).
+//
+// When ProcessFileWorkflow is restarted on a file whose
+// process_status is FAILED (or COMPLETED), the workflow MUST persist
+// FILE_PROCESS_STATUS_PROCESSING to the database BEFORE any
+// stage-level activity runs. Otherwise downstream consumers that
+// derive UI state from file.process_status read the stale FAILED row
+// during the gap and surface a transient "Processing failed" flicker
+// before the new pipeline writes the next status.
+//
+// The deterministic Temporal testsuite is the canonical executable
+// contract for this class of bug — k6 polling cannot observe the
+// sub-second window reliably; the workflow-environment harness can.
+func TestProcessFileWorkflow_AutoReprocessFromFailed_PersistsProcessingBeforeAnyOtherActivity(t *testing.T) {
+	c := qt.New(t)
+	mc := minimock.NewController(c)
+
+	mockRepository := mock.NewRepositoryMock(mc)
+	mockAIClient := mock.NewClientMock(mc)
+
+	fileUID := uuid.Must(uuid.NewV4())
+	kbUID := uuid.Must(uuid.NewV4())
+
+	// File starts in FAILED — the auto-reprocess branch this invariant
+	// guards is entered when startStatus is FAILED or COMPLETED.
+	mockRepository.GetFilesByFileUIDsMock.Return([]repository.FileModel{
+		{
+			UID:           fileUID,
+			ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED.String(),
+			DisplayName:   "anchor.png",
+			FileType:      "TYPE_PDF",
+			StoragePath:   "test/anchor.png",
+		},
+	}, nil)
+	mockRepository.GetKnowledgeBaseByUIDWithConfigMock.Return(&repository.KnowledgeBaseWithConfig{
+		KnowledgeBaseModel: repository.KnowledgeBaseModel{UID: kbUID},
+	}, nil)
+	mockRepository.GetKnowledgeBaseByUIDMock.Return(&repository.KnowledgeBaseModel{
+		UID:     kbUID,
+		Staging: false,
+	}, nil)
+	mockRepository.GetDualProcessingTargetMock.Return(nil, nil)
+
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	w := &Worker{
+		repository: mockRepository,
+		aiClient:   mockAIClient,
+		log:        zap.NewNop(),
+	}
+
+	// Activity-call recorder. We capture every UpdateFileStatusActivity
+	// invocation in order, plus the first stage activity
+	// (DeleteOldConvertedFilesActivity is the next activity the
+	// workflow runs after the auto-reprocess branch enters PROCESSING),
+	// so we can prove ordering.
+	var (
+		mu               sync.Mutex
+		callOrder        []string
+		statusCallParams []artifactpb.FileProcessStatus
+	)
+
+	env.OnActivity(w.UpdateFileStatusActivity, tmock.Anything, tmock.Anything).Return(
+		func(_ context.Context, p *UpdateFileStatusActivityParam) error {
+			mu.Lock()
+			defer mu.Unlock()
+			callOrder = append(callOrder, "UpdateFileStatus")
+			statusCallParams = append(statusCallParams, p.Status)
+			return nil
+		},
+	)
+	env.OnActivity(w.DeleteOldConvertedFilesActivity, tmock.Anything, tmock.Anything).Return(
+		func(_ context.Context, _ *DeleteOldConvertedFilesActivityParam) error {
+			mu.Lock()
+			defer mu.Unlock()
+			callOrder = append(callOrder, "DeleteOldConvertedFiles")
+			return nil
+		},
+	)
+
+	env.RegisterActivity(w.GetFileMetadataActivity)
+	env.RegisterActivity(w.GetFileStatusActivity)
+	env.RegisterWorkflow(w.ProcessFileWorkflow)
+
+	param := ProcessFileWorkflowParam{
+		FileUIDs: []uuid.UUID{fileUID},
+		KBUID:    kbUID,
+	}
+
+	env.ExecuteWorkflow(w.ProcessFileWorkflow, param)
+
+	c.Assert(env.IsWorkflowCompleted(), qt.IsTrue)
+
+	// Look at the activity-call order up to the first
+	// DeleteOldConvertedFiles call — that's the boundary between the
+	// metadata-evaluation phase (where the auto-reprocess persistence
+	// MUST land) and the stage-activity phase (which would let the UI
+	// observe the stale FAILED row if persistence is delayed past it).
+	mu.Lock()
+	defer mu.Unlock()
+
+	c.Assert(len(callOrder) > 0, qt.IsTrue,
+		qt.Commentf("expected at least one activity call; got none"))
+
+	// Find the boundary: index of the first non-UpdateFileStatus
+	// activity. Everything before it MUST be UpdateFileStatus. The
+	// pre-fix workflow runs one UpdateFileStatus(PROCESSING) before
+	// the first stage activity (Step 2a, "Update all files status to
+	// PROCESSING"); the post-fix workflow runs two — the new
+	// auto-reprocess persistence + Step 2a — and both MUST land before
+	// the first stage activity. Asserting >= 2 freezes the contract:
+	// removing the auto-reprocess persistence (regression) drops the
+	// count to 1 and turns this test red.
+	statusCountBeforeStage := 0
+	for _, call := range callOrder {
+		if call == "UpdateFileStatus" {
+			statusCountBeforeStage++
+			continue
+		}
+		break
+	}
+	c.Assert(statusCountBeforeStage >= 2, qt.IsTrue,
+		qt.Commentf("auto-reprocess from FAILED must persist PROCESSING immediately + at the start of full processing — expected >= 2 UpdateFileStatus calls before the first stage activity, got %d. Full order: %v",
+			statusCountBeforeStage, callOrder))
+
+	// All persisted statuses observed before the first stage activity
+	// MUST be PROCESSING. A persisted FAILED or COMPLETED in this
+	// window would mean the workflow regressed to writing a wrong
+	// status (e.g. the handleFileError branch ran early) and would
+	// itself produce a flicker.
+	for i := 0; i < statusCountBeforeStage; i++ {
+		c.Assert(statusCallParams[i], qt.Equals,
+			artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING,
+			qt.Commentf("UpdateFileStatus call #%d before first stage activity persisted %v, expected PROCESSING. Full statuses: %v",
+				i, statusCallParams[i], statusCallParams))
 	}
 }
