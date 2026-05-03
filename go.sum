@@ -431,8 +431,8 @@ github.com/imkira/go-interpol v1.1.0/go.mod h1:z0h2/2T3XF8kyEPpRgJ3kmNv+C43p+I/C
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
 github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260429232800-7b4efe2cd9e9 h1:HtM0U3FchreDXc0A2j0LS3cIleYZKFTlyeG3yGXo+gc=
 github.com/instill-ai/protogen-go v0.3.3-alpha.0.20260429232800-7b4efe2cd9e9/go.mod h1:bCnBosofpaUxKBuTTJM3/I3thAK37kvfBnKByjnLsl4=
-github.com/instill-ai/x v0.10.1-alpha.0.20260423023806-4603a52e08ff h1:Daz4XA5td6rPAq/fMpzpUxK7i2My8C0YtJ4hRgwA/8Y=
-github.com/instill-ai/x v0.10.1-alpha.0.20260423023806-4603a52e08ff/go.mod h1:r6kGo7M1dkYtzSqetAWT1kpglpVzqOmPc+ADs6obpKs=
+github.com/instill-ai/x v0.10.1-alpha.0.20260503172130-376b2c86aa36 h1:aw347OWqOSOVGM2WhaUkgOzkLCmgZpPKFzxuvMcMUbk=
+github.com/instill-ai/x v0.10.1-alpha.0.20260503172130-376b2c86aa36/go.mod h1:r6kGo7M1dkYtzSqetAWT1kpglpVzqOmPc+ADs6obpKs=
 github.com/iris-contrib/blackfriday v2.0.0+incompatible/go.mod h1:UzZ2bDEoaSGPbkg6SAB4att1aAwTmVIx/5gCVqeyUdI=
 github.com/iris-contrib/go.uuid v2.0.0+incompatible/go.mod h1:iz2lgM/1UnEf1kP0L/+fafWORmlnuysV2EMP8MW+qe0=
 github.com/iris-contrib/jade v1.1.3/go.mod h1:H/geBymxJhShH5kecoiOCSssPX7QWYH7UaeZTSWddIk=
