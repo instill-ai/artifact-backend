@@ -278,29 +278,38 @@ func (ph *PublicHandler) ListChunks(ctx context.Context, req *artifactpb.ListChu
 	fileUID := uuid.UUID(kbf.UID)
 	_ = namespaceID // namespaceID can be used for validation if needed
 
-	// ACL - check user's permission to read any of the knowledge bases associated with this file
-	kbUIDs, err := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, kbf.UID)
-	if err != nil {
-		logger.Error("failed to get KB associations for file", zap.Error(err))
-		return nil, fmt.Errorf("getting file KB associations: %w", err)
-	}
-	if len(kbUIDs) == 0 {
-		return nil, fmt.Errorf("%w: file not associated with any knowledge base", errorsx.ErrNotFound)
-	}
-	granted := false
-	for _, kbUID := range kbUIDs {
-		hasPermission, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbUID, "reader")
+	// ACL - check user's permission to read any of the knowledge bases
+	// associated with this file.
+	//
+	// Trusted backend-to-backend calls that have already performed
+	// file-level authorization bypass this KB-level check. Re-checking
+	// KB membership here would reject callers the upstream layer has
+	// already validated. This mirrors the trusted-backend bypass on
+	// `SimilarityChunksSearch` lower in this file.
+	if !service.IsTrustedBackendRequest(ctx) {
+		kbUIDs, err := ph.service.Repository().GetKnowledgeBaseUIDsForFile(ctx, kbf.UID)
 		if err != nil {
-			logger.Warn("failed to check permission for KB", zap.Error(err), zap.String("kbUID", kbUID.String()))
-			continue
+			logger.Error("failed to get KB associations for file", zap.Error(err))
+			return nil, fmt.Errorf("getting file KB associations: %w", err)
 		}
-		if hasPermission {
-			granted = true
-			break
+		if len(kbUIDs) == 0 {
+			return nil, fmt.Errorf("%w: file not associated with any knowledge base", errorsx.ErrNotFound)
 		}
-	}
-	if !granted {
-		return nil, fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized)
+		granted := false
+		for _, kbUID := range kbUIDs {
+			hasPermission, err := ph.service.ACLClient().CheckPermission(ctx, "knowledgebase", kbUID, "reader")
+			if err != nil {
+				logger.Warn("failed to check permission for KB", zap.Error(err), zap.String("kbUID", kbUID.String()))
+				continue
+			}
+			if hasPermission {
+				granted = true
+				break
+			}
+		}
+		if !granted {
+			return nil, fmt.Errorf("%w: no permission over knowledge base", errorsx.ErrUnauthorized)
+		}
 	}
 	// Get ALL text chunks for this file (content + summary + augmented)
 	// Note: A file can have multiple converted_files (e.g., content converted_file + summary converted_file)
