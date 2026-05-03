@@ -381,19 +381,21 @@ func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.Up
 		return nil, status.Errorf(codes.Internal, "failed to update file: %v", err)
 	}
 
-	// If tags were updated, sync them to Milvus embeddings
+	// If tags were updated, sync them to Milvus embeddings.
+	// Milvus is a derived view; the DB is the source of truth. Run the sync
+	// in a background goroutine so a slow or unavailable Milvus instance
+	// (e.g. CE deployments without a vector store) never blocks the response.
 	if _, tagsUpdated := updates[repository.FileColumn.Tags]; tagsUpdated {
-		// Get the active collection UID for this KB
 		collectionID := constant.KBCollectionName(kb.ActiveCollectionUID)
-
-		// Update tags in Milvus for all embeddings of this file
-		if err := h.service.Repository().UpdateEmbeddingTagsForFile(ctx, collectionID, types.FileUIDType(kbFile.UID), updatedFile.Tags); err != nil {
-			logger.Warn("Failed to update embedding tags in Milvus (file tags in DB were updated)",
-				zap.String("fileUID", kbFile.UID.String()),
-				zap.Error(err))
-			// Don't fail the request - DB tags were updated successfully
-			// Milvus tags will be resynced if file is reprocessed
-		}
+		fileUID := types.FileUIDType(kbFile.UID)
+		tags := updatedFile.Tags
+		go func() {
+			if err := h.service.Repository().UpdateEmbeddingTagsForFile(context.Background(), collectionID, fileUID, tags); err != nil {
+				logger.Warn("Failed to update embedding tags in Milvus (file tags in DB were updated)",
+					zap.String("fileUID", fileUID.String()),
+					zap.Error(err))
+			}
+		}()
 	}
 
 	// Fetch owner for response

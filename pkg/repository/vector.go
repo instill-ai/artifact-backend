@@ -14,6 +14,8 @@ import (
 	"github.com/milvus-io/milvus/client/v2/index"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
@@ -161,6 +163,30 @@ func NewVectorDatabase(ctx context.Context, cfg MilvusConfig) (db VectorDatabase
 	// Enable TLS if configured (required for Zilliz Cloud)
 	if cfg.EnableTLS {
 		clientCfg.EnableTLSAuth = true
+	}
+
+	// milvusclient.DefaultGrpcOpts includes grpc.WithBlock(), which makes
+	// grpc.DialContext block indefinitely until Milvus is reachable. When
+	// Milvus is unavailable (e.g. CE deployments without a vector store), this
+	// causes the service to hang at startup.
+	//
+	// Providing a custom DialOptions slice replaces DefaultGrpcOpts (the
+	// dialOptions() function uses DefaultGrpcOpts only when DialOptions is nil).
+	// We preserve keepalive settings but omit grpc.WithBlock() so the channel
+	// is created immediately with a lazy connection. The first actual RPC
+	// initiates the TCP handshake; errors are handled at call sites (all Milvus
+	// calls run in background goroutines that log and continue on failure).
+	//
+	// DisableConn also skips the blocking connectInternal RPC that New() makes.
+	// Note: transport credentials (TLS vs insecure) are prepended by
+	// dialOptions() based on EnableTLSAuth; do not duplicate them here.
+	clientCfg.DisableConn = true
+	clientCfg.DialOptions = []grpc.DialOption{
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                5 * time.Second,
+			Timeout:             10 * time.Second,
+			PermitWithoutStream: true,
+		}),
 	}
 
 	c, err := milvusclient.New(ctx, clientCfg)
