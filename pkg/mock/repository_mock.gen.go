@@ -579,6 +579,13 @@ type RepositoryMock struct {
 	beforeGetObjectByUIDCounter uint64
 	GetObjectByUIDMock          mRepositoryMockGetObjectByUID
 
+	funcGetObjectsByUIDs          func(ctx context.Context, uids []types.ObjectUIDType) (m1 map[types.ObjectUIDType]*mm_repository.ObjectModel, err error)
+	funcGetObjectsByUIDsOrigin    string
+	inspectFuncGetObjectsByUIDs   func(ctx context.Context, uids []types.ObjectUIDType)
+	afterGetObjectsByUIDsCounter  uint64
+	beforeGetObjectsByUIDsCounter uint64
+	GetObjectsByUIDsMock          mRepositoryMockGetObjectsByUIDs
+
 	funcGetRepositoryTag          func(ctx context.Context, r1 utils.RepositoryTagName) (tp1 *types.Tag, err error)
 	funcGetRepositoryTagOrigin    string
 	inspectFuncGetRepositoryTag   func(ctx context.Context, r1 utils.RepositoryTagName)
@@ -1342,6 +1349,9 @@ func NewRepositoryMock(t minimock.Tester) *RepositoryMock {
 
 	m.GetObjectByUIDMock = mRepositoryMockGetObjectByUID{mock: m}
 	m.GetObjectByUIDMock.callArgs = []*RepositoryMockGetObjectByUIDParams{}
+
+	m.GetObjectsByUIDsMock = mRepositoryMockGetObjectsByUIDs{mock: m}
+	m.GetObjectsByUIDsMock.callArgs = []*RepositoryMockGetObjectsByUIDsParams{}
 
 	m.GetRepositoryTagMock = mRepositoryMockGetRepositoryTag{mock: m}
 	m.GetRepositoryTagMock.callArgs = []*RepositoryMockGetRepositoryTagParams{}
@@ -29204,6 +29214,349 @@ func (m *RepositoryMock) MinimockGetObjectByUIDInspect() {
 	}
 }
 
+type mRepositoryMockGetObjectsByUIDs struct {
+	optional           bool
+	mock               *RepositoryMock
+	defaultExpectation *RepositoryMockGetObjectsByUIDsExpectation
+	expectations       []*RepositoryMockGetObjectsByUIDsExpectation
+
+	callArgs []*RepositoryMockGetObjectsByUIDsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// RepositoryMockGetObjectsByUIDsExpectation specifies expectation struct of the Repository.GetObjectsByUIDs
+type RepositoryMockGetObjectsByUIDsExpectation struct {
+	mock               *RepositoryMock
+	params             *RepositoryMockGetObjectsByUIDsParams
+	paramPtrs          *RepositoryMockGetObjectsByUIDsParamPtrs
+	expectationOrigins RepositoryMockGetObjectsByUIDsExpectationOrigins
+	results            *RepositoryMockGetObjectsByUIDsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// RepositoryMockGetObjectsByUIDsParams contains parameters of the Repository.GetObjectsByUIDs
+type RepositoryMockGetObjectsByUIDsParams struct {
+	ctx  context.Context
+	uids []types.ObjectUIDType
+}
+
+// RepositoryMockGetObjectsByUIDsParamPtrs contains pointers to parameters of the Repository.GetObjectsByUIDs
+type RepositoryMockGetObjectsByUIDsParamPtrs struct {
+	ctx  *context.Context
+	uids *[]types.ObjectUIDType
+}
+
+// RepositoryMockGetObjectsByUIDsResults contains results of the Repository.GetObjectsByUIDs
+type RepositoryMockGetObjectsByUIDsResults struct {
+	m1  map[types.ObjectUIDType]*mm_repository.ObjectModel
+	err error
+}
+
+// RepositoryMockGetObjectsByUIDsOrigins contains origins of expectations of the Repository.GetObjectsByUIDs
+type RepositoryMockGetObjectsByUIDsExpectationOrigins struct {
+	origin     string
+	originCtx  string
+	originUids string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) Optional() *mRepositoryMockGetObjectsByUIDs {
+	mmGetObjectsByUIDs.optional = true
+	return mmGetObjectsByUIDs
+}
+
+// Expect sets up expected params for Repository.GetObjectsByUIDs
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) Expect(ctx context.Context, uids []types.ObjectUIDType) *mRepositoryMockGetObjectsByUIDs {
+	if mmGetObjectsByUIDs.mock.funcGetObjectsByUIDs != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("RepositoryMock.GetObjectsByUIDs mock is already set by Set")
+	}
+
+	if mmGetObjectsByUIDs.defaultExpectation == nil {
+		mmGetObjectsByUIDs.defaultExpectation = &RepositoryMockGetObjectsByUIDsExpectation{}
+	}
+
+	if mmGetObjectsByUIDs.defaultExpectation.paramPtrs != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("RepositoryMock.GetObjectsByUIDs mock is already set by ExpectParams functions")
+	}
+
+	mmGetObjectsByUIDs.defaultExpectation.params = &RepositoryMockGetObjectsByUIDsParams{ctx, uids}
+	mmGetObjectsByUIDs.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetObjectsByUIDs.expectations {
+		if minimock.Equal(e.params, mmGetObjectsByUIDs.defaultExpectation.params) {
+			mmGetObjectsByUIDs.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetObjectsByUIDs.defaultExpectation.params)
+		}
+	}
+
+	return mmGetObjectsByUIDs
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Repository.GetObjectsByUIDs
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) ExpectCtxParam1(ctx context.Context) *mRepositoryMockGetObjectsByUIDs {
+	if mmGetObjectsByUIDs.mock.funcGetObjectsByUIDs != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("RepositoryMock.GetObjectsByUIDs mock is already set by Set")
+	}
+
+	if mmGetObjectsByUIDs.defaultExpectation == nil {
+		mmGetObjectsByUIDs.defaultExpectation = &RepositoryMockGetObjectsByUIDsExpectation{}
+	}
+
+	if mmGetObjectsByUIDs.defaultExpectation.params != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("RepositoryMock.GetObjectsByUIDs mock is already set by Expect")
+	}
+
+	if mmGetObjectsByUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetObjectsByUIDs.defaultExpectation.paramPtrs = &RepositoryMockGetObjectsByUIDsParamPtrs{}
+	}
+	mmGetObjectsByUIDs.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetObjectsByUIDs.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetObjectsByUIDs
+}
+
+// ExpectUidsParam2 sets up expected param uids for Repository.GetObjectsByUIDs
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) ExpectUidsParam2(uids []types.ObjectUIDType) *mRepositoryMockGetObjectsByUIDs {
+	if mmGetObjectsByUIDs.mock.funcGetObjectsByUIDs != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("RepositoryMock.GetObjectsByUIDs mock is already set by Set")
+	}
+
+	if mmGetObjectsByUIDs.defaultExpectation == nil {
+		mmGetObjectsByUIDs.defaultExpectation = &RepositoryMockGetObjectsByUIDsExpectation{}
+	}
+
+	if mmGetObjectsByUIDs.defaultExpectation.params != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("RepositoryMock.GetObjectsByUIDs mock is already set by Expect")
+	}
+
+	if mmGetObjectsByUIDs.defaultExpectation.paramPtrs == nil {
+		mmGetObjectsByUIDs.defaultExpectation.paramPtrs = &RepositoryMockGetObjectsByUIDsParamPtrs{}
+	}
+	mmGetObjectsByUIDs.defaultExpectation.paramPtrs.uids = &uids
+	mmGetObjectsByUIDs.defaultExpectation.expectationOrigins.originUids = minimock.CallerInfo(1)
+
+	return mmGetObjectsByUIDs
+}
+
+// Inspect accepts an inspector function that has same arguments as the Repository.GetObjectsByUIDs
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) Inspect(f func(ctx context.Context, uids []types.ObjectUIDType)) *mRepositoryMockGetObjectsByUIDs {
+	if mmGetObjectsByUIDs.mock.inspectFuncGetObjectsByUIDs != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("Inspect function is already set for RepositoryMock.GetObjectsByUIDs")
+	}
+
+	mmGetObjectsByUIDs.mock.inspectFuncGetObjectsByUIDs = f
+
+	return mmGetObjectsByUIDs
+}
+
+// Return sets up results that will be returned by Repository.GetObjectsByUIDs
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) Return(m1 map[types.ObjectUIDType]*mm_repository.ObjectModel, err error) *RepositoryMock {
+	if mmGetObjectsByUIDs.mock.funcGetObjectsByUIDs != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("RepositoryMock.GetObjectsByUIDs mock is already set by Set")
+	}
+
+	if mmGetObjectsByUIDs.defaultExpectation == nil {
+		mmGetObjectsByUIDs.defaultExpectation = &RepositoryMockGetObjectsByUIDsExpectation{mock: mmGetObjectsByUIDs.mock}
+	}
+	mmGetObjectsByUIDs.defaultExpectation.results = &RepositoryMockGetObjectsByUIDsResults{m1, err}
+	mmGetObjectsByUIDs.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetObjectsByUIDs.mock
+}
+
+// Set uses given function f to mock the Repository.GetObjectsByUIDs method
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) Set(f func(ctx context.Context, uids []types.ObjectUIDType) (m1 map[types.ObjectUIDType]*mm_repository.ObjectModel, err error)) *RepositoryMock {
+	if mmGetObjectsByUIDs.defaultExpectation != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("Default expectation is already set for the Repository.GetObjectsByUIDs method")
+	}
+
+	if len(mmGetObjectsByUIDs.expectations) > 0 {
+		mmGetObjectsByUIDs.mock.t.Fatalf("Some expectations are already set for the Repository.GetObjectsByUIDs method")
+	}
+
+	mmGetObjectsByUIDs.mock.funcGetObjectsByUIDs = f
+	mmGetObjectsByUIDs.mock.funcGetObjectsByUIDsOrigin = minimock.CallerInfo(1)
+	return mmGetObjectsByUIDs.mock
+}
+
+// When sets expectation for the Repository.GetObjectsByUIDs which will trigger the result defined by the following
+// Then helper
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) When(ctx context.Context, uids []types.ObjectUIDType) *RepositoryMockGetObjectsByUIDsExpectation {
+	if mmGetObjectsByUIDs.mock.funcGetObjectsByUIDs != nil {
+		mmGetObjectsByUIDs.mock.t.Fatalf("RepositoryMock.GetObjectsByUIDs mock is already set by Set")
+	}
+
+	expectation := &RepositoryMockGetObjectsByUIDsExpectation{
+		mock:               mmGetObjectsByUIDs.mock,
+		params:             &RepositoryMockGetObjectsByUIDsParams{ctx, uids},
+		expectationOrigins: RepositoryMockGetObjectsByUIDsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetObjectsByUIDs.expectations = append(mmGetObjectsByUIDs.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Repository.GetObjectsByUIDs return parameters for the expectation previously defined by the When method
+func (e *RepositoryMockGetObjectsByUIDsExpectation) Then(m1 map[types.ObjectUIDType]*mm_repository.ObjectModel, err error) *RepositoryMock {
+	e.results = &RepositoryMockGetObjectsByUIDsResults{m1, err}
+	return e.mock
+}
+
+// Times sets number of times Repository.GetObjectsByUIDs should be invoked
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) Times(n uint64) *mRepositoryMockGetObjectsByUIDs {
+	if n == 0 {
+		mmGetObjectsByUIDs.mock.t.Fatalf("Times of RepositoryMock.GetObjectsByUIDs mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetObjectsByUIDs.expectedInvocations, n)
+	mmGetObjectsByUIDs.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetObjectsByUIDs
+}
+
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) invocationsDone() bool {
+	if len(mmGetObjectsByUIDs.expectations) == 0 && mmGetObjectsByUIDs.defaultExpectation == nil && mmGetObjectsByUIDs.mock.funcGetObjectsByUIDs == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetObjectsByUIDs.mock.afterGetObjectsByUIDsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetObjectsByUIDs.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetObjectsByUIDs implements mm_repository.Repository
+func (mmGetObjectsByUIDs *RepositoryMock) GetObjectsByUIDs(ctx context.Context, uids []types.ObjectUIDType) (m1 map[types.ObjectUIDType]*mm_repository.ObjectModel, err error) {
+	mm_atomic.AddUint64(&mmGetObjectsByUIDs.beforeGetObjectsByUIDsCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetObjectsByUIDs.afterGetObjectsByUIDsCounter, 1)
+
+	mmGetObjectsByUIDs.t.Helper()
+
+	if mmGetObjectsByUIDs.inspectFuncGetObjectsByUIDs != nil {
+		mmGetObjectsByUIDs.inspectFuncGetObjectsByUIDs(ctx, uids)
+	}
+
+	mm_params := RepositoryMockGetObjectsByUIDsParams{ctx, uids}
+
+	// Record call args
+	mmGetObjectsByUIDs.GetObjectsByUIDsMock.mutex.Lock()
+	mmGetObjectsByUIDs.GetObjectsByUIDsMock.callArgs = append(mmGetObjectsByUIDs.GetObjectsByUIDsMock.callArgs, &mm_params)
+	mmGetObjectsByUIDs.GetObjectsByUIDsMock.mutex.Unlock()
+
+	for _, e := range mmGetObjectsByUIDs.GetObjectsByUIDsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.m1, e.results.err
+		}
+	}
+
+	if mmGetObjectsByUIDs.GetObjectsByUIDsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetObjectsByUIDs.GetObjectsByUIDsMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetObjectsByUIDs.GetObjectsByUIDsMock.defaultExpectation.params
+		mm_want_ptrs := mmGetObjectsByUIDs.GetObjectsByUIDsMock.defaultExpectation.paramPtrs
+
+		mm_got := RepositoryMockGetObjectsByUIDsParams{ctx, uids}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetObjectsByUIDs.t.Errorf("RepositoryMock.GetObjectsByUIDs got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObjectsByUIDs.GetObjectsByUIDsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.uids != nil && !minimock.Equal(*mm_want_ptrs.uids, mm_got.uids) {
+				mmGetObjectsByUIDs.t.Errorf("RepositoryMock.GetObjectsByUIDs got unexpected parameter uids, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObjectsByUIDs.GetObjectsByUIDsMock.defaultExpectation.expectationOrigins.originUids, *mm_want_ptrs.uids, mm_got.uids, minimock.Diff(*mm_want_ptrs.uids, mm_got.uids))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetObjectsByUIDs.t.Errorf("RepositoryMock.GetObjectsByUIDs got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetObjectsByUIDs.GetObjectsByUIDsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetObjectsByUIDs.GetObjectsByUIDsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetObjectsByUIDs.t.Fatal("No results are set for the RepositoryMock.GetObjectsByUIDs")
+		}
+		return (*mm_results).m1, (*mm_results).err
+	}
+	if mmGetObjectsByUIDs.funcGetObjectsByUIDs != nil {
+		return mmGetObjectsByUIDs.funcGetObjectsByUIDs(ctx, uids)
+	}
+	mmGetObjectsByUIDs.t.Fatalf("Unexpected call to RepositoryMock.GetObjectsByUIDs. %v %v", ctx, uids)
+	return
+}
+
+// GetObjectsByUIDsAfterCounter returns a count of finished RepositoryMock.GetObjectsByUIDs invocations
+func (mmGetObjectsByUIDs *RepositoryMock) GetObjectsByUIDsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectsByUIDs.afterGetObjectsByUIDsCounter)
+}
+
+// GetObjectsByUIDsBeforeCounter returns a count of RepositoryMock.GetObjectsByUIDs invocations
+func (mmGetObjectsByUIDs *RepositoryMock) GetObjectsByUIDsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObjectsByUIDs.beforeGetObjectsByUIDsCounter)
+}
+
+// Calls returns a list of arguments used in each call to RepositoryMock.GetObjectsByUIDs.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetObjectsByUIDs *mRepositoryMockGetObjectsByUIDs) Calls() []*RepositoryMockGetObjectsByUIDsParams {
+	mmGetObjectsByUIDs.mutex.RLock()
+
+	argCopy := make([]*RepositoryMockGetObjectsByUIDsParams, len(mmGetObjectsByUIDs.callArgs))
+	copy(argCopy, mmGetObjectsByUIDs.callArgs)
+
+	mmGetObjectsByUIDs.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetObjectsByUIDsDone returns true if the count of the GetObjectsByUIDs invocations corresponds
+// the number of defined expectations
+func (m *RepositoryMock) MinimockGetObjectsByUIDsDone() bool {
+	if m.GetObjectsByUIDsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetObjectsByUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetObjectsByUIDsMock.invocationsDone()
+}
+
+// MinimockGetObjectsByUIDsInspect logs each unmet expectation
+func (m *RepositoryMock) MinimockGetObjectsByUIDsInspect() {
+	for _, e := range m.GetObjectsByUIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to RepositoryMock.GetObjectsByUIDs at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetObjectsByUIDsCounter := mm_atomic.LoadUint64(&m.afterGetObjectsByUIDsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetObjectsByUIDsMock.defaultExpectation != nil && afterGetObjectsByUIDsCounter < 1 {
+		if m.GetObjectsByUIDsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to RepositoryMock.GetObjectsByUIDs at\n%s", m.GetObjectsByUIDsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to RepositoryMock.GetObjectsByUIDs at\n%s with params: %#v", m.GetObjectsByUIDsMock.defaultExpectation.expectationOrigins.origin, *m.GetObjectsByUIDsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetObjectsByUIDs != nil && afterGetObjectsByUIDsCounter < 1 {
+		m.t.Errorf("Expected call to RepositoryMock.GetObjectsByUIDs at\n%s", m.funcGetObjectsByUIDsOrigin)
+	}
+
+	if !m.GetObjectsByUIDsMock.invocationsDone() && afterGetObjectsByUIDsCounter > 0 {
+		m.t.Errorf("Expected %d calls to RepositoryMock.GetObjectsByUIDs at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetObjectsByUIDsMock.expectedInvocations), m.GetObjectsByUIDsMock.expectedInvocationsOrigin, afterGetObjectsByUIDsCounter)
+	}
+}
+
 type mRepositoryMockGetRepositoryTag struct {
 	optional           bool
 	mock               *RepositoryMock
@@ -56507,6 +56860,8 @@ func (m *RepositoryMock) MinimockFinish() {
 
 			m.MinimockGetObjectByUIDInspect()
 
+			m.MinimockGetObjectsByUIDsInspect()
+
 			m.MinimockGetRepositoryTagInspect()
 
 			m.MinimockGetRollbackKBForProductionInspect()
@@ -56755,6 +57110,7 @@ func (m *RepositoryMock) minimockDone() bool {
 		m.MinimockGetObjectByIDDone() &&
 		m.MinimockGetObjectByIDOnlyDone() &&
 		m.MinimockGetObjectByUIDDone() &&
+		m.MinimockGetObjectsByUIDsDone() &&
 		m.MinimockGetRepositoryTagDone() &&
 		m.MinimockGetRollbackKBForProductionDone() &&
 		m.MinimockGetSourceByFileUIDDone() &&

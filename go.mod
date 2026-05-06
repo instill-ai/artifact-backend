@@ -4,6 +4,7 @@ go 1.25.6
 
 require (
 	cloud.google.com/go/storage v1.50.0
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/frankban/quicktest v1.14.6
 	github.com/go-playground/validator v9.31.0+incompatible
 	github.com/gofrs/uuid v4.4.0+incompatible

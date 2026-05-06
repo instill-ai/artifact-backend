@@ -23,6 +23,7 @@ type Object interface {
 	DeleteObjectByStoragePath(ctx context.Context, storagePath string) error
 	DeleteObject(ctx context.Context, uid types.ObjectUIDType) error
 	GetObjectByUID(ctx context.Context, uid types.ObjectUIDType) (*ObjectModel, error)
+	GetObjectsByUIDs(ctx context.Context, uids []types.ObjectUIDType) (map[types.ObjectUIDType]*ObjectModel, error)
 	GetObjectByID(ctx context.Context, namespaceUID types.NamespaceUIDType, id types.ObjectIDType) (*ObjectModel, error)
 	GetObjectByIDOnly(ctx context.Context, id types.ObjectIDType) (*ObjectModel, error)
 	UpdateObjectByUpdateMap(ctx context.Context, objUID types.ObjectUIDType, updateMap map[string]any) (*ObjectModel, error)
@@ -187,6 +188,33 @@ func (r *repository) GetObjectByUID(ctx context.Context, uid types.ObjectUIDType
 		return nil, err
 	}
 	return &obj, nil
+}
+
+// GetObjectsByUIDs batch-fetches ObjectModel records by their UIDs, returning a
+// map keyed by UID. Missing or soft-deleted UIDs are silently excluded from the
+// result (callers should check for nil on map lookup). UIDs are chunked in
+// batches of 1000 to stay safely under Postgres parameter limits.
+func (r *repository) GetObjectsByUIDs(ctx context.Context, uids []types.ObjectUIDType) (map[types.ObjectUIDType]*ObjectModel, error) {
+	if len(uids) == 0 {
+		return map[types.ObjectUIDType]*ObjectModel{}, nil
+	}
+	m := make(map[types.ObjectUIDType]*ObjectModel, len(uids))
+	const chunk = 1000
+	whereString := fmt.Sprintf("%v IN ? AND %v IS NULL", ObjectColumn.UID, ObjectColumn.DeleteTime)
+	for i := 0; i < len(uids); i += chunk {
+		end := i + chunk
+		if end > len(uids) {
+			end = len(uids)
+		}
+		var objs []ObjectModel
+		if err := r.db.WithContext(ctx).Where(whereString, uids[i:end]).Find(&objs).Error; err != nil {
+			return nil, err
+		}
+		for j := range objs {
+			m[objs[j].UID] = &objs[j]
+		}
+	}
+	return m, nil
 }
 
 // GetObjectByID fetches an ObjectModel record by its ID within a namespace.

@@ -438,14 +438,28 @@ func (s *service) GetDownloadURLByObjectUID(
 ) (*artifactpb.GetObjectDownloadURLResponse, error) {
 	logger, _ := logx.GetZapLogger(ctx)
 
-	// Get the object from database using UID
 	obj, err := s.repository.GetObjectByUID(ctx, objectUID)
 	if err != nil {
 		logger.Error("failed to get object by UID", zap.Error(err), zap.String("objectUID", objectUID.String()))
 		return nil, status.Errorf(codes.NotFound, "object not found: %v", err)
 	}
 
-	// Verify namespace matches
+	return s.PresignDownloadForObject(ctx, obj, namespaceUID, namespaceID, urlExpireDays, downloadFilenameParam)
+}
+
+// PresignDownloadForObject generates a presigned download URL for a pre-fetched
+// ObjectModel. Use this in batch contexts (e.g., ListFiles) where the object has
+// already been loaded to avoid redundant DB round-trips.
+func (s *service) PresignDownloadForObject(
+	ctx context.Context,
+	obj *repository.ObjectModel,
+	namespaceUID types.NamespaceUIDType,
+	namespaceID string,
+	urlExpireDays int32,
+	downloadFilenameParam string,
+) (*artifactpb.GetObjectDownloadURLResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
 	if obj.NamespaceUID != namespaceUID {
 		logger.Error("namespace mismatch")
 		return nil, status.Error(codes.PermissionDenied, "namespace mismatch")
@@ -467,7 +481,6 @@ func (s *service) GetDownloadURLByObjectUID(
 		obj.ContentType = objectInfo.ContentType
 	}
 
-	// Check URL expiration days
 	if urlExpireDays < 1 {
 		urlExpireDays = 1
 	}
@@ -477,7 +490,6 @@ func (s *service) GetDownloadURLByObjectUID(
 
 	expirationTime := time.Duration(urlExpireDays) * time.Hour * 24
 
-	// Determine download filename
 	downloadFilename := downloadFilenameParam
 	if downloadFilename == "" {
 		downloadFilename = obj.DisplayName
@@ -492,7 +504,6 @@ func (s *service) GetDownloadURLByObjectUID(
 		}
 	}
 
-	// Get presigned URL for downloading object
 	presignedURL, err := s.repository.GetMinIOStorage().GetPresignedURLForDownload(
 		ctx,
 		object.BlobBucketName,

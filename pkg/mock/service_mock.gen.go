@@ -236,6 +236,13 @@ type ServiceMock struct {
 	beforePipelinePublicClientCounter uint64
 	PipelinePublicClientMock          mServiceMockPipelinePublicClient
 
+	funcPresignDownloadForObject          func(ctx context.Context, obj *repository.ObjectModel, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilenameParam string) (gp1 *artifactpb.GetObjectDownloadURLResponse, err error)
+	funcPresignDownloadForObjectOrigin    string
+	inspectFuncPresignDownloadForObject   func(ctx context.Context, obj *repository.ObjectModel, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilenameParam string)
+	afterPresignDownloadForObjectCounter  uint64
+	beforePresignDownloadForObjectCounter uint64
+	PresignDownloadForObjectMock          mServiceMockPresignDownloadForObject
+
 	funcProcessFile          func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType) (err error)
 	funcProcessFileOrigin    string
 	inspectFuncProcessFile   func(ctx context.Context, k1 types.KBUIDType, fa1 []types.FileUIDType, u1 types.UserUIDType, r1 types.RequesterUIDType)
@@ -430,6 +437,9 @@ func NewServiceMock(t minimock.Tester) *ServiceMock {
 	m.ListSystemsAdminMock.callArgs = []*ServiceMockListSystemsAdminParams{}
 
 	m.PipelinePublicClientMock = mServiceMockPipelinePublicClient{mock: m}
+
+	m.PresignDownloadForObjectMock = mServiceMockPresignDownloadForObject{mock: m}
+	m.PresignDownloadForObjectMock.callArgs = []*ServiceMockPresignDownloadForObjectParams{}
 
 	m.ProcessFileMock = mServiceMockProcessFile{mock: m}
 	m.ProcessFileMock.callArgs = []*ServiceMockProcessFileParams{}
@@ -11382,6 +11392,473 @@ func (m *ServiceMock) MinimockPipelinePublicClientInspect() {
 	}
 }
 
+type mServiceMockPresignDownloadForObject struct {
+	optional           bool
+	mock               *ServiceMock
+	defaultExpectation *ServiceMockPresignDownloadForObjectExpectation
+	expectations       []*ServiceMockPresignDownloadForObjectExpectation
+
+	callArgs []*ServiceMockPresignDownloadForObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// ServiceMockPresignDownloadForObjectExpectation specifies expectation struct of the Service.PresignDownloadForObject
+type ServiceMockPresignDownloadForObjectExpectation struct {
+	mock               *ServiceMock
+	params             *ServiceMockPresignDownloadForObjectParams
+	paramPtrs          *ServiceMockPresignDownloadForObjectParamPtrs
+	expectationOrigins ServiceMockPresignDownloadForObjectExpectationOrigins
+	results            *ServiceMockPresignDownloadForObjectResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// ServiceMockPresignDownloadForObjectParams contains parameters of the Service.PresignDownloadForObject
+type ServiceMockPresignDownloadForObjectParams struct {
+	ctx                   context.Context
+	obj                   *repository.ObjectModel
+	namespaceUID          types.NamespaceUIDType
+	namespaceID           string
+	urlExpireDays         int32
+	downloadFilenameParam string
+}
+
+// ServiceMockPresignDownloadForObjectParamPtrs contains pointers to parameters of the Service.PresignDownloadForObject
+type ServiceMockPresignDownloadForObjectParamPtrs struct {
+	ctx                   *context.Context
+	obj                   **repository.ObjectModel
+	namespaceUID          *types.NamespaceUIDType
+	namespaceID           *string
+	urlExpireDays         *int32
+	downloadFilenameParam *string
+}
+
+// ServiceMockPresignDownloadForObjectResults contains results of the Service.PresignDownloadForObject
+type ServiceMockPresignDownloadForObjectResults struct {
+	gp1 *artifactpb.GetObjectDownloadURLResponse
+	err error
+}
+
+// ServiceMockPresignDownloadForObjectOrigins contains origins of expectations of the Service.PresignDownloadForObject
+type ServiceMockPresignDownloadForObjectExpectationOrigins struct {
+	origin                      string
+	originCtx                   string
+	originObj                   string
+	originNamespaceUID          string
+	originNamespaceID           string
+	originUrlExpireDays         string
+	originDownloadFilenameParam string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) Optional() *mServiceMockPresignDownloadForObject {
+	mmPresignDownloadForObject.optional = true
+	return mmPresignDownloadForObject
+}
+
+// Expect sets up expected params for Service.PresignDownloadForObject
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) Expect(ctx context.Context, obj *repository.ObjectModel, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilenameParam string) *mServiceMockPresignDownloadForObject {
+	if mmPresignDownloadForObject.mock.funcPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Set")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation == nil {
+		mmPresignDownloadForObject.defaultExpectation = &ServiceMockPresignDownloadForObjectExpectation{}
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.paramPtrs != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by ExpectParams functions")
+	}
+
+	mmPresignDownloadForObject.defaultExpectation.params = &ServiceMockPresignDownloadForObjectParams{ctx, obj, namespaceUID, namespaceID, urlExpireDays, downloadFilenameParam}
+	mmPresignDownloadForObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmPresignDownloadForObject.expectations {
+		if minimock.Equal(e.params, mmPresignDownloadForObject.defaultExpectation.params) {
+			mmPresignDownloadForObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmPresignDownloadForObject.defaultExpectation.params)
+		}
+	}
+
+	return mmPresignDownloadForObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Service.PresignDownloadForObject
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) ExpectCtxParam1(ctx context.Context) *mServiceMockPresignDownloadForObject {
+	if mmPresignDownloadForObject.mock.funcPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Set")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation == nil {
+		mmPresignDownloadForObject.defaultExpectation = &ServiceMockPresignDownloadForObjectExpectation{}
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.params != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Expect")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.paramPtrs == nil {
+		mmPresignDownloadForObject.defaultExpectation.paramPtrs = &ServiceMockPresignDownloadForObjectParamPtrs{}
+	}
+	mmPresignDownloadForObject.defaultExpectation.paramPtrs.ctx = &ctx
+	mmPresignDownloadForObject.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmPresignDownloadForObject
+}
+
+// ExpectObjParam2 sets up expected param obj for Service.PresignDownloadForObject
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) ExpectObjParam2(obj *repository.ObjectModel) *mServiceMockPresignDownloadForObject {
+	if mmPresignDownloadForObject.mock.funcPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Set")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation == nil {
+		mmPresignDownloadForObject.defaultExpectation = &ServiceMockPresignDownloadForObjectExpectation{}
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.params != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Expect")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.paramPtrs == nil {
+		mmPresignDownloadForObject.defaultExpectation.paramPtrs = &ServiceMockPresignDownloadForObjectParamPtrs{}
+	}
+	mmPresignDownloadForObject.defaultExpectation.paramPtrs.obj = &obj
+	mmPresignDownloadForObject.defaultExpectation.expectationOrigins.originObj = minimock.CallerInfo(1)
+
+	return mmPresignDownloadForObject
+}
+
+// ExpectNamespaceUIDParam3 sets up expected param namespaceUID for Service.PresignDownloadForObject
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) ExpectNamespaceUIDParam3(namespaceUID types.NamespaceUIDType) *mServiceMockPresignDownloadForObject {
+	if mmPresignDownloadForObject.mock.funcPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Set")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation == nil {
+		mmPresignDownloadForObject.defaultExpectation = &ServiceMockPresignDownloadForObjectExpectation{}
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.params != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Expect")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.paramPtrs == nil {
+		mmPresignDownloadForObject.defaultExpectation.paramPtrs = &ServiceMockPresignDownloadForObjectParamPtrs{}
+	}
+	mmPresignDownloadForObject.defaultExpectation.paramPtrs.namespaceUID = &namespaceUID
+	mmPresignDownloadForObject.defaultExpectation.expectationOrigins.originNamespaceUID = minimock.CallerInfo(1)
+
+	return mmPresignDownloadForObject
+}
+
+// ExpectNamespaceIDParam4 sets up expected param namespaceID for Service.PresignDownloadForObject
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) ExpectNamespaceIDParam4(namespaceID string) *mServiceMockPresignDownloadForObject {
+	if mmPresignDownloadForObject.mock.funcPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Set")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation == nil {
+		mmPresignDownloadForObject.defaultExpectation = &ServiceMockPresignDownloadForObjectExpectation{}
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.params != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Expect")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.paramPtrs == nil {
+		mmPresignDownloadForObject.defaultExpectation.paramPtrs = &ServiceMockPresignDownloadForObjectParamPtrs{}
+	}
+	mmPresignDownloadForObject.defaultExpectation.paramPtrs.namespaceID = &namespaceID
+	mmPresignDownloadForObject.defaultExpectation.expectationOrigins.originNamespaceID = minimock.CallerInfo(1)
+
+	return mmPresignDownloadForObject
+}
+
+// ExpectUrlExpireDaysParam5 sets up expected param urlExpireDays for Service.PresignDownloadForObject
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) ExpectUrlExpireDaysParam5(urlExpireDays int32) *mServiceMockPresignDownloadForObject {
+	if mmPresignDownloadForObject.mock.funcPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Set")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation == nil {
+		mmPresignDownloadForObject.defaultExpectation = &ServiceMockPresignDownloadForObjectExpectation{}
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.params != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Expect")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.paramPtrs == nil {
+		mmPresignDownloadForObject.defaultExpectation.paramPtrs = &ServiceMockPresignDownloadForObjectParamPtrs{}
+	}
+	mmPresignDownloadForObject.defaultExpectation.paramPtrs.urlExpireDays = &urlExpireDays
+	mmPresignDownloadForObject.defaultExpectation.expectationOrigins.originUrlExpireDays = minimock.CallerInfo(1)
+
+	return mmPresignDownloadForObject
+}
+
+// ExpectDownloadFilenameParamParam6 sets up expected param downloadFilenameParam for Service.PresignDownloadForObject
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) ExpectDownloadFilenameParamParam6(downloadFilenameParam string) *mServiceMockPresignDownloadForObject {
+	if mmPresignDownloadForObject.mock.funcPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Set")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation == nil {
+		mmPresignDownloadForObject.defaultExpectation = &ServiceMockPresignDownloadForObjectExpectation{}
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.params != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Expect")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation.paramPtrs == nil {
+		mmPresignDownloadForObject.defaultExpectation.paramPtrs = &ServiceMockPresignDownloadForObjectParamPtrs{}
+	}
+	mmPresignDownloadForObject.defaultExpectation.paramPtrs.downloadFilenameParam = &downloadFilenameParam
+	mmPresignDownloadForObject.defaultExpectation.expectationOrigins.originDownloadFilenameParam = minimock.CallerInfo(1)
+
+	return mmPresignDownloadForObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the Service.PresignDownloadForObject
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) Inspect(f func(ctx context.Context, obj *repository.ObjectModel, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilenameParam string)) *mServiceMockPresignDownloadForObject {
+	if mmPresignDownloadForObject.mock.inspectFuncPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("Inspect function is already set for ServiceMock.PresignDownloadForObject")
+	}
+
+	mmPresignDownloadForObject.mock.inspectFuncPresignDownloadForObject = f
+
+	return mmPresignDownloadForObject
+}
+
+// Return sets up results that will be returned by Service.PresignDownloadForObject
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) Return(gp1 *artifactpb.GetObjectDownloadURLResponse, err error) *ServiceMock {
+	if mmPresignDownloadForObject.mock.funcPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Set")
+	}
+
+	if mmPresignDownloadForObject.defaultExpectation == nil {
+		mmPresignDownloadForObject.defaultExpectation = &ServiceMockPresignDownloadForObjectExpectation{mock: mmPresignDownloadForObject.mock}
+	}
+	mmPresignDownloadForObject.defaultExpectation.results = &ServiceMockPresignDownloadForObjectResults{gp1, err}
+	mmPresignDownloadForObject.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmPresignDownloadForObject.mock
+}
+
+// Set uses given function f to mock the Service.PresignDownloadForObject method
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) Set(f func(ctx context.Context, obj *repository.ObjectModel, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilenameParam string) (gp1 *artifactpb.GetObjectDownloadURLResponse, err error)) *ServiceMock {
+	if mmPresignDownloadForObject.defaultExpectation != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("Default expectation is already set for the Service.PresignDownloadForObject method")
+	}
+
+	if len(mmPresignDownloadForObject.expectations) > 0 {
+		mmPresignDownloadForObject.mock.t.Fatalf("Some expectations are already set for the Service.PresignDownloadForObject method")
+	}
+
+	mmPresignDownloadForObject.mock.funcPresignDownloadForObject = f
+	mmPresignDownloadForObject.mock.funcPresignDownloadForObjectOrigin = minimock.CallerInfo(1)
+	return mmPresignDownloadForObject.mock
+}
+
+// When sets expectation for the Service.PresignDownloadForObject which will trigger the result defined by the following
+// Then helper
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) When(ctx context.Context, obj *repository.ObjectModel, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilenameParam string) *ServiceMockPresignDownloadForObjectExpectation {
+	if mmPresignDownloadForObject.mock.funcPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.mock.t.Fatalf("ServiceMock.PresignDownloadForObject mock is already set by Set")
+	}
+
+	expectation := &ServiceMockPresignDownloadForObjectExpectation{
+		mock:               mmPresignDownloadForObject.mock,
+		params:             &ServiceMockPresignDownloadForObjectParams{ctx, obj, namespaceUID, namespaceID, urlExpireDays, downloadFilenameParam},
+		expectationOrigins: ServiceMockPresignDownloadForObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmPresignDownloadForObject.expectations = append(mmPresignDownloadForObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Service.PresignDownloadForObject return parameters for the expectation previously defined by the When method
+func (e *ServiceMockPresignDownloadForObjectExpectation) Then(gp1 *artifactpb.GetObjectDownloadURLResponse, err error) *ServiceMock {
+	e.results = &ServiceMockPresignDownloadForObjectResults{gp1, err}
+	return e.mock
+}
+
+// Times sets number of times Service.PresignDownloadForObject should be invoked
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) Times(n uint64) *mServiceMockPresignDownloadForObject {
+	if n == 0 {
+		mmPresignDownloadForObject.mock.t.Fatalf("Times of ServiceMock.PresignDownloadForObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmPresignDownloadForObject.expectedInvocations, n)
+	mmPresignDownloadForObject.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmPresignDownloadForObject
+}
+
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) invocationsDone() bool {
+	if len(mmPresignDownloadForObject.expectations) == 0 && mmPresignDownloadForObject.defaultExpectation == nil && mmPresignDownloadForObject.mock.funcPresignDownloadForObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmPresignDownloadForObject.mock.afterPresignDownloadForObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmPresignDownloadForObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// PresignDownloadForObject implements mm_service.Service
+func (mmPresignDownloadForObject *ServiceMock) PresignDownloadForObject(ctx context.Context, obj *repository.ObjectModel, namespaceUID types.NamespaceUIDType, namespaceID string, urlExpireDays int32, downloadFilenameParam string) (gp1 *artifactpb.GetObjectDownloadURLResponse, err error) {
+	mm_atomic.AddUint64(&mmPresignDownloadForObject.beforePresignDownloadForObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmPresignDownloadForObject.afterPresignDownloadForObjectCounter, 1)
+
+	mmPresignDownloadForObject.t.Helper()
+
+	if mmPresignDownloadForObject.inspectFuncPresignDownloadForObject != nil {
+		mmPresignDownloadForObject.inspectFuncPresignDownloadForObject(ctx, obj, namespaceUID, namespaceID, urlExpireDays, downloadFilenameParam)
+	}
+
+	mm_params := ServiceMockPresignDownloadForObjectParams{ctx, obj, namespaceUID, namespaceID, urlExpireDays, downloadFilenameParam}
+
+	// Record call args
+	mmPresignDownloadForObject.PresignDownloadForObjectMock.mutex.Lock()
+	mmPresignDownloadForObject.PresignDownloadForObjectMock.callArgs = append(mmPresignDownloadForObject.PresignDownloadForObjectMock.callArgs, &mm_params)
+	mmPresignDownloadForObject.PresignDownloadForObjectMock.mutex.Unlock()
+
+	for _, e := range mmPresignDownloadForObject.PresignDownloadForObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.gp1, e.results.err
+		}
+	}
+
+	if mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := ServiceMockPresignDownloadForObjectParams{ctx, obj, namespaceUID, namespaceID, urlExpireDays, downloadFilenameParam}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmPresignDownloadForObject.t.Errorf("ServiceMock.PresignDownloadForObject got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.obj != nil && !minimock.Equal(*mm_want_ptrs.obj, mm_got.obj) {
+				mmPresignDownloadForObject.t.Errorf("ServiceMock.PresignDownloadForObject got unexpected parameter obj, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.expectationOrigins.originObj, *mm_want_ptrs.obj, mm_got.obj, minimock.Diff(*mm_want_ptrs.obj, mm_got.obj))
+			}
+
+			if mm_want_ptrs.namespaceUID != nil && !minimock.Equal(*mm_want_ptrs.namespaceUID, mm_got.namespaceUID) {
+				mmPresignDownloadForObject.t.Errorf("ServiceMock.PresignDownloadForObject got unexpected parameter namespaceUID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.expectationOrigins.originNamespaceUID, *mm_want_ptrs.namespaceUID, mm_got.namespaceUID, minimock.Diff(*mm_want_ptrs.namespaceUID, mm_got.namespaceUID))
+			}
+
+			if mm_want_ptrs.namespaceID != nil && !minimock.Equal(*mm_want_ptrs.namespaceID, mm_got.namespaceID) {
+				mmPresignDownloadForObject.t.Errorf("ServiceMock.PresignDownloadForObject got unexpected parameter namespaceID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.expectationOrigins.originNamespaceID, *mm_want_ptrs.namespaceID, mm_got.namespaceID, minimock.Diff(*mm_want_ptrs.namespaceID, mm_got.namespaceID))
+			}
+
+			if mm_want_ptrs.urlExpireDays != nil && !minimock.Equal(*mm_want_ptrs.urlExpireDays, mm_got.urlExpireDays) {
+				mmPresignDownloadForObject.t.Errorf("ServiceMock.PresignDownloadForObject got unexpected parameter urlExpireDays, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.expectationOrigins.originUrlExpireDays, *mm_want_ptrs.urlExpireDays, mm_got.urlExpireDays, minimock.Diff(*mm_want_ptrs.urlExpireDays, mm_got.urlExpireDays))
+			}
+
+			if mm_want_ptrs.downloadFilenameParam != nil && !minimock.Equal(*mm_want_ptrs.downloadFilenameParam, mm_got.downloadFilenameParam) {
+				mmPresignDownloadForObject.t.Errorf("ServiceMock.PresignDownloadForObject got unexpected parameter downloadFilenameParam, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.expectationOrigins.originDownloadFilenameParam, *mm_want_ptrs.downloadFilenameParam, mm_got.downloadFilenameParam, minimock.Diff(*mm_want_ptrs.downloadFilenameParam, mm_got.downloadFilenameParam))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmPresignDownloadForObject.t.Errorf("ServiceMock.PresignDownloadForObject got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmPresignDownloadForObject.PresignDownloadForObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmPresignDownloadForObject.t.Fatal("No results are set for the ServiceMock.PresignDownloadForObject")
+		}
+		return (*mm_results).gp1, (*mm_results).err
+	}
+	if mmPresignDownloadForObject.funcPresignDownloadForObject != nil {
+		return mmPresignDownloadForObject.funcPresignDownloadForObject(ctx, obj, namespaceUID, namespaceID, urlExpireDays, downloadFilenameParam)
+	}
+	mmPresignDownloadForObject.t.Fatalf("Unexpected call to ServiceMock.PresignDownloadForObject. %v %v %v %v %v %v", ctx, obj, namespaceUID, namespaceID, urlExpireDays, downloadFilenameParam)
+	return
+}
+
+// PresignDownloadForObjectAfterCounter returns a count of finished ServiceMock.PresignDownloadForObject invocations
+func (mmPresignDownloadForObject *ServiceMock) PresignDownloadForObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPresignDownloadForObject.afterPresignDownloadForObjectCounter)
+}
+
+// PresignDownloadForObjectBeforeCounter returns a count of ServiceMock.PresignDownloadForObject invocations
+func (mmPresignDownloadForObject *ServiceMock) PresignDownloadForObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPresignDownloadForObject.beforePresignDownloadForObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to ServiceMock.PresignDownloadForObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmPresignDownloadForObject *mServiceMockPresignDownloadForObject) Calls() []*ServiceMockPresignDownloadForObjectParams {
+	mmPresignDownloadForObject.mutex.RLock()
+
+	argCopy := make([]*ServiceMockPresignDownloadForObjectParams, len(mmPresignDownloadForObject.callArgs))
+	copy(argCopy, mmPresignDownloadForObject.callArgs)
+
+	mmPresignDownloadForObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockPresignDownloadForObjectDone returns true if the count of the PresignDownloadForObject invocations corresponds
+// the number of defined expectations
+func (m *ServiceMock) MinimockPresignDownloadForObjectDone() bool {
+	if m.PresignDownloadForObjectMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.PresignDownloadForObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.PresignDownloadForObjectMock.invocationsDone()
+}
+
+// MinimockPresignDownloadForObjectInspect logs each unmet expectation
+func (m *ServiceMock) MinimockPresignDownloadForObjectInspect() {
+	for _, e := range m.PresignDownloadForObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to ServiceMock.PresignDownloadForObject at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterPresignDownloadForObjectCounter := mm_atomic.LoadUint64(&m.afterPresignDownloadForObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.PresignDownloadForObjectMock.defaultExpectation != nil && afterPresignDownloadForObjectCounter < 1 {
+		if m.PresignDownloadForObjectMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to ServiceMock.PresignDownloadForObject at\n%s", m.PresignDownloadForObjectMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to ServiceMock.PresignDownloadForObject at\n%s with params: %#v", m.PresignDownloadForObjectMock.defaultExpectation.expectationOrigins.origin, *m.PresignDownloadForObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcPresignDownloadForObject != nil && afterPresignDownloadForObjectCounter < 1 {
+		m.t.Errorf("Expected call to ServiceMock.PresignDownloadForObject at\n%s", m.funcPresignDownloadForObjectOrigin)
+	}
+
+	if !m.PresignDownloadForObjectMock.invocationsDone() && afterPresignDownloadForObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to ServiceMock.PresignDownloadForObject at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.PresignDownloadForObjectMock.expectedInvocations), m.PresignDownloadForObjectMock.expectedInvocationsOrigin, afterPresignDownloadForObjectCounter)
+	}
+}
+
 type mServiceMockProcessFile struct {
 	optional           bool
 	mock               *ServiceMock
@@ -16583,6 +17060,8 @@ func (m *ServiceMock) MinimockFinish() {
 
 			m.MinimockPipelinePublicClientInspect()
 
+			m.MinimockPresignDownloadForObjectInspect()
+
 			m.MinimockProcessFileInspect()
 
 			m.MinimockProcessFileDualModeInspect()
@@ -16663,6 +17142,7 @@ func (m *ServiceMock) minimockDone() bool {
 		m.MinimockGetUploadURLDone() &&
 		m.MinimockListSystemsAdminDone() &&
 		m.MinimockPipelinePublicClientDone() &&
+		m.MinimockPresignDownloadForObjectDone() &&
 		m.MinimockProcessFileDone() &&
 		m.MinimockProcessFileDualModeDone() &&
 		m.MinimockPurgeRollbackAdminDone() &&

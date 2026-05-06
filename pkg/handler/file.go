@@ -914,6 +914,28 @@ func (ph *PublicHandler) ListFilesWithPermissionFilter(ctx context.Context, req 
 		}
 	}
 
+	// Batch-fetch all object metadata in one DB round-trip to avoid N+1 queries.
+	// (ARTIFACT-INV-LIST-FILES-NO-PER-ROW-DB-FANOUT)
+	objectUIDSet := make(map[types.ObjectUIDType]struct{}, len(kbFileList.Files))
+	for _, kbFile := range kbFileList.Files {
+		if kbFile.ObjectUID != nil {
+			objectUIDSet[*kbFile.ObjectUID] = struct{}{}
+		}
+		parsed := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.StoragePath, "/")[1], "obj-"))
+		if parsed != uuid.Nil {
+			objectUIDSet[types.ObjectUIDType(parsed)] = struct{}{}
+		}
+	}
+	objectUIDs := make([]types.ObjectUIDType, 0, len(objectUIDSet))
+	for uid := range objectUIDSet {
+		objectUIDs = append(objectUIDs, uid)
+	}
+	objsByUID, err := ph.service.Repository().GetObjectsByUIDs(ctx, objectUIDs)
+	if err != nil {
+		logger.Warn("failed to batch-fetch objects", zap.Error(err))
+		objsByUID = map[types.ObjectUIDType]*repository.ObjectModel{}
+	}
+
 	files := make([]*artifactpb.File, 0, len(kbFileList.Files))
 	for _, kbFile := range kbFileList.Files {
 		objectUID := uuid.FromStringOrNil(strings.TrimPrefix(strings.Split(kbFile.StoragePath, "/")[1], "obj-"))
@@ -966,9 +988,11 @@ func (ph *PublicHandler) ListFilesWithPermissionFilter(ctx context.Context, req 
 		}
 
 		downloadURL := ""
-		response, err := ph.service.GetDownloadURLByObjectUID(ctx, objectUID, ns.NsUID, ns.NsID, 1, "")
-		if err == nil {
-			downloadURL = response.GetDownloadUrl()
+		if obj := objsByUID[types.ObjectUIDType(objectUID)]; obj != nil {
+			response, err := ph.service.PresignDownloadForObject(ctx, obj, ns.NsUID, ns.NsID, 1, "")
+			if err == nil {
+				downloadURL = response.GetDownloadUrl()
+			}
 		}
 
 		// Fetch creator for this file (owner is the same for all files in this KB)
@@ -996,25 +1020,21 @@ func (ph *PublicHandler) ListFilesWithPermissionFilter(ctx context.Context, req 
 					knowledgeBaseNames[i] = fmt.Sprintf("namespaces/%s/knowledge-bases/%s", namespaceID, id)
 				}
 			} else {
-				// Fallback if no associations found (should not happen)
 				fileKBID = "unknown"
 				knowledgeBaseNames = []string{}
 			}
 		}
 
-		// Get object ID for AIP-122 compliant resource name
+		// Get object ID for AIP-122 compliant resource name using batch-fetched map
 		objectID := ""
 		objectResourceName := ""
 		if kbFile.ObjectUID != nil {
-			obj, err := ph.service.Repository().GetObjectByUID(ctx, *kbFile.ObjectUID)
-			if err == nil && obj != nil {
+			if obj := objsByUID[*kbFile.ObjectUID]; obj != nil {
 				objectID = string(obj.ID)
 				objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
 			}
 		} else if objectUID != uuid.Nil {
-			// Fallback: try to get object by UID parsed from storage path
-			obj, err := ph.service.Repository().GetObjectByUID(ctx, types.ObjectUIDType(objectUID))
-			if err == nil && obj != nil {
+			if obj := objsByUID[types.ObjectUIDType(objectUID)]; obj != nil {
 				objectID = string(obj.ID)
 				objectResourceName = fmt.Sprintf("namespaces/%s/objects/%s", namespaceID, objectID)
 			}
