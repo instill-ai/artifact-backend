@@ -314,6 +314,13 @@ func main() {
 	w.RegisterActivity(cw.EmbedAndSaveChunksActivity)      // Combined: query chunks, generate embeddings, save to DB/Milvus
 	w.RegisterActivity(cw.UpdateEmbeddingMetadataActivity) // Update file status and embedding metadata
 
+	// Cross-datastore drift probe — used by the workflow to detect the
+	// MISSING_MILVUS class (chunks in PG + converted_file present + zero
+	// vectors) and route into the embed-only fast path instead of paying
+	// full Convert + Chunk for what is structurally a re-embed-only
+	// recovery. See ARTIFACT-INV-REPROCESS-EMBED-ONLY-FAST-PATH.
+	w.RegisterActivity(cw.ProbeFileChunkIntegrityActivity)
+
 	// ===== Cleanup Activities =====
 	w.RegisterActivity(cw.CleanupExpiredGCSFilesActivity)      // Scan and delete expired GCS files from bucket and Redis
 	w.RegisterActivity(cw.CleanupExpiredObjectRecordsActivity)  // Hard-delete expired object DB records (blobs already removed by MinIO ILM)

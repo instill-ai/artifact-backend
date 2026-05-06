@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 
 	fieldmask_utils "github.com/mennanov/fieldmask-utils"
 
@@ -25,6 +27,7 @@ import (
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/mgmt/v1beta"
 	constantx "github.com/instill-ai/x/constant"
+	errorsx "github.com/instill-ai/x/errors"
 	logx "github.com/instill-ai/x/log"
 )
 
@@ -644,25 +647,41 @@ func (h *PrivateHandler) ReprocessFileAdmin(ctx context.Context, req *artifactpb
 	ownerUID := types.UserUIDType(uuid.FromStringOrNil(kb.NamespaceUID))
 	requesterUID := types.RequesterUIDType(uuid.FromStringOrNil(kb.NamespaceUID))
 
-	// Update file status to PROCESSING before triggering the workflow
-	updatedFiles, err := h.service.Repository().ProcessFiles(ctx, []string{file.UID.String()}, requesterUID)
-	if err != nil {
-		logger.Error("Failed to update file status to PROCESSING", zap.Error(err), zap.String("fileUID", file.UID.String()))
-		return nil, status.Errorf(codes.Internal, "failed to update file status: %v", err)
-	}
-
-	if len(updatedFiles) == 0 {
-		return nil, status.Error(codes.NotFound, "file not found after status update")
-	}
-
-	// Trigger file processing workflow
+	// ARTIFACT-INV-REPROCESS-NO-TERMINATE-RACE: ProcessFile is the
+	// idempotency gate — if a workflow is already RUNNING for this
+	// fileUID, it returns errorsx.ErrAlreadyExists (wrapped as
+	// ErrReprocessAlreadyRunning in pkg/worker). We MUST call it
+	// BEFORE stamping the DB status to PROCESSING, because the
+	// stamp would otherwise regress an already-CHUNKING/EMBEDDING
+	// file's status to PROCESSING (and on the post-fix happy path,
+	// the existing workflow's status is the ground truth — there's
+	// nothing for this caller to do).
 	err = h.service.ProcessFile(ctx, kb.UID, []types.FileUIDType{file.UID}, ownerUID, requesterUID)
 	if err != nil {
+		if errors.Is(err, errorsx.ErrAlreadyExists) {
+			logger.Info("ReprocessFileAdmin: workflow already running for this file; returning AlreadyExists",
+				zap.String("fileUID", file.UID.String()),
+				zap.String("filename", file.DisplayName))
+			return nil, status.Error(codes.AlreadyExists, "a reprocessing workflow is already running for this file")
+		}
 		logger.Error("Failed to trigger file reprocessing",
 			zap.Error(err),
 			zap.String("fileUID", file.UID.String()),
 			zap.String("filename", file.DisplayName))
 		return nil, status.Errorf(codes.Internal, "failed to start reprocessing: %v", err)
+	}
+
+	// Workflow accepted — stamp the file to PROCESSING. The
+	// workflow's first activity reads this status as the source of
+	// truth, so the stamp must land before activities run.
+	updatedFiles, err := h.service.Repository().ProcessFiles(ctx, []string{file.UID.String()}, requesterUID)
+	if err != nil {
+		logger.Error("Failed to update file status to PROCESSING after workflow start", zap.Error(err), zap.String("fileUID", file.UID.String()))
+		return nil, status.Errorf(codes.Internal, "failed to update file status: %v", err)
+	}
+
+	if len(updatedFiles) == 0 {
+		return nil, status.Error(codes.NotFound, "file not found after status update")
 	}
 
 	logger.Info("Admin file reprocessing started successfully",
@@ -691,6 +710,154 @@ func (h *PrivateHandler) ReprocessFileAdmin(ctx context.Context, req *artifactpb
 
 	return &artifactpb.ReprocessFileAdminResponse{
 		File: pbFile,
+	}, nil
+}
+
+// CheckFileChunkIntegrityAdmin probes the cross-datastore consistency of a
+// knowledge-base file (PG `chunk` row count, Milvus per-file vector count,
+// PG `converted_file` row presence) against the file's declared
+// `process_status`. Used by downstream readiness-gate consumers to detect
+// drift before dispatching work that depends on the file's chunks.
+//
+// Implements `ARTIFACT-INV-FILE-CHUNK-INTEGRITY-PROBE`: the probe is
+// read-only, returns OK with `INTEGRITY_STATE_FILE_NOT_FOUND` for a deleted
+// file row (rather than `NotFound`), and uses strict equality between PG
+// chunk count and Milvus vector count for the MISSING_MILVUS classification.
+//
+// Idempotent and safe to call concurrently for the same file UID.
+func (h *PrivateHandler) CheckFileChunkIntegrityAdmin(ctx context.Context, req *artifactpb.CheckFileChunkIntegrityAdminRequest) (*artifactpb.CheckFileChunkIntegrityAdminResponse, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+
+	fileUIDStr := req.GetFileUid()
+	if fileUIDStr == "" {
+		return nil, status.Error(codes.InvalidArgument, "file_uid is required")
+	}
+	fileUID, err := uuid.FromString(fileUIDStr)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid file_uid format: %v", err)
+	}
+
+	repo := h.service.Repository()
+
+	files, err := repo.GetFilesByFileUIDs(ctx, []types.FileUIDType{types.FileUIDType(fileUID)})
+	if err != nil {
+		logger.Error("CheckFileChunkIntegrityAdmin: GetFilesByFileUIDs failed",
+			zap.String("file_uid", fileUIDStr), zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "looking up file: %v", err)
+	}
+	if len(files) == 0 {
+		return &artifactpb.CheckFileChunkIntegrityAdminResponse{
+			State:             artifactpb.IntegrityState_INTEGRITY_STATE_FILE_NOT_FOUND,
+			RecommendedAction: artifactpb.RecommendedAction_RECOMMENDED_ACTION_SKIP_FILE_NOT_FOUND,
+			Message:           "file row missing or soft-deleted",
+		}, nil
+	}
+	file := files[0]
+
+	processStatus := artifactpb.FileProcessStatus(artifactpb.FileProcessStatus_value[file.ProcessStatus])
+
+	if processStatus != artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED {
+		return &artifactpb.CheckFileChunkIntegrityAdminResponse{
+			State:             artifactpb.IntegrityState_INTEGRITY_STATE_NOT_COMPLETED,
+			RecommendedAction: artifactpb.RecommendedAction_RECOMMENDED_ACTION_DEFER_PROCESSING,
+			ProcessStatus:     processStatus,
+			Message:           fmt.Sprintf("file process_status=%s; defer until upstream completes", file.ProcessStatus),
+		}, nil
+	}
+
+	chunkCount, err := repo.GetChunkCountByFileUID(ctx, file.UID)
+	if err != nil {
+		logger.Error("CheckFileChunkIntegrityAdmin: GetChunkCountByFileUID failed",
+			zap.String("file_uid", fileUIDStr), zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "counting PG chunks: %v", err)
+	}
+
+	if chunkCount == 0 {
+		return &artifactpb.CheckFileChunkIntegrityAdminResponse{
+			State:             artifactpb.IntegrityState_INTEGRITY_STATE_EMPTY_PG,
+			RecommendedAction: artifactpb.RecommendedAction_RECOMMENDED_ACTION_REPROCESS_FILE,
+			ProcessStatus:     processStatus,
+			ChunkRowsInPg:     0,
+			VectorsInMilvus:   0,
+			Message:           "file marked COMPLETED but PG chunk table is empty for this file_uid",
+		}, nil
+	}
+
+	kbUIDs, err := repo.GetKnowledgeBaseUIDsForFile(ctx, file.UID)
+	if err != nil || len(kbUIDs) == 0 {
+		logger.Warn("CheckFileChunkIntegrityAdmin: KB association lookup failed",
+			zap.String("file_uid", fileUIDStr), zap.Error(err))
+		return &artifactpb.CheckFileChunkIntegrityAdminResponse{
+			State:             artifactpb.IntegrityState_INTEGRITY_STATE_FILE_NOT_FOUND,
+			RecommendedAction: artifactpb.RecommendedAction_RECOMMENDED_ACTION_SKIP_FILE_NOT_FOUND,
+			ProcessStatus:     processStatus,
+			ChunkRowsInPg:     chunkCount,
+			Message:           "file has no knowledge-base association; treat as tombstone",
+		}, nil
+	}
+
+	kb, err := repo.GetKnowledgeBaseByUID(ctx, kbUIDs[0])
+	if err != nil {
+		logger.Error("CheckFileChunkIntegrityAdmin: GetKnowledgeBaseByUID failed",
+			zap.String("file_uid", fileUIDStr), zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "looking up knowledge base: %v", err)
+	}
+
+	collectionUID := kb.ActiveCollectionUID
+	if collectionUID == uuid.Nil {
+		collectionUID = kb.UID
+	}
+	collectionName := constant.KBCollectionName(collectionUID)
+	vectorCount, err := repo.CountVectorsForFileUID(ctx, collectionName, file.UID)
+	if err != nil {
+		logger.Error("CheckFileChunkIntegrityAdmin: CountVectorsForFileUID failed",
+			zap.String("file_uid", fileUIDStr),
+			zap.String("collection", collectionName),
+			zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "counting Milvus vectors: %v", err)
+	}
+
+	if vectorCount < 0 || vectorCount != chunkCount {
+		return &artifactpb.CheckFileChunkIntegrityAdminResponse{
+			State:             artifactpb.IntegrityState_INTEGRITY_STATE_MISSING_MILVUS,
+			RecommendedAction: artifactpb.RecommendedAction_RECOMMENDED_ACTION_REPROCESS_FILE,
+			ProcessStatus:     processStatus,
+			ChunkRowsInPg:     chunkCount,
+			VectorsInMilvus:   vectorCount,
+			Message:           fmt.Sprintf("PG chunk count=%d, Milvus vector count=%d on collection %s; mismatch indicates drift", chunkCount, vectorCount, collectionName),
+		}, nil
+	}
+
+	convertedPresent := true
+	if _, err := repo.GetConvertedFileByFileUID(ctx, file.UID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			convertedPresent = false
+		} else {
+			logger.Error("CheckFileChunkIntegrityAdmin: GetConvertedFileByFileUID failed",
+				zap.String("file_uid", fileUIDStr), zap.Error(err))
+			return nil, status.Errorf(codes.Internal, "looking up converted file: %v", err)
+		}
+	}
+
+	if !convertedPresent {
+		return &artifactpb.CheckFileChunkIntegrityAdminResponse{
+			State:                artifactpb.IntegrityState_INTEGRITY_STATE_MISSING_CONVERTED_FILE,
+			RecommendedAction:    artifactpb.RecommendedAction_RECOMMENDED_ACTION_REPROCESS_FILE,
+			ProcessStatus:        processStatus,
+			ChunkRowsInPg:        chunkCount,
+			VectorsInMilvus:      vectorCount,
+			ConvertedFilePresent: false,
+			Message:              "converted_file row missing for COMPLETED file; reprocess to restore content",
+		}, nil
+	}
+
+	return &artifactpb.CheckFileChunkIntegrityAdminResponse{
+		State:                artifactpb.IntegrityState_INTEGRITY_STATE_HEALTHY,
+		RecommendedAction:    artifactpb.RecommendedAction_RECOMMENDED_ACTION_NONE,
+		ProcessStatus:        processStatus,
+		ChunkRowsInPg:        chunkCount,
+		VectorsInMilvus:      vectorCount,
+		ConvertedFilePresent: true,
 	}, nil
 }
 

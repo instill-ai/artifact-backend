@@ -12,6 +12,7 @@ On-demand reference for `ARTIFACT-INV-*` invariants. Read only the section relev
 | [`media-processing.md`](./media-processing.md) | `ARTIFACT-INV-MEDIA-DURATION-PROBE-FALLBACK`, `ARTIFACT-INV-VIDEO-REMUX-FAIL-FAST` |
 | [`storage-streaming.md`](./storage-streaming.md) | `ARTIFACT-INV-GCS-STREAM-RESUME`, `ARTIFACT-INV-MINIO-RANGE-OFFSET-ZERO`, `ARTIFACT-INV-MINIO-CLIENT-KEEPALIVE(TODO)` |
 | [`reprocess-status.md`](./reprocess-status.md) | `ARTIFACT-INV-reprocess-status-flicker-elimination` |
+| [`vector-search.md`](./vector-search.md) | `ARTIFACT-INV-MILVUS-SEARCH-GRACEFUL` |
 
 ## Cross-cutting rules
 

@@ -93,6 +93,13 @@ type VectorDatabase interface {
 	CollectionExists(_ context.Context, collectionID string) (bool, error)
 	// UpdateEmbeddingTags updates tags for all embeddings belonging to a file
 	UpdateEmbeddingTags(_ context.Context, collectionID string, fileUID types.FileUIDType, tags []string) error
+	// CountVectorsForFileUID returns the number of vectors in `collectionID`
+	// whose `file_uid` metadata equals the given file UID. Returns the count
+	// and an error; on collection-not-found returns (-1, nil) so callers can
+	// distinguish "no vectors yet" (0) from "no collection" (-1) without
+	// having to call `CollectionExists` separately. Used by
+	// `CheckFileChunkIntegrityAdmin`.
+	CountVectorsForFileUID(_ context.Context, collectionID string, fileUID types.FileUIDType) (int64, error)
 }
 
 // Milvus implementation constants
@@ -546,14 +553,21 @@ func (m *milvusClient) SearchVectorsInCollection(ctx context.Context, p SearchVe
 
 	logger = logger.With(zap.String("collection_name", collectionName))
 
-	// Check if the collection exists
+	// Check if the collection exists.
+	// Gracefully return empty results when the collection is missing — this
+	// covers the case where file embeddings were never inserted (failed
+	// processing) or the Milvus data was lost. The insert path
+	// (InsertVectorsInCollection) auto-creates the collection on write, so
+	// re-processing KB files will recover it.
 	t := time.Now()
 	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionName))
 	if err != nil {
 		return nil, fmt.Errorf("checking collection existence: %w", err)
 	}
 	if !has {
-		return nil, fmt.Errorf("checking collection existence: %w", errorsx.ErrNotFound)
+		logger.Warn("Milvus collection does not exist, returning empty results.",
+			zap.String("collection_name", collectionName))
+		return nil, nil
 	}
 
 	logger.Info("Existence check.", zap.Duration("duration", time.Since(t)))
@@ -1041,6 +1055,71 @@ func (m *milvusClient) CollectionExists(ctx context.Context, collectionID string
 		zap.Bool("exists", has))
 
 	return has, nil
+}
+
+// CountVectorsForFileUID returns the number of vectors in `collectionID`
+// whose `file_uid` metadata equals the given file UID. Returns -1 (not an
+// error) when the collection does not exist, which `CheckFileChunkIntegrityAdmin`
+// uses as the MISSING_MILVUS signal — the caller can short-circuit without
+// a separate `CollectionExists` call. Returns 0 when the collection exists
+// but holds no vectors for the file (legitimate "no vectors yet" state OR
+// post-drift state); the caller distinguishes these by comparing against
+// the PG chunk count.
+//
+// Implementation note: vectors are only tagged with `file_uid` on collections
+// that have the file_uid metadata field — legacy collections (predate the
+// field's introduction) cannot be probed this way. For those, the function
+// returns -1 (treated as "missing") because we cannot prove the vectors are
+// there. This is safe-by-default: legacy collections will trigger reprocess,
+// which re-creates them under the new schema.
+func (m *milvusClient) CountVectorsForFileUID(ctx context.Context, collectionID string, fileUID types.FileUIDType) (int64, error) {
+	logger, _ := logx.GetZapLogger(ctx)
+	logger = logger.With(
+		zap.String("collection_id", collectionID),
+		zap.String("file_uid", fileUID.String()),
+	)
+
+	has, err := m.c.HasCollection(ctx, milvusclient.NewHasCollectionOption(collectionID))
+	if err != nil {
+		return 0, fmt.Errorf("checking collection existence: %w", err)
+	}
+	if !has {
+		return -1, nil
+	}
+
+	hasFileUID, err := m.CheckFileUIDMetadata(ctx, collectionID)
+	if err != nil {
+		return 0, fmt.Errorf("checking file_uid metadata field: %w", err)
+	}
+	if !hasFileUID {
+		// Legacy collection without file_uid field: cannot probe per-file
+		// counts. Treat as MISSING_MILVUS so the caller triggers reprocess
+		// (which lands the file into the new schema).
+		logger.Debug("collection lacks file_uid metadata; treating as MISSING_MILVUS")
+		return -1, nil
+	}
+
+	// Load collection if necessary; Query against an unloaded collection
+	// returns 0 even when vectors exist.
+	loadTask, err := m.c.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(collectionID))
+	if err != nil {
+		logger.Debug("LoadCollection returned error (likely already loaded); continuing",
+			zap.Error(err))
+	} else if err := loadTask.Await(ctx); err != nil {
+		logger.Warn("LoadCollection.Await failed; querying anyway", zap.Error(err))
+	}
+
+	expr := fmt.Sprintf("%s == '%s'", kbCollectionFieldFileUID, fileUID.String())
+	queryOpt := milvusclient.NewQueryOption(collectionID).
+		WithFilter(expr).
+		WithOutputFields(kbCollectionFieldDenseEmbeddingUID)
+
+	res, err := m.c.Query(ctx, queryOpt)
+	if err != nil {
+		return 0, fmt.Errorf("querying collection for file_uid count: %w", err)
+	}
+
+	return int64(res.ResultCount), nil
 }
 
 // UpdateEmbeddingTags updates tags for all embeddings belonging to a specific file

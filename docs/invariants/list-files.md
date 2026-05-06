@@ -6,7 +6,7 @@
 
 ## No per-row DB fan-out
 
-**ARTIFACT-INV-LIST-FILES-NO-PER-ROW-DB-FANOUT.** The per-row enrichment loop in `ListFilesWithPermissionFilter` MUST NOT issue per-file database queries. All object lookups MUST be batch-fetched before the loop via `repository.GetObjectsByUIDs`; all creator/owner lookups MUST be served from the existing per-namespace cache (`FetchOwnerByNamespace` once before the loop, `FetchUserByUID` per unique creator UID — already cached at the service layer). Reintroducing per-file `GetObjectByUID` or equivalent point lookups inside the loop creates an N+1 amplifier that saturates the DB connection pool under concurrent workloads (observed: 130 sequential queries for 65 files, 126 s under autofill burst, tripping the 10 s gateway timeout).
+**ARTIFACT-INV-LIST-FILES-NO-PER-ROW-DB-FANOUT.** The per-row enrichment loop in `ListFilesWithPermissionFilter` MUST NOT issue per-file database queries. All object lookups MUST be batch-fetched before the loop via `repository.GetObjectsByUIDs`; all creator/owner lookups MUST be served from the existing per-namespace cache (`FetchOwnerByNamespace` once before the loop, `FetchUserByUID` per unique creator UID — already cached at the service layer). Reintroducing per-file `GetObjectByUID` or equivalent point lookups inside the loop creates an N+1 amplifier that saturates the DB connection pool under concurrent workloads (observed: 130 sequential queries for 65 files, 126 s under a concurrent burst from a downstream consumer, tripping the 10 s gateway timeout).
 
 **Next-watch item**: `FetchUserByUID` is still called per-file-creator; today it is cached per-namespace at the service layer. If that cache is ever removed, the loop would issue N gRPC round-trips and must be batched similarly.
 

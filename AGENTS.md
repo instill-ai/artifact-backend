@@ -26,3 +26,4 @@ Go 1.25.6, gRPC/grpc-gateway, PostgreSQL/GORM, Milvus, MinIO/GCS, Redis, Tempora
 - `entity-aliases.md` — `BackfillEntityAliasesWorkflow` (CE code, operator-only registration).
 - `media-processing.md` — ffprobe duration fallback chain and ffmpeg remux fail-fast.
 - `storage-streaming.md` — GCS resume loop, MinIO range offset-zero footgun, MinIO keep-alive TODO.
+- `vector-search.md` — Milvus search graceful degradation when collection is missing.

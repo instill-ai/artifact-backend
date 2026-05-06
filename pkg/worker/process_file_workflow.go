@@ -25,6 +25,17 @@ import (
 	errorsx "github.com/instill-ai/x/errors"
 )
 
+// ErrReprocessAlreadyRunning is returned by Execute when a
+// ProcessFileWorkflow is already in the RUNNING state for the same
+// workflowID (i.e. for the same fileUID, since workflowID is derived
+// from FileUIDs[0]). It wraps errorsx.ErrAlreadyExists so the standard
+// gRPC mapping in x/errors surfaces ``codes.AlreadyExists`` to callers
+// (HTTP 409 via grpc-gateway).
+//
+// See ARTIFACT-INV-REPROCESS-NO-TERMINATE-RACE in
+// docs/invariants/reprocess-status.md.
+var ErrReprocessAlreadyRunning = fmt.Errorf("%w: a ProcessFileWorkflow is already running for this file", errorsx.ErrAlreadyExists)
+
 // fileMetadata holds per-file metadata fetched at the start of the workflow.
 type fileMetadata struct {
 	fileUID            types.FileUIDType
@@ -108,10 +119,47 @@ func (w *processFileWorkflow) Execute(ctx context.Context, param ProcessFileWork
 		workflowID = fmt.Sprintf("process-files-batch-%s-count-%d", param.FileUIDs[0].String(), len(param.FileUIDs))
 	}
 
-	// Terminate any existing workflow with the same ID before starting a new one
-	// This handles "reprocess" scenarios where a file might be stuck in processing
-	// We don't check for errors here because the workflow might not exist (which is fine)
-	_ = w.terminateExistingWorkflow(ctx, workflowID, param.FileUIDs)
+	// ARTIFACT-INV-REPROCESS-NO-TERMINATE-RACE
+	// (docs/invariants/reprocess-status.md):
+	//
+	// If a ProcessFileWorkflow is already RUNNING for this workflowID,
+	// return ErrReprocessAlreadyRunning (codes.AlreadyExists) instead
+	// of terminating-and-restarting. The pre-fix terminate-and-restart
+	// path raced against the new workflow's status writes — the
+	// terminator wrote ProcessStatus=FAILED to the DB *between* the
+	// terminated workflow's death and the freshly-started workflow's
+	// first activity, leaving the file marked FAILED while a fresh
+	// workflow was legitimately running. The 2026-05-10
+	// col-X0WlOK5wa9 audio-files incident anchored this rule: 4–10
+	// concurrent ReprocessFileAdmin calls per file ran the
+	// terminator-thrash loop at sub-second intervals and corrupted
+	// every file's status to FAILED.
+	//
+	// The fan-out coalescing on the cell-worker side
+	// (AUTOFILL-EE-INV-DRIFT-FANIN-COALESCE) is the upstream
+	// defence; this gate is the artifact-backend's last-line defence
+	// that any caller (autofill, manual UI reprocess, admin RPC)
+	// gets the same idempotent contract.
+	desc, descErr := w.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	if descErr == nil && desc.WorkflowExecutionInfo.Status == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		w.worker.log.Info("ProcessFileWorkflow already running for this file; refusing duplicate start",
+			zap.String("workflowID", workflowID),
+			zap.Strings("fileUIDs", func() []string {
+				strs := make([]string, len(param.FileUIDs))
+				for i, uid := range param.FileUIDs {
+					strs[i] = uid.String()
+				}
+				return strs
+			}()))
+		return ErrReprocessAlreadyRunning
+	}
+	// descErr != nil means the workflow doesn't exist (fine) or
+	// Temporal RPC hiccup. We deliberately treat both as "not
+	// running" — Temporal's WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	// is the second line of defence against accidental duplicate
+	// starts. Statuses other than RUNNING (COMPLETED, FAILED,
+	// CANCELED, TERMINATED, TIMED_OUT) all permit a fresh start
+	// because the previous run is finished.
 
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                    workflowID,
@@ -121,69 +169,6 @@ func (w *processFileWorkflow) Execute(ctx context.Context, param ProcessFileWork
 
 	_, err := w.temporalClient.ExecuteWorkflow(ctx, workflowOptions, w.worker.ProcessFileWorkflow, param)
 	return err
-}
-
-// terminateExistingWorkflow attempts to terminate an existing workflow if it's running.
-// After successful termination, it marks all associated files as FAILED in the DB
-// because TerminateWorkflow kills the goroutine immediately — defer blocks don't run.
-// Returns nil if no workflow exists or if termination succeeds.
-func (w *processFileWorkflow) terminateExistingWorkflow(ctx context.Context, workflowID string, fileUIDs []types.FileUIDType) error {
-	// First, check if the workflow exists and is running by describing it
-	desc, err := w.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
-	if err != nil {
-		// Workflow doesn't exist or other error - that's fine, nothing to terminate
-		return nil
-	}
-
-	// Check if the workflow is in a running state
-	status := desc.WorkflowExecutionInfo.Status
-	if status == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		// Terminate the running workflow
-		w.worker.log.Info("Terminating existing workflow for reprocessing",
-			zap.String("workflowID", workflowID),
-			zap.String("status", status.String()))
-
-		err = w.temporalClient.TerminateWorkflow(ctx, workflowID, "", "Terminated for file reprocessing")
-		if err != nil {
-			w.worker.log.Warn("Failed to terminate existing workflow",
-				zap.String("workflowID", workflowID),
-				zap.Error(err))
-			// Don't return error - we'll try to start the new workflow anyway
-			// If the old one is truly stuck, ALLOW_DUPLICATE policy will handle it
-		} else {
-			// Workflow terminated — mark all files as FAILED directly in the DB.
-			// The terminated workflow's defer block won't run, so we must reconcile here.
-			w.markFilesAsFailed(ctx, fileUIDs, "File processing was interrupted for reprocessing")
-		}
-
-		// Give Temporal a moment to process the termination
-		// This helps ensure the workflow ID is available for reuse
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	return nil
-}
-
-// markFilesAsFailed updates file statuses to FAILED directly in the database.
-// Used when a workflow is terminated and its defer cleanup cannot run.
-func (w *processFileWorkflow) markFilesAsFailed(ctx context.Context, fileUIDs []types.FileUIDType, message string) {
-	repo := w.worker.GetRepository()
-	for _, fileUID := range fileUIDs {
-		updateMap := map[string]any{
-			repository.FileColumn.ProcessStatus: artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED.String(),
-		}
-		if _, err := repo.UpdateFile(ctx, fileUID.String(), updateMap); err != nil {
-			w.worker.log.Warn("Failed to mark file as FAILED after workflow termination",
-				zap.String("fileUID", fileUID.String()),
-				zap.Error(err))
-			continue
-		}
-		if err := repo.UpdateFileMetadata(ctx, fileUID, repository.ExtraMetaData{StatusMessage: message}); err != nil {
-			w.worker.log.Warn("Failed to update file metadata after workflow termination",
-				zap.String("fileUID", fileUID.String()),
-				zap.Error(err))
-		}
-	}
 }
 
 // ProcessFileWorkflow orchestrates the file processing pipeline for multiple files
@@ -356,31 +341,77 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		// Handle different starting statuses
 		if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED ||
 			startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_FAILED {
-			logger.Info("Reprocessing file from beginning",
-				"fileUID", fileUID.String(),
-				"previousStatus", startStatus.String())
-			startStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING
 
-			// Persist PROCESSING immediately so callers that derive UI state
-			// from file.process_status (e.g. cell-status derivation in
-			// downstream consumers) never observe a stale FAILED/COMPLETED
-			// row while the auto-reprocess is in flight. Without this, the
-			// DB stays on the previous status until the first stage-level
-			// activity runs and writes its own status update — that gap is
-			// observed in the UI as a transient "Processing failed" /
-			// stale-COMPLETED flicker before the new pipeline lands.
+			// ARTIFACT-INV-REPROCESS-EMBED-ONLY-FAST-PATH:
+			// Before defaulting to a full Convert + Chunk + Embed
+			// reprocess, probe cross-datastore integrity. When the
+			// drift is purely MISSING_MILVUS (PG chunks present +
+			// converted_file present + zero Milvus vectors) the
+			// cheap recovery is to re-embed the existing chunks
+			// without paying the cost of re-extracting markdown
+			// from the original PDF / re-running the LLM summary /
+			// re-chunking. We restrict this fast path to the
+			// COMPLETED branch — files in FAILED state may have
+			// partial / inconsistent chunk and converted_file rows
+			// from the failed run, and the cell-worker drift gate
+			// (AUTOFILL-INV-pool-upstream-file-chunk-integrity)
+			// only kicks reprocess for COMPLETED files in the
+			// first place. Probe failures fall through to the
+			// existing full-reprocess path: the optimisation is
+			// strictly a cost reduction, not a correctness
+			// contract.
+			useEmbedOnlyFastPath := false
+			if startStatus == artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED {
+				var probe ProbeFileChunkIntegrityActivityResult
+				if err := workflow.ExecuteActivity(ctx, w.ProbeFileChunkIntegrityActivity, &ProbeFileChunkIntegrityActivityParam{
+					FileUID: fileUID,
+				}).Get(ctx, &probe); err == nil {
+					if probe.State == artifactpb.IntegrityState_INTEGRITY_STATE_MISSING_MILVUS &&
+						probe.ChunkRowsInPg > 0 &&
+						probe.ConvertedFilePresent {
+						useEmbedOnlyFastPath = true
+						logger.Info("Reprocessing file via embed-only fast path (MISSING_MILVUS drift)",
+							"fileUID", fileUID.String(),
+							"chunkRowsInPg", probe.ChunkRowsInPg,
+							"vectorsInMilvus", probe.VectorsInMilvus)
+					}
+				} else {
+					logger.Warn("Integrity probe failed; falling back to full reprocess",
+						"fileUID", fileUID.String(), "error", err)
+				}
+			}
+
+			if useEmbedOnlyFastPath {
+				startStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_EMBEDDING
+			} else {
+				logger.Info("Reprocessing file from beginning",
+					"fileUID", fileUID.String(),
+					"previousStatus", startStatus.String())
+				startStatus = artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING
+			}
+
+			// Persist the new status immediately so callers that
+			// derive UI state from file.process_status (e.g.
+			// cell-status derivation in downstream consumers) never
+			// observe a stale FAILED/COMPLETED row while the
+			// auto-reprocess is in flight. Without this, the DB
+			// stays on the previous status until the first
+			// stage-level activity runs and writes its own status
+			// update — that gap is observed in the UI as a
+			// transient "Processing failed" / stale-COMPLETED
+			// flicker before the new pipeline lands.
 			//
-			// The activity is fire-and-forget on failure: a missed status
-			// write degrades gracefully back to the pre-fix flicker rather
-			// than blocking the reprocess. See
+			// The activity is fire-and-forget on failure: a missed
+			// status write degrades gracefully back to the pre-fix
+			// flicker rather than blocking the reprocess. See
 			// ARTIFACT-INV-reprocess-status-flicker-elimination in
 			// docs/invariants/reprocess-status.md.
 			if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
 				FileUID: fileUID,
-				Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_PROCESSING,
+				Status:  startStatus,
 				Message: "",
 			}).Get(ctx, nil); err != nil {
-				logger.Warn("Failed to persist PROCESSING status on auto-reprocess",
+				logger.Warn("Failed to persist new status on auto-reprocess",
 					"fileUID", fileUID.String(), "error", err)
 			}
 		}
@@ -720,6 +751,95 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				"fileUID", fuid.String(),
 				"patchApplied", patchResult.Patched,
 				"totalChunks", totalChunkCount)
+			filesCompleted[fuid.String()] = true
+		}
+	}
+
+	// Step 1c: Embed-only fast path —
+	// ARTIFACT-INV-REPROCESS-EMBED-ONLY-FAST-PATH.
+	//
+	// Files whose `startStatus` was promoted to EMBEDDING by the
+	// MISSING_MILVUS drift probe in Step 1 skip Convert + Cache +
+	// ProcessContent + ProcessSummary + Chunk and re-run the existing
+	// embedding activity directly against the chunks already in
+	// Postgres. Pre-fix, every cell-worker drift-triggered reprocess
+	// paid the full pipeline (~minutes per file) even when the only
+	// missing artefact was the Milvus vector set; in the live
+	// `col-LG9QdYz4NJ` recovery window, 26 files × full reprocess took
+	// roughly an hour, where embed-only would have taken ~5 minutes.
+	//
+	// The fast path is intentionally stripped down: any failure here
+	// flips the file to FAILED via handleFileError; we do NOT silently
+	// fall back to full reprocess on failure, because a degraded
+	// embed-only retry already exhausted the cheap recovery budget and
+	// the user-visible signal is more useful than a silent doubling of
+	// recovery cost.
+	filesToEmbedOnly := make([]fileMetadata, 0)
+	for _, fm := range filesMetadata {
+		if fm.shouldProcessEmbed && !fm.isPatchOnly {
+			filesToEmbedOnly = append(filesToEmbedOnly, fm)
+		}
+	}
+
+	if len(filesToEmbedOnly) > 0 {
+		logger.Info("Starting embed-only fast path for files (MISSING_MILVUS drift recovery)",
+			"count", len(filesToEmbedOnly))
+
+		for _, fm := range filesToEmbedOnly {
+			fuid := fm.fileUID
+
+			// EmbedAndSaveChunksActivity reads chunks from PG and
+			// writes embeddings to Milvus + chunk_embedding to PG.
+			// We allow the same retry budget as the full path's
+			// embed step; the activity itself is idempotent
+			// because vector inserts are keyed by chunk UID.
+			embedCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: ActivityTimeoutLong,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    RetryInitialInterval,
+					BackoffCoefficient: RetryBackoffCoefficient,
+					MaximumInterval:    RetryMaximumIntervalLong,
+					MaximumAttempts:    RetryMaximumAttempts,
+				},
+			})
+			var embedResult EmbedAndSaveChunksActivityResult
+			if err := workflow.ExecuteActivity(embedCtx, w.EmbedAndSaveChunksActivity, &EmbedAndSaveChunksActivityParam{
+				KBUID:    kbUID,
+				FileUID:  fuid,
+				Metadata: fm.metadata.ExternalMetadata,
+			}).Get(embedCtx, &embedResult); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "embed-only fast path: embed and save chunks", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+			if embedResult.Error != "" {
+				filesFailed[fuid.String()] = handleFileError(fuid, "embed-only fast path: embed and save chunks", fmt.Errorf("%s", embedResult.Error))
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			if err := workflow.ExecuteActivity(ctx, w.UpdateEmbeddingMetadataActivity, &UpdateEmbeddingMetadataActivityParam{
+				FileUID:  fuid,
+				Pipeline: embedResult.Pipeline,
+			}).Get(ctx, nil); err != nil {
+				filesFailed[fuid.String()] = handleFileError(fuid, "embed-only fast path: update embedding metadata", err)
+				filesCompleted[fuid.String()] = true
+				continue
+			}
+
+			if err := workflow.ExecuteActivity(ctx, w.UpdateFileStatusActivity, &UpdateFileStatusActivityParam{
+				FileUID: fuid,
+				Status:  artifactpb.FileProcessStatus_FILE_PROCESS_STATUS_COMPLETED,
+				Message: "",
+			}).Get(ctx, nil); err != nil {
+				logger.Warn("Embed-only fast path: failed to persist COMPLETED status",
+					"fileUID", fuid.String(), "error", err)
+			}
+
+			logger.Info("Embed-only fast path: file processing completed successfully",
+				"fileUID", fuid.String(),
+				"chunkCount", embedResult.ChunkCount,
+				"embeddingCount", embedResult.EmbeddingCount)
 			filesCompleted[fuid.String()] = true
 		}
 	}

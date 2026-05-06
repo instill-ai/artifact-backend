@@ -2589,13 +2589,45 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 		zap.String("currentStatus", file.ProcessStatus),
 		zap.String("kbUID", kb.UID.String()))
 
-	// Update file status to PROCESSING before triggering the workflow
 	ownerUID := types.UserUIDType(ns.NsUID)
 	requesterUID := types.RequesterUIDType(uuid.FromStringOrNil(authUID))
 
+	// ARTIFACT-INV-REPROCESS-NO-TERMINATE-RACE: ProcessFile is the
+	// idempotency gate — if a workflow is already RUNNING for this
+	// fileUID, it returns errorsx.ErrAlreadyExists. We MUST call it
+	// BEFORE stamping the DB status to PROCESSING, because the stamp
+	// would otherwise regress an already-CHUNKING/EMBEDDING file's
+	// status to PROCESSING (and on the post-fix happy path, the
+	// existing workflow's status is the ground truth — there's
+	// nothing for this caller to do). See `ReprocessFileAdmin` in
+	// pkg/handler/private.go for the symmetric admin path and
+	// docs/invariants/reprocess-status.md for the full contract.
+	if err := ph.service.ProcessFile(ctx, kb.UID, []types.FileUIDType{file.UID}, ownerUID, requesterUID); err != nil {
+		if errors.Is(err, errorsx.ErrAlreadyExists) {
+			logger.Info("ReprocessFile: workflow already running for this file; returning AlreadyExists",
+				zap.String("fileUID", file.UID.String()),
+				zap.String("filename", file.DisplayName))
+			return nil, errorsx.AddMessage(
+				fmt.Errorf("%w: a reprocessing workflow is already running for this file", errorsx.ErrAlreadyExists),
+				"This file is already being reprocessed. Please wait for the current run to finish.",
+			)
+		}
+		logger.Error("Failed to trigger file reprocessing",
+			zap.Error(err),
+			zap.String("fileUID", file.UID.String()),
+			zap.String("filename", file.DisplayName))
+		return nil, errorsx.AddMessage(
+			fmt.Errorf("failed to start reprocessing: %w", err),
+			"Unable to start file reprocessing. Please try again.",
+		)
+	}
+
+	// Workflow accepted — stamp the file to PROCESSING. The
+	// workflow's first activity reads this status as the source of
+	// truth, so the stamp must land before activities run.
 	updatedFiles, err := ph.service.Repository().ProcessFiles(ctx, []string{file.UID.String()}, requesterUID)
 	if err != nil {
-		logger.Error("Failed to update file status to PROCESSING",
+		logger.Error("Failed to update file status to PROCESSING after workflow start",
 			zap.Error(err),
 			zap.String("fileUID", file.UID.String()))
 		return nil, errorsx.AddMessage(
@@ -2612,19 +2644,6 @@ func (ph *PublicHandler) ReprocessFile(ctx context.Context, req *artifactpb.Repr
 	}
 
 	updatedFile := updatedFiles[0]
-
-	// Trigger file processing workflow
-	err = ph.service.ProcessFile(ctx, kb.UID, []types.FileUIDType{file.UID}, ownerUID, requesterUID)
-	if err != nil {
-		logger.Error("Failed to trigger file reprocessing",
-			zap.Error(err),
-			zap.String("fileUID", file.UID.String()),
-			zap.String("filename", file.DisplayName))
-		return nil, errorsx.AddMessage(
-			fmt.Errorf("failed to start reprocessing: %w", err),
-			"Unable to start file reprocessing. Please try again.",
-		)
-	}
 
 	logger.Info("File reprocessing started successfully",
 		zap.String("fileUID", file.UID.String()),

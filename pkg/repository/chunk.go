@@ -62,6 +62,12 @@ type Chunk interface {
 	UpdateTextChunk(_ context.Context, chunkUID string, updates map[string]any) (*ChunkModel, error)
 	UpdateTextChunkDestinations(_ context.Context, destinations map[string]string) error
 	GetChunkCountByKBUID(ctx context.Context, kbUID types.KBUIDType) (int64, error)
+	// GetChunkCountByFileUID returns the count of `chunk` rows for a given
+	// file UID. Used by `CheckFileChunkIntegrityAdmin` as the source-of-
+	// truth chunk-inventory probe (paired with Milvus vector count and
+	// MinIO converted-file presence) to detect drift between
+	// `process_status = COMPLETED` and the actual derived RAG state.
+	GetChunkCountByFileUID(ctx context.Context, fileUID types.FileUIDType) (int64, error)
 }
 
 // ChunkModel is the model for the text chunk table.
@@ -623,6 +629,23 @@ func (r *repository) GetChunkCountByKBUID(ctx context.Context, kbUID types.KBUID
 		Error
 	if err != nil {
 		return 0, fmt.Errorf("counting text chunks for KB %s: %w", kbUID, err)
+	}
+	return count, nil
+}
+
+// GetChunkCountByFileUID returns the count of `chunk` rows attached to the
+// given file UID. Returns 0 (not an error) when no chunks exist — the caller
+// distinguishes "no chunks yet" from "lookup failed" by inspecting the
+// returned error.
+func (r *repository) GetChunkCountByFileUID(ctx context.Context, fileUID types.FileUIDType) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table(ChunkTableName).
+		Where("file_uid = ?", fileUID).
+		Count(&count).
+		Error
+	if err != nil {
+		return 0, fmt.Errorf("counting text chunks for file %s: %w", fileUID, err)
 	}
 	return count, nil
 }
