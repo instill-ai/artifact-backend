@@ -898,8 +898,15 @@ func (w *Worker) CleanupExpiredGCSFilesActivity(ctx context.Context, param *Clea
 			zap.Time("uploadTime", gcsFile.UploadTime),
 			zap.Time("expiresAt", gcsFile.ExpiresAt))
 
-		// Delete file from GCS
-		err := w.repository.GetMinIOStorage().DeleteFile(ctx, gcsFile.GCSBucket, gcsFile.GCSObjectPath)
+		// Delete file from GCS (not MinIO — the bucket name is a GCS bucket)
+		gcsStorage := w.repository.GetGCSStorage()
+		if gcsStorage == nil {
+			w.log.Warn("CleanupExpiredGCSFilesActivity: GCS storage not configured, skipping deletion",
+				zap.String("path", gcsFile.GCSObjectPath))
+			errorCount++
+			continue
+		}
+		err := gcsStorage.DeleteFile(ctx, gcsFile.GCSBucket, gcsFile.GCSObjectPath)
 		if err != nil {
 			w.log.Warn("CleanupExpiredGCSFilesActivity: Failed to delete GCS file (may not exist)",
 				zap.String("path", gcsFile.GCSObjectPath),
