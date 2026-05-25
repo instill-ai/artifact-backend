@@ -303,6 +303,12 @@ type FileColumns struct {
 	Tags             string
 	UsageMetadata    string
 	Visibility       string
+	// ParentProjectUID is the file's folder home (single permission parent
+	// under the Folder–File Permission Model). The column DDL is shipped by
+	// the EE migration `000071_add_parent_project_uid_to_file`; CE owns the
+	// read + (limited) write path. Used by `UpdateFileAdmin` to honour the
+	// `parent_project` field mask path.
+	ParentProjectUID string
 }
 
 // FileColumn is the columns for the file table
@@ -327,6 +333,7 @@ var FileColumn = FileColumns{
 	Tags:             "tags",
 	UsageMetadata:    "usage_metadata",
 	Visibility:       "visibility",
+	ParentProjectUID: "parent_project_uid",
 }
 
 // ConvertingPipeline extracts the conversion pipeline, if present, from the
