@@ -700,6 +700,7 @@ func (h *PrivateHandler) ReprocessFileAdmin(ctx context.Context, req *artifactpb
 		Size:          updatedFile.Size,
 		ContentSha256: updatedFile.ContentSHA256,
 		Visibility:    convertFileVisibility(updatedFile.Visibility),
+		ParentProject: ptrStringFromUUIDPointer(updatedFile.ParentProjectUID),
 	}
 	if updatedFile.CreateTime != nil {
 		pbFile.CreateTime = timestamppb.New(*updatedFile.CreateTime)
