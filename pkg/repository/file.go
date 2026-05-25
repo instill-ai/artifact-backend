@@ -209,6 +209,20 @@ type FileModel struct {
 	// "VISIBILITY_WORKSPACE", "VISIBILITY_LINK_SHARED"). Defaults to
 	// VISIBILITY_WORKSPACE so org members can access the file.
 	Visibility string `gorm:"column:visibility;not null;default:VISIBILITY_WORKSPACE" json:"visibility"`
+	// ParentProjectUID is the file's folder (project) home, the single
+	// permission parent under the Folder–File Permission Model. NULL means
+	// "no folder assigned yet" — every live file should have a non-NULL
+	// value once the EE backfill (agent-backend-ee convert000132) has run.
+	//
+	// Edition-boundary note: the underlying column DDL is shipped by the
+	// EE migration `000071_add_parent_project_uid_to_file` in
+	// artifact-backend-ee. CE only declares the GORM field so the read
+	// path can populate the corresponding proto field
+	// (`File.ParentProject`). CE never writes the column today; the write
+	// happens through artifact-backend-ee's `EEFileRepository.SetParentProjectUID`.
+	// When the column moves into CE ownership (planned follow-up), this
+	// note can be removed.
+	ParentProjectUID *types.ProjectUIDType `gorm:"column:parent_project_uid;type:uuid" json:"parent_project_uid,omitempty"`
 }
 
 // TableName overrides the default table name for GORM

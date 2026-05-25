@@ -102,6 +102,12 @@ type (
 	CollectionUIDType = uuid.UUID
 	// FileUIDType is the File unique identifier
 	FileUIDType = uuid.UUID
+	// ProjectUIDType is the Project (folder) unique identifier. A file
+	// optionally references its parent project via
+	// `FileModel.ParentProjectUID`; the column itself is added by an EE
+	// migration today (artifact-backend-ee 000071_add_parent_project_uid_to_file),
+	// see the FileModel comment for the edition-boundary note.
+	ProjectUIDType = uuid.UUID
 	// ChunkUIDType is the Text chunk unique identifier
 	ChunkUIDType = uuid.UUID
 	// ConvertedFileUIDType is the Converted file unique identifier

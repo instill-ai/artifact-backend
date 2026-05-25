@@ -10,6 +10,7 @@ import (
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
 	"github.com/instill-ai/artifact-backend/pkg/resource"
+	"github.com/instill-ai/artifact-backend/pkg/types"
 
 	artifactpb "github.com/instill-ai/protogen-go/artifact/v1alpha"
 	mgmtpb "github.com/instill-ai/protogen-go/mgmt/v1beta"
@@ -135,6 +136,19 @@ func creatorResourceName(user *mgmtpb.User) string {
 	return ""
 }
 
+// ptrStringFromUUIDPointer converts a `*uuid.UUID` column value (e.g.
+// `FileModel.ParentProjectUID`) into the `*string` form expected by the
+// oneof-wrapped proto field `File.ParentProject`. Returns nil when the
+// column is NULL so the field stays unset in the wire response (and
+// JSON-marshals to an absent key thanks to `proto3,oneof,omitempty`).
+func ptrStringFromUUIDPointer(u *types.ProjectUIDType) *string {
+	if u == nil {
+		return nil
+	}
+	s := u.String()
+	return &s
+}
+
 // convertKBFileToPB converts database FileModel to protobuf File.
 // The `name` field is computed dynamically following other backends' patterns.
 // The objectID parameter is the hash-based object ID (e.g., "obj-abc123") for AIP-122 compliant resource references.
@@ -172,6 +186,7 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 		ProcessStatus:      convertFileProcessStatus(kbf.ProcessStatus),
 		Aliases:            kbf.Aliases,
 		Visibility:         convertFileVisibility(kbf.Visibility),
+		ParentProject:      ptrStringFromUUIDPointer(kbf.ParentProjectUID),
 	}
 
 	// Handle optional fields
