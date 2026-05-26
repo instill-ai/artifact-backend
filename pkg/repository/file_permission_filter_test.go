@@ -53,14 +53,14 @@ func TestFilePermissionClause_compile_uidsIn(t *testing.T) {
 func TestFilePermissionClause_compile_tagsLikeNone(t *testing.T) {
 	c := qt.New(t)
 
-	clause := FilePermissionClause{TagsLikeNone: []string{"agent:collection:%", "agent:project:%"}}
+	clause := FilePermissionClause{TagsLikeNone: []string{"agent:collection:%", "agent:folder:%"}}
 	frag, args := clause.compile()
 
 	// One NOT EXISTS per pattern, AND-joined inside the clause parens.
 	c.Check(frag, qt.Equals,
 		"(NOT EXISTS (SELECT 1 FROM unnest(file.tags) t WHERE t LIKE ?) "+
 			"AND NOT EXISTS (SELECT 1 FROM unnest(file.tags) t WHERE t LIKE ?))")
-	c.Check(args, qt.DeepEquals, []any{"agent:collection:%", "agent:project:%"})
+	c.Check(args, qt.DeepEquals, []any{"agent:collection:%", "agent:folder:%"})
 }
 
 func TestFilePermissionClause_compile_visibilityIn(t *testing.T) {

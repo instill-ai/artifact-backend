@@ -51,7 +51,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 			content_sha256 TEXT,
 			is_text_based BOOLEAN DEFAULT FALSE,
 			visibility TEXT NOT NULL DEFAULT 'VISIBILITY_WORKSPACE',
-			parent_project_uid TEXT
+			parent_folder_uid TEXT
 		)`,
 		`CREATE TABLE file_knowledge_base (
 			file_uid TEXT NOT NULL,

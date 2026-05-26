@@ -137,11 +137,11 @@ func creatorResourceName(user *mgmtpb.User) string {
 }
 
 // ptrStringFromUUIDPointer converts a `*uuid.UUID` column value (e.g.
-// `FileModel.ParentProjectUID`) into the `*string` form expected by the
-// oneof-wrapped proto field `File.ParentProject`. Returns nil when the
+// `FileModel.ParentFolderUID`) into the `*string` form expected by the
+// oneof-wrapped proto field `File.ParentFolder`. Returns nil when the
 // column is NULL so the field stays unset in the wire response (and
 // JSON-marshals to an absent key thanks to `proto3,oneof,omitempty`).
-func ptrStringFromUUIDPointer(u *types.ProjectUIDType) *string {
+func ptrStringFromUUIDPointer(u *types.FolderUIDType) *string {
 	if u == nil {
 		return nil
 	}
@@ -186,7 +186,7 @@ func convertKBFileToPB(kbf *repository.FileModel, ns *resource.Namespace, kb *re
 		ProcessStatus:      convertFileProcessStatus(kbf.ProcessStatus),
 		Aliases:            kbf.Aliases,
 		Visibility:         convertFileVisibility(kbf.Visibility),
-		ParentProject:      ptrStringFromUUIDPointer(kbf.ParentProjectUID),
+		ParentFolder:      ptrStringFromUUIDPointer(kbf.ParentFolderUID),
 	}
 
 	// Handle optional fields
