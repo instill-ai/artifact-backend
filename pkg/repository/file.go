@@ -209,20 +209,20 @@ type FileModel struct {
 	// "VISIBILITY_WORKSPACE", "VISIBILITY_LINK_SHARED"). Defaults to
 	// VISIBILITY_WORKSPACE so org members can access the file.
 	Visibility string `gorm:"column:visibility;not null;default:VISIBILITY_WORKSPACE" json:"visibility"`
-	// ParentProjectUID is the file's folder (project) home, the single
+	// ParentFolderUID is the file's folder (folder) home, the single
 	// permission parent under the Folder–File Permission Model. NULL means
 	// "no folder assigned yet" — every live file should have a non-NULL
 	// value once the EE backfill (agent-backend-ee convert000132) has run.
 	//
 	// Edition-boundary note: the underlying column DDL is shipped by the
-	// EE migration `000071_add_parent_project_uid_to_file` in
+	// EE migration `000071_add_parent_folder_uid_to_file` in
 	// artifact-backend-ee. CE only declares the GORM field so the read
 	// path can populate the corresponding proto field
-	// (`File.ParentProject`). CE never writes the column today; the write
-	// happens through artifact-backend-ee's `EEFileRepository.SetParentProjectUID`.
+	// (`File.ParentFolder`). CE never writes the column today; the write
+	// happens through artifact-backend-ee's `EEFileRepository.SetParentFolderUID`.
 	// When the column moves into CE ownership (planned follow-up), this
 	// note can be removed.
-	ParentProjectUID *types.ProjectUIDType `gorm:"column:parent_project_uid;type:uuid" json:"parent_project_uid,omitempty"`
+	ParentFolderUID *types.FolderUIDType `gorm:"column:parent_folder_uid;type:uuid" json:"parent_folder_uid,omitempty"`
 }
 
 // TableName overrides the default table name for GORM
@@ -303,12 +303,12 @@ type FileColumns struct {
 	Tags             string
 	UsageMetadata    string
 	Visibility       string
-	// ParentProjectUID is the file's folder home (single permission parent
+	// ParentFolderUID is the file's folder home (single permission parent
 	// under the Folder–File Permission Model). The column DDL is shipped by
-	// the EE migration `000071_add_parent_project_uid_to_file`; CE owns the
+	// the EE migration `000071_add_parent_folder_uid_to_file`; CE owns the
 	// read + (limited) write path. Used by `UpdateFileAdmin` to honour the
-	// `parent_project` field mask path.
-	ParentProjectUID string
+	// `parent_folder` field mask path.
+	ParentFolderUID string
 }
 
 // FileColumn is the columns for the file table
@@ -333,7 +333,7 @@ var FileColumn = FileColumns{
 	Tags:             "tags",
 	UsageMetadata:    "usage_metadata",
 	Visibility:       "visibility",
-	ParentProjectUID: "parent_project_uid",
+	ParentFolderUID: "parent_folder_uid",
 }
 
 // ConvertingPipeline extracts the conversion pipeline, if present, from the

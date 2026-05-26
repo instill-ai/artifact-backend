@@ -368,29 +368,29 @@ func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.Up
 				updates[repository.FileColumn.Tags] = req.GetFile().GetTags()
 			case "external_metadata":
 				updates[repository.FileColumn.ExternalMetadata] = req.GetFile().GetExternalMetadata()
-			case "parent_project":
+			case "parent_folder":
 				// Set or clear the file's folder home (single permission
 				// parent under the Folder–File Permission Model). Used by
 				// agent-backend-ee's convert000132 boot-time backfill to
 				// retroactively assign a folder UID to every legacy file
-				// whose parent_project_uid is NULL.
+				// whose parent_folder_uid is NULL.
 				//
-				// Empty string in `File.ParentProject` clears the column
-				// (sets parent_project_uid back to NULL); a non-empty
+				// Empty string in `File.ParentFolder` clears the column
+				// (sets parent_folder_uid back to NULL); a non-empty
 				// value is parsed as a UUID and stored. A malformed UUID
 				// is rejected at this layer rather than silently dropping
 				// the field — the data plane never gets a chance to
 				// over-restrict files because of caller bugs.
-				parent := req.GetFile().GetParentProject()
+				parent := req.GetFile().GetParentFolder()
 				if parent == "" {
-					updates[repository.FileColumn.ParentProjectUID] = nil
+					updates[repository.FileColumn.ParentFolderUID] = nil
 				} else {
-					projectUID, err := uuid.FromString(parent)
+					folderUID, err := uuid.FromString(parent)
 					if err != nil {
 						return nil, status.Errorf(codes.InvalidArgument,
-							"invalid parent_project UUID %q: %v", parent, err)
+							"invalid parent_folder UUID %q: %v", parent, err)
 					}
-					updates[repository.FileColumn.ParentProjectUID] = projectUID
+					updates[repository.FileColumn.ParentFolderUID] = folderUID
 				}
 			}
 		}
@@ -724,7 +724,7 @@ func (h *PrivateHandler) ReprocessFileAdmin(ctx context.Context, req *artifactpb
 		Size:          updatedFile.Size,
 		ContentSha256: updatedFile.ContentSHA256,
 		Visibility:    convertFileVisibility(updatedFile.Visibility),
-		ParentProject: ptrStringFromUUIDPointer(updatedFile.ParentProjectUID),
+		ParentFolder: ptrStringFromUUIDPointer(updatedFile.ParentFolderUID),
 	}
 	if updatedFile.CreateTime != nil {
 		pbFile.CreateTime = timestamppb.New(*updatedFile.CreateTime)

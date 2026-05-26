@@ -702,13 +702,13 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			Collections:        extractCollectionIDs(res.Tags),
 			ContentSha256:      res.ContentSHA256,
 			Visibility:         convertFileVisibility(res.Visibility),
-			// ParentProject may still be nil here when the column is
+			// ParentFolder may still be nil here when the column is
 			// populated by an EE follow-up write (e.g.
-			// artifact-backend-ee's `SetParentProjectUID`) after the CE
+			// artifact-backend-ee's `SetParentFolderUID`) after the CE
 			// INSERT returns. A subsequent GetFile picks up the value;
 			// the CreateFile response surfaces it whenever the column is
 			// already set by the time CE finishes inserting.
-			ParentProject: ptrStringFromUUIDPointer(res.ParentProjectUID),
+			ParentFolder: ptrStringFromUUIDPointer(res.ParentFolderUID),
 		},
 	}, nil
 }
@@ -1078,7 +1078,7 @@ func (ph *PublicHandler) ListFilesWithPermissionFilter(ctx context.Context, req 
 			IsTextBased:        kbFile.IsTextBased,
 			ContentSha256:      kbFile.ContentSHA256,
 			Visibility:         convertFileVisibility(kbFile.Visibility),
-			ParentProject:      ptrStringFromUUIDPointer(kbFile.ParentProjectUID),
+			ParentFolder:      ptrStringFromUUIDPointer(kbFile.ParentFolderUID),
 		}
 
 		// Include status message (error or success message)
