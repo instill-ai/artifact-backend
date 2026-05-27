@@ -335,7 +335,7 @@ var FileColumn = FileColumns{
 	Tags:             "tags",
 	UsageMetadata:    "usage_metadata",
 	Visibility:       "visibility",
-	ParentFolderUID: "parent_folder_uid",
+	ParentFolderUID:  "parent_folder_uid",
 }
 
 // ConvertingPipeline extracts the conversion pipeline, if present, from the
@@ -1579,6 +1579,12 @@ func (r *repository) DeleteFileAndDecreaseUsage(ctx context.Context, fileUID typ
 			Where(whereClause, fileUID).
 			Update(FileColumn.DeleteTime, currentTime).Error; err != nil {
 			return err
+		}
+
+		if err := tx.Model(&FileKnowledgeBase{}).
+			Where("file_uid = ?", fileUID).
+			Update("content_sha256", "").Error; err != nil {
+			return fmt.Errorf("clearing content_sha256 on associations: %w", err)
 		}
 
 		// Decrease usage for all associated KBs
