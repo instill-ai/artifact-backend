@@ -195,16 +195,16 @@ func main() {
 	w.RegisterActivity(cw.GetFilesBatchActivity)    // Retrieve multiple files from MinIO (parallel)
 
 	// Media processing
-	w.RegisterActivity(cw.GetMediaDurationActivity)  // Probe media duration with ffprobe
-	w.RegisterActivity(cw.SplitMediaChunksActivity)  // Split long media into physical chunks
+	w.RegisterActivity(cw.GetMediaDurationActivity) // Probe media duration with ffprobe
+	w.RegisterActivity(cw.SplitMediaChunksActivity) // Split long media into physical chunks
 
 	// Hybrid two-pass audio/visual processing
-	w.RegisterActivity(cw.ExtractAudioActivity)      // Extract audio track from video via FFmpeg
-	w.RegisterActivity(cw.UploadToGCSActivity)       // Upload file from MinIO to GCS
-	w.RegisterActivity(cw.TranscribeAudioActivity)   // Transcribe audio via ConvertAudioDirect
-	w.RegisterActivity(cw.DeleteFromGCSActivity)     // Clean up GCS temp files
-	w.RegisterActivity(cw.ReadMinIOFileActivity)     // Read text file from MinIO
-	w.RegisterActivity(cw.WriteMinIOFileActivity)    // Write/overwrite text file in MinIO
+	w.RegisterActivity(cw.ExtractAudioActivity)    // Extract audio track from video via FFmpeg
+	w.RegisterActivity(cw.UploadToGCSActivity)     // Upload file from MinIO to GCS
+	w.RegisterActivity(cw.TranscribeAudioActivity) // Transcribe audio via ConvertAudioDirect
+	w.RegisterActivity(cw.DeleteFromGCSActivity)   // Clean up GCS temp files
+	w.RegisterActivity(cw.ReadMinIOFileActivity)   // Read text file from MinIO
+	w.RegisterActivity(cw.WriteMinIOFileActivity)  // Write/overwrite text file in MinIO
 
 	// File status management
 	w.RegisterActivity(cw.GetFileStatusActivity)    // Retrieve current file processing status
@@ -293,10 +293,10 @@ func main() {
 	w.RegisterActivity(cw.DeleteCacheActivity)      // Clean up AI cache after processing
 
 	// Content and Summary Processing Phase - Composite activities (flattened from child workflows)
-	w.RegisterActivity(cw.ProcessContentActivity)        // Complete content processing: markdown conversion → save to DB
-	w.RegisterActivity(cw.ProcessSummaryActivity)        // Complete summary processing: generate → save to DB
-	w.RegisterActivity(cw.ApplyPatchToContentActivity)   // Apply user-submitted patch.md to freshly generated content via LLM merge
-	w.RegisterActivity(cw.ReadExistingContentActivity)  // Load existing content.md from MinIO for patch-only fast path
+	w.RegisterActivity(cw.ProcessContentActivity)      // Complete content processing: markdown conversion → save to DB
+	w.RegisterActivity(cw.ProcessSummaryActivity)      // Complete summary processing: generate → save to DB
+	w.RegisterActivity(cw.ApplyPatchToContentActivity) // Apply user-submitted patch.md to freshly generated content via LLM merge
+	w.RegisterActivity(cw.ReadExistingContentActivity) // Load existing content.md from MinIO for patch-only fast path
 
 	// Per-Batch Chunked Conversion Activities (for large files that exceed single-shot limits)
 	w.RegisterActivity(cw.GetPageCountActivity)         // Query cached document for total page count
@@ -323,7 +323,7 @@ func main() {
 
 	// ===== Cleanup Activities =====
 	w.RegisterActivity(cw.CleanupExpiredGCSFilesActivity)      // Scan and delete expired GCS files from bucket and Redis
-	w.RegisterActivity(cw.CleanupExpiredObjectRecordsActivity)  // Hard-delete expired object DB records (blobs already removed by MinIO ILM)
+	w.RegisterActivity(cw.CleanupExpiredObjectRecordsActivity) // Hard-delete expired object DB records (blobs already removed by MinIO ILM)
 
 	if err := w.Start(); err != nil {
 		logger.Fatal(fmt.Sprintf("Unable to start worker: %s", err))
@@ -552,6 +552,7 @@ func newAIClient(ctx context.Context, logger *zap.Logger, storage object.Storage
 			ProjectID: cfg.RAG.Model.VertexAI.ProjectID,
 			Region:    cfg.RAG.Model.VertexAI.Region,
 			SAKey:     cfg.RAG.Model.VertexAI.SAKey,
+			Model:     cfg.RAG.Model.VertexAI.Model,
 		}, storage)
 		if err != nil {
 			logger.Error("Failed to initialize VertexAI client", zap.Error(err))
@@ -566,7 +567,7 @@ func newAIClient(ctx context.Context, logger *zap.Logger, storage object.Storage
 		}
 	} else if cfg.RAG.Model.Gemini.APIKey != "" {
 		// Fallback to Gemini API client if VertexAI not configured
-		geminiClient, err := gemini.NewClient(ctx, cfg.RAG.Model.Gemini.APIKey)
+		geminiClient, err := gemini.NewClientWithModel(ctx, cfg.RAG.Model.Gemini.APIKey, cfg.RAG.Model.Gemini.Model)
 		if err != nil {
 			logger.Error("Failed to initialize Gemini client", zap.Error(err))
 		} else {

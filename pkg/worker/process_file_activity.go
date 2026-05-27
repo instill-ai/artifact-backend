@@ -351,6 +351,7 @@ type UpdateConversionMetadataActivityParam struct {
 // UpdateUsageMetadataActivityParam for updating file usage metadata after content/summary/embedding processing
 type UpdateUsageMetadataActivityParam struct {
 	FileUID           types.FileUIDType // File unique identifier
+	CacheMetadata     any               // Usage metadata from cached-content creation
 	ContentMetadata   any               // Usage metadata from content processing (from AI response)
 	SummaryMetadata   any               // Usage metadata from summary processing (from AI response)
 	EmbeddingMetadata any               // Usage metadata from embedding generation (processed characters)
@@ -722,23 +723,37 @@ func (w *Worker) UpdateConversionMetadataActivity(ctx context.Context, param *Up
 func (w *Worker) UpdateUsageMetadataActivity(ctx context.Context, param *UpdateUsageMetadataActivityParam) error {
 	w.log.Info("UpdateUsageMetadataActivity: Storing usage metadata",
 		zap.String("fileUID", param.FileUID.String()),
+		zap.Bool("hasCacheMetadata", param.CacheMetadata != nil),
 		zap.Bool("hasContentMetadata", param.ContentMetadata != nil),
 		zap.Bool("hasSummaryMetadata", param.SummaryMetadata != nil),
 		zap.Bool("hasEmbeddingMetadata", param.EmbeddingMetadata != nil))
 
 	// Early return if all metadata are nil - no need to do a database update
-	if param.ContentMetadata == nil && param.SummaryMetadata == nil && param.EmbeddingMetadata == nil {
+	if param.CacheMetadata == nil && param.ContentMetadata == nil && param.SummaryMetadata == nil && param.EmbeddingMetadata == nil {
 		w.log.Info("UpdateUsageMetadataActivity: Skipping - no usage metadata available yet",
 			zap.String("fileUID", param.FileUID.String()))
 		return nil
 	}
 
 	// Build usage metadata structure
-	// Format: {"content": {...}, "summary": {...}, "embedding": {...}}
+	// Format: {"cache": {...}, "content": {...}, "summary": {...}, "embedding": {...}}
 	usageMetadata := repository.UsageMetadata{
+		Cache:     make(map[string]interface{}),
 		Content:   make(map[string]interface{}),
 		Summary:   make(map[string]interface{}),
 		Embedding: make(map[string]interface{}),
+	}
+
+	// Store cache metadata if available
+	if param.CacheMetadata != nil {
+		if cacheMap, ok := param.CacheMetadata.(map[string]interface{}); ok {
+			usageMetadata.Cache = cacheMap
+		} else {
+			cacheBytes, err := json.Marshal(param.CacheMetadata)
+			if err == nil {
+				_ = json.Unmarshal(cacheBytes, &usageMetadata.Cache)
+			}
+		}
 	}
 
 	// Store content metadata if available
@@ -1844,7 +1859,6 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 			CachedContextEnabled: false,
 		}, nil
 	}
-
 	// Check if file type is supported for caching
 	if !filetype.IsFileTypeSupported(param.FileType) {
 		w.log.Info("CacheFileContextActivity: File type not supported for caching",
@@ -1903,6 +1917,15 @@ func (w *Worker) CacheFileContextActivity(ctx context.Context, param *CacheFileC
 		// continue without optimization rather than failing entirely.
 		if strings.Contains(err.Error(), "minimum token count") {
 			w.log.Info("CacheFileContextActivity: File too small for caching, skipping (< 1024 tokens)",
+				zap.String("fileUID", param.FileUID.String()),
+				zap.String("fileType", param.FileType.String()),
+				zap.Error(err))
+			return &CacheFileContextActivityResult{
+				CachedContextEnabled: false,
+			}, nil
+		}
+		if strings.Contains(err.Error(), "cached contexts are not supported") {
+			w.log.Info("CacheFileContextActivity: AI client does not support cached contexts, skipping cache",
 				zap.String("fileUID", param.FileUID.String()),
 				zap.String("fileType", param.FileType.String()),
 				zap.Error(err))
@@ -2284,13 +2307,13 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					zap.String("cacheName", param.CacheName),
 					zap.String("client", aiClient.Name()))
 
-			singleShotCtx, singleShotCancel := context.WithTimeout(authCtx, SingleShotConversionTimeout)
-			conversion, err := aiClient.ConvertToMarkdownWithCache(
-				singleShotCtx,
-				param.CacheName,
-				w.getContentPromptForFileType(param.FileType),
-			)
-			singleShotCancel()
+				singleShotCtx, singleShotCancel := context.WithTimeout(authCtx, SingleShotConversionTimeout)
+				conversion, err := aiClient.ConvertToMarkdownWithCache(
+					singleShotCtx,
+					param.CacheName,
+					w.getContentPromptForFileType(param.FileType),
+				)
+				singleShotCancel()
 				if err != nil {
 					logger.Warn("Cached AI conversion failed, will try without cache", zap.Error(err))
 					conversionErr = err
@@ -2315,15 +2338,15 @@ func (w *Worker) ProcessContentActivity(ctx context.Context, param *ProcessConte
 					zap.String("fileType", param.FileType.String()),
 					zap.String("client", aiClient.Name()))
 
-			singleShotCtx, singleShotCancel := context.WithTimeout(authCtx, SingleShotConversionTimeout)
-			conversion, err := aiClient.ConvertToMarkdownWithoutCache(
-				singleShotCtx,
-				rawFileContent,
-				param.FileType,
-				param.FileDisplayName,
-				w.getContentPromptForFileType(param.FileType),
-			)
-			singleShotCancel()
+				singleShotCtx, singleShotCancel := context.WithTimeout(authCtx, SingleShotConversionTimeout)
+				conversion, err := aiClient.ConvertToMarkdownWithoutCache(
+					singleShotCtx,
+					rawFileContent,
+					param.FileType,
+					param.FileDisplayName,
+					w.getContentPromptForFileType(param.FileType),
+				)
+				singleShotCancel()
 				if err != nil {
 					logger.Error("AI conversion without cache failed", zap.Error(err))
 					conversionErr = err
@@ -2578,9 +2601,9 @@ func formatAugmentedEntities(entities []EntityTag) string {
 	// Walk the joined string rune-by-rune, remembering the last "; "
 	// boundary we saw; stop at the cap.
 	var (
-		runeCount  int
-		lastCut    = -1
-		prevSemi   = false
+		runeCount int
+		lastCut   = -1
+		prevSemi  = false
 	)
 	for i, r := range out {
 		if runeCount >= augmentedChunkMaxRunes {
@@ -2856,11 +2879,12 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 
 		// Try AI client with cache first (if available)
 		if param.CacheName != "" {
+			aiClient := w.getAIClientForFileType(fileType)
 			logger.Info("Attempting AI summarization with cache",
 				zap.String("cacheName", param.CacheName),
-				zap.String("client", w.aiClient.Name()))
+				zap.String("client", aiClient.Name()))
 
-			conversion, err := w.aiClient.ConvertToMarkdownWithCache(authCtx, param.CacheName, summaryPrompt)
+			conversion, err := aiClient.ConvertToMarkdownWithCache(authCtx, param.CacheName, summaryPrompt)
 			if err != nil {
 				logger.Warn("Cached AI summarization failed, will try without cache", zap.Error(err))
 				summarizationErr = err
@@ -2877,9 +2901,10 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 		if summary == "" {
 			logger.Info("Attempting AI summarization without cache",
 				zap.String("fileType", fileType.String()),
-				zap.String("client", w.aiClient.Name()))
+				zap.String("client", w.getAIClientForFileType(fileType).Name()))
 
-			conversion, err := w.aiClient.ConvertToMarkdownWithoutCache(
+			aiClient := w.getAIClientForFileType(fileType)
+			conversion, err := aiClient.ConvertToMarkdownWithoutCache(
 				authCtx,
 				content,
 				fileType,
@@ -3018,8 +3043,8 @@ func (w *Worker) ProcessSummaryActivity(ctx context.Context, param *ProcessSumma
 
 // SaveEntitiesActivityParam defines input for SaveEntitiesActivity.
 type SaveEntitiesActivityParam struct {
-	KBUID   types.KBUIDType
-	FileUID types.FileUIDType
+	KBUID    types.KBUIDType
+	FileUID  types.FileUIDType
 	Entities []EntityTag
 }
 
@@ -3536,8 +3561,8 @@ func probeMediaDuration(ctx context.Context, content []byte) (float64, error) {
 
 	var (
 		lastErr      error
-		allExitErr   = true              // every failure so far was *exec.ExitError
-		parsedPerQry []string             // raw stdout of each invocation, for error context
+		allExitErr   = true   // every failure so far was *exec.ExitError
+		parsedPerQry []string // raw stdout of each invocation, for error context
 	)
 	for _, q := range queries {
 		out, err := ffprobeRun(ctx, q...)

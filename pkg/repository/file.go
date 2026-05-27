@@ -273,9 +273,11 @@ type ExtraMetaData struct {
 	DurationSeconds int32 `json:"duration_seconds,omitempty"`
 }
 
-// UsageMetadata stores AI usage metadata from content, summary, and embedding generation
-// Format: {"content": {...}, "summary": {...}, "embedding": {...}}
+// UsageMetadata stores AI usage metadata from cache creation, content, summary,
+// and embedding generation.
+// Format: {"cache": {...}, "content": {...}, "summary": {...}, "embedding": {...}}
 type UsageMetadata struct {
+	Cache     map[string]interface{} `json:"cache,omitempty"`
 	Content   map[string]interface{} `json:"content,omitempty"`
 	Summary   map[string]interface{} `json:"summary,omitempty"`
 	Embedding map[string]interface{} `json:"embedding,omitempty"`

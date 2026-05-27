@@ -15,7 +15,7 @@ flowchart TD
     AudioOnly -->|Yes| GCSAudio["Upload to GCS → ConvertAudioDirect"]
     AudioOnly -->|No| HybridSplit["Extract Audio + Split Video"]
     HybridSplit --> AudioBranch["Audio: GCS → ConvertAudioDirect"]
-    HybridSplit --> VisualBranch["Visual: Cache Chunks → Visual-Only Batches"]
+    HybridSplit --> VisualBranch["Visual: GCS → ConvertVideoRange"]
     AudioBranch --> Merge["Merge Audio + Visual by Timestamp"]
     VisualBranch --> Merge
     Cache --> Convert["AI Content Conversion"]
@@ -34,7 +34,7 @@ flowchart TD
 | **Temporal** | Orchestrates the workflow as activities with retries and timeouts |
 | **MinIO** | Stores original files, standardized files, converted content, and temp chunks |
 | **PostgreSQL** | Tracks file metadata, processing status, converted files, and chunk records |
-| **Gemini** | AI model (`gemini-3.1-pro-preview`) for multimodal content extraction, speaker identification, and summary generation |
+| **Gemini / Vertex AI** | AI model for multimodal content extraction and summary generation. The active model is selected by `rag.model.vertexai.model` or `rag.model.gemini.model`; media and embedding-adjacent flows stay on their dedicated routes. |
 | **Vertex AI Cache** | Caches uploaded files in Gemini context for efficient multi-batch access |
 | **Milvus** | Vector database storing embeddings for semantic search |
 | **ffmpeg / ffprobe** | Media duration probing, physical splitting, and lossless audio extraction |
@@ -115,7 +115,7 @@ For media files, `ffprobe` extracts the exact duration before any AI processing.
 
 ### Phase 4: AI Content Conversion
 
-All file types (documents, images, audio, video) use `gemini-3.1-pro-preview` for content extraction and summary generation.
+File types use the configured Gemini model (`rag.model.vertexai.model` or `rag.model.gemini.model`, default `gemini-3.1-pro-preview`) for content extraction and summary generation. Deployments may provide modality-specific AI clients, but audio/video remain on the dedicated media route.
 
 #### Short Path (Documents & Images)
 
@@ -164,9 +164,9 @@ All video files use a **hybrid two-pass architecture** that separates audio and 
 flowchart TD
     Split["1. SplitMediaChunksActivity<br/>(ffmpeg -c copy, 30s overlap)"]
     Extract["1b. ExtractAudioActivity<br/>(ffmpeg lossless audio extraction)"]
-    Split --> CacheAll["2a. CacheFileContextActivity × N chunks<br/>(all concurrent)"]
+    Split --> UploadVisual["2a. UploadToGCSActivity × N chunks<br/>(all concurrent)"]
     Extract --> UploadGCS["2b. UploadToGCSActivity<br/>(audio → GCS)"]
-    CacheAll --> Speakers["2c. IdentifySpeakersActivity<br/>(from chunk 0 cache)"]
+    UploadVisual --> Speakers["2c. IdentifySpeakersActivity<br/>(from chunk 0 video URI)"]
     UploadGCS --> AudioTranscribe["2d. TranscribeAudioActivity<br/>(ConvertAudioDirect, concurrent with visual)"]
     Speakers --> VisualBatches["2e. ConvertBatchActivity × all segments<br/>(visual-only mode, concurrent)"]
     AudioTranscribe --> Merge["3. mergeAudioAndVisual<br/>(interleave by timestamp)"]
@@ -184,7 +184,7 @@ flowchart TD
 
 **Visual branch (concurrent):**
 
-1. Physical chunks are cached and batched as before, but with `VisualOnly: true` on each `ConvertBatchActivity`. This uses a visual-only prompt that produces only `[Video:]` entries with rich visual descriptions (`[Location:]`, `[Image:]`, `[Chart:]`, `[Diagram:]`, `[Icon:]`, `[Logo:]` sub-tags). No `[Audio:]` or `[Sound:]` tags are generated.
+1. Physical chunks are uploaded to GCS and processed with `ConvertVideoRange` through `ConvertBatchActivity` with `VisualOnly: true`. This uses a visual-only prompt that produces only `[Video:]` entries with rich visual descriptions (`[Location:]`, `[Image:]`, `[Chart:]`, `[Diagram:]`, `[Icon:]`, `[Logo:]` sub-tags). No `[Audio:]` or `[Sound:]` tags are generated.
 2. `SaveAssembledContentActivity` handles timestamp offsetting and overlap trimming as before.
 
 **Merge:**

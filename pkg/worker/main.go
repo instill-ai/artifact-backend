@@ -65,10 +65,10 @@ const (
 // These are used by ProcessContentActivity (single-shot only) and ProcessSummaryActivity.
 // The per-batch chunked conversion is handled by separate Temporal activities with their own timeouts.
 const (
-	AIProcessingMinTimeout     = 15 * time.Minute  // Enough for single-shot + without-cache fallback
-	AIProcessingMaxTimeout     = 2 * time.Hour     // For very large single-shot attempts; chunked path uses profile.ActivityTimeout
-	AIProcessingBaseTimeout    = 5 * time.Minute   // Fixed overhead: cache creation, GCS upload, retries
-	AIProcessingBytesPerSecond = 20 * 1024         // ~20KB/sec: dense PDFs (financial, legal) process much slower than simple text
+	AIProcessingMinTimeout     = 15 * time.Minute // Enough for single-shot + without-cache fallback
+	AIProcessingMaxTimeout     = 2 * time.Hour    // For very large single-shot attempts; chunked path uses profile.ActivityTimeout
+	AIProcessingBaseTimeout    = 5 * time.Minute  // Fixed overhead: cache creation, GCS upload, retries
+	AIProcessingBytesPerSecond = 20 * 1024        // ~20KB/sec: dense PDFs (financial, legal) process much slower than simple text
 )
 
 // Step-level timeout constants for the fallback chain inside ProcessContentActivity.
@@ -85,7 +85,7 @@ const (
 // When single-shot conversion hits DEADLINE_EXCEEDED, the document is split into
 // page-range chunks and each chunk is converted independently using the existing cache.
 const (
-	ChunkedConversionMinChunkPages   = 5  // Minimum chunk size for adaptive retry
+	ChunkedConversionMinChunkPages   = 5 // Minimum chunk size for adaptive retry
 	ChunkedConversionPageCountPrompt = "How many pages does this document have? Respond with ONLY the number, nothing else."
 	RateLimitCooldown                = 60 * time.Second // Sleep before batch start and between retry rounds to let API quota recover
 )
@@ -95,10 +95,10 @@ const (
 // Videos exceeding MaxVideoChunkDuration are physically split into chunks using
 // ffmpeg, each processed independently through the existing cache+batch pipeline.
 const (
-	MaxVideoChunkDuration    = 30 * time.Minute // Gemini limit ~45 min for video with audio; 30 min gives safety margin
-	MaxAudioChunkDuration    = 8 * time.Hour    // Gemini limit ~9.5 hours for audio-only
-	ChunkOverlap             = 60 * time.Second // Overlap between adjacent chunks to avoid boundary content loss
-	SegmentOverlapLookback   = 15 * time.Second // Extra API window before a non-first segment's logical start, so the model assigns accurate timestamps to boundary audio that can then be deterministically clipped
+	MaxVideoChunkDuration  = 30 * time.Minute // Gemini limit ~45 min for video with audio; 30 min gives safety margin
+	MaxAudioChunkDuration  = 8 * time.Hour    // Gemini limit ~9.5 hours for audio-only
+	ChunkOverlap           = 60 * time.Second // Overlap between adjacent chunks to avoid boundary content loss
+	SegmentOverlapLookback = 15 * time.Second // Extra API window before a non-first segment's logical start, so the model assigns accurate timestamps to boundary audio that can then be deterministically clipped
 )
 
 // BatchProfile holds per-file-type tuning parameters for the concurrent batch
@@ -492,6 +492,8 @@ type PostFileCompletionFn func(_ workflow.Context, file *repository.FileModel, e
 // if the corresponding activity didn't complete or didn't produce usage data
 // (e.g., OpenAI pipeline route, or the activity failed before LLM call).
 type FileProcessingUsageData struct {
+	CacheUsageMetadata     any    // From CacheFileContextActivity (nil if caching was skipped or failed)
+	CacheModel             string // Model used for cached-content creation
 	ContentUsageMetadata   any    // From ProcessContentActivity (nil if content activity didn't complete)
 	ContentModel           string // Model used for content generation (e.g., "gemini-2.0-flash-001")
 	SummaryUsageMetadata   any    // From ProcessSummaryActivity (nil if summary activity didn't complete)
@@ -531,14 +533,14 @@ type Worker struct {
 	aiClient ai.Client // AI client (can be single or composite with routing capabilities)
 	log      *zap.Logger
 
-	postFileCompletion    PostFileCompletionFn
-	postFileFailure       PostFileFailureFn
-	postContentConversion PostContentConversionFn
-	postStandardization   PostStandardizationFn
-	postSummaryConversion PostSummaryConversionFn
-	generateContentPrompt  string            // Default prompt for AI content generation (backward compat)
-	generateContentPrompts map[string]string // Per-modality prompts: "document", "image", "video", "audio"
-	generateSummaryPrompt  string            // Prompt for AI summary generation
+	postFileCompletion     PostFileCompletionFn
+	postFileFailure        PostFileFailureFn
+	postContentConversion  PostContentConversionFn
+	postStandardization    PostStandardizationFn
+	postSummaryConversion  PostSummaryConversionFn
+	generateContentPrompt  string               // Default prompt for AI content generation (backward compat)
+	generateContentPrompts map[string]string    // Per-modality prompts: "document", "image", "video", "audio"
+	generateSummaryPrompt  string               // Prompt for AI summary generation
 	aiClientOverrides      map[string]ai.Client // Per-modality AI client overrides
 }
 
