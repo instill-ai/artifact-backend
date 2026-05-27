@@ -113,6 +113,30 @@ func TestInvariant_CreateFilePopulatesContentSHA256(t *testing.T) {
 	}
 }
 
+// TestInvariant_DeleteFileClearsAssociationContentSHA256 verifies that a
+// soft-deleted file releases the partial unique index slot for re-upload.
+func TestInvariant_DeleteFileClearsAssociationContentSHA256(t *testing.T) {
+	src := readRepoSourceFile(t, "file.go")
+
+	const marker = "func (r *repository) DeleteFileAndDecreaseUsage("
+	idx := strings.Index(src, marker)
+	if idx < 0 {
+		t.Fatalf("DeleteFileAndDecreaseUsage signature not found in file.go")
+	}
+	body := src[idx:]
+	next := strings.Index(body, "\n// GetFileByKBUIDAndFileID")
+	if next > 0 {
+		body = body[:next]
+	}
+
+	if !strings.Contains(body, "tx.Model(&FileKnowledgeBase{})") {
+		t.Error("DeleteFileAndDecreaseUsage must update file_knowledge_base associations")
+	}
+	if !strings.Contains(body, `Update("content_sha256", "")`) {
+		t.Error("DeleteFileAndDecreaseUsage must clear association content_sha256")
+	}
+}
+
 // TestInvariant_ErrDuplicateContentSHA256Defined verifies the sentinel error
 // and helper function exist.
 func TestInvariant_ErrDuplicateContentSHA256Defined(t *testing.T) {
