@@ -474,6 +474,13 @@ func TestAggregateBatchUsage(t *testing.T) {
 			"totalTokenCount":         int64(300),
 			"cachedContentTokenCount": int64(50),
 			"callCount":               2,
+			"promptTokensDetails": []interface{}{
+				map[string]interface{}{"modality": "AUDIO", "tokenCount": int64(70)},
+				map[string]interface{}{"modality": "TEXT", "tokenCount": int64(30)},
+			},
+			"candidatesTokensDetails": []interface{}{
+				map[string]interface{}{"modality": "TEXT", "tokenCount": int64(200)},
+			},
 		},
 		1: {
 			"promptTokenCount":        int64(150),
@@ -481,6 +488,12 @@ func TestAggregateBatchUsage(t *testing.T) {
 			"totalTokenCount":         int64(400),
 			"cachedContentTokenCount": int64(75),
 			"callCount":               3,
+			"promptTokensDetails": []interface{}{
+				map[string]interface{}{"modality": "AUDIO", "tokenCount": int64(120)},
+			},
+			"cacheTokensDetails": []interface{}{
+				map[string]interface{}{"modality": "AUDIO", "tokenCount": int64(75)},
+			},
 		},
 	}
 
@@ -490,6 +503,20 @@ func TestAggregateBatchUsage(t *testing.T) {
 	c.Assert(result["totalTokenCount"], qt.Equals, int64(700))
 	c.Assert(result["cachedContentTokenCount"], qt.Equals, int64(125))
 	c.Assert(result["callCount"], qt.Equals, int64(5))
+	c.Assert(modalityTokenCountFromResult(result, "promptTokensDetails", "AUDIO"), qt.Equals, int64(190))
+	c.Assert(modalityTokenCountFromResult(result, "promptTokensDetails", "TEXT"), qt.Equals, int64(30))
+	c.Assert(modalityTokenCountFromResult(result, "candidatesTokensDetails", "TEXT"), qt.Equals, int64(200))
+	c.Assert(modalityTokenCountFromResult(result, "cacheTokensDetails", "AUDIO"), qt.Equals, int64(75))
+}
+
+func modalityTokenCountFromResult(result map[string]interface{}, key, modality string) int64 {
+	items, _ := result[key].([]map[string]interface{})
+	for _, item := range items {
+		if item["modality"] == modality {
+			return item["tokenCount"].(int64)
+		}
+	}
+	return 0
 }
 
 func TestAggregateBatchUsage_Empty(t *testing.T) {

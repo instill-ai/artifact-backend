@@ -16,10 +16,15 @@ import (
 // Client implements the ai.Client interface for Gemini
 type Client struct {
 	client *genai.Client
+	model  string
 }
 
 // NewClient creates a new Gemini AI client
 func NewClient(ctx context.Context, apiKey string) (*Client, error) {
+	return NewClientWithModel(ctx, apiKey, "")
+}
+
+func NewClientWithModel(ctx context.Context, apiKey, model string) (*Client, error) {
 	if apiKey == "" {
 		err := errorsx.ErrInvalidArgument
 		return nil, errorsx.AddMessage(err, "AI client configuration is missing. Please contact your administrator.")
@@ -36,8 +41,13 @@ func NewClient(ctx context.Context, apiKey string) (*Client, error) {
 		)
 	}
 
+	if model == "" {
+		model = DefaultModel
+	}
+
 	return &Client{
 		client: client,
+		model:  model,
 	}, nil
 }
 
@@ -82,7 +92,7 @@ func (c *Client) CountTokens(ctx context.Context, content []byte, fileType artif
 	}
 
 	// Count tokens using the Gemini API
-	resp, err := c.client.Models.CountTokens(ctx, DefaultModel, contents, nil)
+	resp, err := c.client.Models.CountTokens(ctx, c.model, contents, nil)
 	if err != nil {
 		return 0, nil, errorsx.AddMessage(
 			fmt.Errorf("failed to count tokens: %w", err),

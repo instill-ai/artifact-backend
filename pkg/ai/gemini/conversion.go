@@ -121,7 +121,7 @@ func (c *Client) convertToMarkdownWithoutCache(ctx context.Context, content []by
 
 	// Generate content without cache
 	config := createGenerateContentConfig("")
-	return c.generateContentAndExtractMarkdown(ctx, GetModel(), contents, config, nil)
+	return c.generateContentAndExtractMarkdown(ctx, c.model, contents, config, nil)
 }
 
 // convertToMarkdownWithCache converts unstructured data to Markdown using a pre-existing cached context
@@ -149,7 +149,7 @@ func (c *Client) convertToMarkdownWithCache(ctx context.Context, cacheName, prom
 
 	// Generate content using cached context
 	config := createGenerateContentConfig(cacheName)
-	return c.generateContentAndExtractMarkdown(ctx, GetModel(), contents, config, &cacheName)
+	return c.generateContentAndExtractMarkdown(ctx, c.model, contents, config, &cacheName)
 }
 
 // generateContentAndExtractMarkdown is a common helper that calls Gemini API and extracts markdown

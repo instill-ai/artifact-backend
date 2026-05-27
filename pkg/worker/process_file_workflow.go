@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"strings"
 	"time"
 
@@ -29,7 +30,7 @@ import (
 // ProcessFileWorkflow is already in the RUNNING state for the same
 // workflowID (i.e. for the same fileUID, since workflowID is derived
 // from FileUIDs[0]). It wraps errorsx.ErrAlreadyExists so the standard
-// gRPC mapping in x/errors surfaces ``codes.AlreadyExists`` to callers
+// gRPC mapping in x/errors surfaces "codes.AlreadyExists" to callers
 // (HTTP 409 via grpc-gateway).
 //
 // See ARTIFACT-INV-REPROCESS-NO-TERMINATE-RACE in
@@ -721,6 +722,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			if err := workflow.ExecuteActivity(ctx, w.UpdateUsageMetadataActivity, &UpdateUsageMetadataActivityParam{
 				FileUID:           fuid,
+				CacheMetadata:     nil,
 				ContentMetadata:   patchResult.UsageMetadata,
 				SummaryMetadata:   summaryResult.UsageMetadata,
 				EmbeddingMetadata: embedResult.UsageMetadata,
@@ -1026,8 +1028,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 		// Step 2d-pre: Probe media duration with ffprobe (before cache creation).
 		// For media files, duration must be known locally because long videos
 		// (> MaxVideoChunkDuration) cannot be cached by Gemini at all.
-		fileDurationSec := make(map[string]int32)  // Map fileUID -> media duration in seconds
-		longMediaFiles := make(map[string]bool)     // Files that need physical chunking
+		fileDurationSec := make(map[string]int32) // Map fileUID -> media duration in seconds
+		longMediaFiles := make(map[string]bool)   // Files that need physical chunking
 
 		for _, cr := range stdResults {
 			if !isMediaFileType(cr.effectiveFileType) {
@@ -1157,6 +1159,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 		workflowFutures := make([]fileWorkflowFutures, len(processingFutures))
 		fileCacheNames := make(map[string]string)
+		fileCacheUsageMetadata := make(map[string]any)
+		fileCacheModels := make(map[string]string)
 
 		// Phase 1: Collect cache names for all files (Gemini only)
 		for _, pf := range processingFutures {
@@ -1176,6 +1180,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			} else if fileCacheResult.CachedContextEnabled {
 				fileCacheName = fileCacheResult.CacheName
 				fileCacheNames[pf.fileUID.String()] = fileCacheName
+				fileCacheUsageMetadata[pf.fileUID.String()] = fileCacheResult.UsageMetadata
+				fileCacheModels[pf.fileUID.String()] = fileCacheResult.Model
 				logger.Info("File cache created",
 					"fileUID", pf.fileUID.String(),
 					"cacheName", fileCacheName)
@@ -1461,224 +1467,312 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 
 			// ───── Normal path: single-shot or batch conversion ─────
 			{
-			needsBatchConversion := false
-			preQueriedPageCount := filePageCounts[wf.fileUID.String()]
+				needsBatchConversion := false
+				preQueriedPageCount := filePageCounts[wf.fileUID.String()]
 
-			if wf.contentFuture == nil {
-				needsBatchConversion = true
-			} else {
-				contentErr = wf.contentFuture.Get(ctx, &contentResult)
-
-				// Check for activity-level post-LLM error: the LLM call succeeded
-				// but post-processing (DB write, MinIO upload) failed. The result
-				// (including UsageMetadata) is still valid for usage tracking.
-				if contentErr == nil && contentResult.Error != "" {
-					contentErr = fmt.Errorf("%s", contentResult.Error)
-				}
-				if contentErr == nil && contentResult.NeedsChunkedConversion {
+				if wf.contentFuture == nil {
 					needsBatchConversion = true
-				}
-			}
-
-			if needsBatchConversion {
-				cacheName := fileCacheNames[wf.fileUID.String()]
-				if cacheName == "" {
-					contentErr = fmt.Errorf("batch conversion requested but no cache available for file %s", wf.fileUID.String())
 				} else {
-					// Only sleep for quota recovery if single-shot was actually attempted
-					if wf.contentFuture != nil {
-						logger.Info("Sleeping before batch conversion to let API quota recover from single-shot attempts",
-							"fileUID", wf.fileUID.String())
-						_ = workflow.Sleep(ctx, RateLimitCooldown)
+					contentErr = wf.contentFuture.Get(ctx, &contentResult)
+
+					// Check for activity-level post-LLM error: the LLM call succeeded
+					// but post-processing (DB write, MinIO upload) failed. The result
+					// (including UsageMetadata) is still valid for usage tracking.
+					if contentErr == nil && contentResult.Error != "" {
+						contentErr = fmt.Errorf("%s", contentResult.Error)
 					}
+					if contentErr == nil && contentResult.NeedsChunkedConversion {
+						needsBatchConversion = true
+					}
+				}
 
-					logger.Info("Starting per-batch chunked conversion",
-						"fileUID", wf.fileUID.String(),
-						"cacheName", cacheName)
+				if needsBatchConversion {
+					cacheName := fileCacheNames[wf.fileUID.String()]
+					if cacheName == "" {
+						contentErr = fmt.Errorf("batch conversion requested but no cache available for file %s", wf.fileUID.String())
+					} else {
+						// Only sleep for quota recovery if single-shot was actually attempted
+						if wf.contentFuture != nil {
+							logger.Info("Sleeping before batch conversion to let API quota recover from single-shot attempts",
+								"fileUID", wf.fileUID.String())
+							_ = workflow.Sleep(ctx, RateLimitCooldown)
+						}
 
-					batchProfile := batchProfile(wf.conversionData.effectiveFileType)
-					fileDuration := time.Duration(fileDurationSec[wf.fileUID.String()]) * time.Second
-					useTimeRange := batchProfile.SegmentDuration > 0 && fileDuration > 0
+						logger.Info("Starting per-batch chunked conversion",
+							"fileUID", wf.fileUID.String(),
+							"cacheName", cacheName)
 
-					// For page-based mode, determine total pages.
-					totalPages := 0
-					if !useTimeRange {
-						totalPages = preQueriedPageCount
-						if totalPages == 0 {
-							pageCountCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-								StartToCloseTimeout: 5 * time.Minute,
+						batchProfile := batchProfile(wf.conversionData.effectiveFileType)
+						fileDuration := time.Duration(fileDurationSec[wf.fileUID.String()]) * time.Second
+						useTimeRange := batchProfile.SegmentDuration > 0 && fileDuration > 0
+
+						// For page-based mode, determine total pages.
+						totalPages := 0
+						if !useTimeRange {
+							totalPages = preQueriedPageCount
+							if totalPages == 0 {
+								pageCountCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+									StartToCloseTimeout: 5 * time.Minute,
+									RetryPolicy: &temporal.RetryPolicy{
+										InitialInterval:    RetryInitialInterval,
+										BackoffCoefficient: RetryBackoffCoefficient,
+										MaximumInterval:    RetryMaximumIntervalStandard,
+										MaximumAttempts:    3,
+									},
+								})
+								var pgResult GetPageCountActivityResult
+								if pgErr := workflow.ExecuteActivity(pageCountCtx, w.GetPageCountActivity, &GetPageCountActivityParam{
+									CacheName: cacheName,
+									FileType:  wf.conversionData.effectiveFileType,
+								}).Get(ctx, &pgResult); pgErr != nil {
+									contentErr = fmt.Errorf("failed to get page count: %w", pgErr)
+								} else {
+									totalPages = pgResult.PageCount
+								}
+							}
+						}
+
+						if contentErr == nil && (useTimeRange || totalPages > 0) {
+							batchCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+								StartToCloseTimeout: batchProfile.ActivityTimeout,
 								RetryPolicy: &temporal.RetryPolicy{
-									InitialInterval:    RetryInitialInterval,
-									BackoffCoefficient: RetryBackoffCoefficient,
-									MaximumInterval:    RetryMaximumIntervalStandard,
-									MaximumAttempts:    3,
+									InitialInterval:    5 * time.Second,
+									BackoffCoefficient: 2.0,
+									MaximumInterval:    120 * time.Second,
+									MaximumAttempts:    5,
 								},
 							})
-							var pgResult GetPageCountActivityResult
-							if pgErr := workflow.ExecuteActivity(pageCountCtx, w.GetPageCountActivity, &GetPageCountActivityParam{
-								CacheName: cacheName,
-								FileType:  wf.conversionData.effectiveFileType,
-							}).Get(ctx, &pgResult); pgErr != nil {
-								contentErr = fmt.Errorf("failed to get page count: %w", pgErr)
-							} else {
-								totalPages = pgResult.PageCount
+
+							workflowRunID := workflow.GetInfo(ctx).WorkflowExecution.RunID
+
+							type batchSlot struct {
+								Index          int
+								StartPage      int
+								EndPage        int
+								StartTimestamp time.Duration
+								EndTimestamp   time.Duration
+								SegmentIndex   int
 							}
-						}
-					}
 
-				if contentErr == nil && (useTimeRange || totalPages > 0) {
-					batchCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-						StartToCloseTimeout: batchProfile.ActivityTimeout,
-						RetryPolicy: &temporal.RetryPolicy{
-							InitialInterval:    5 * time.Second,
-							BackoffCoefficient: 2.0,
-							MaximumInterval:    120 * time.Second,
-							MaximumAttempts:    5,
-						},
-					})
-
-						workflowRunID := workflow.GetInfo(ctx).WorkflowExecution.RunID
-
-						type batchSlot struct {
-							Index          int
-							StartPage      int
-							EndPage        int
-							StartTimestamp time.Duration
-							EndTimestamp   time.Duration
-							SegmentIndex   int
-						}
-
-					var allSlots []batchSlot
-					if useTimeRange {
-						segCount := int(math.Ceil(fileDuration.Seconds() / batchProfile.SegmentDuration.Seconds()))
-						for i := 0; i < segCount; i++ {
-							start := time.Duration(i) * batchProfile.SegmentDuration
-							end := start + batchProfile.SegmentDuration
-							if end > fileDuration {
-								end = fileDuration
-							}
-							allSlots = append(allSlots, batchSlot{
-								Index:          i,
-								SegmentIndex:   i + 1,
-								StartTimestamp: start,
-								EndTimestamp:   end,
-							})
-						}
-					} else {
-						idx := 0
-						for start := 1; start <= totalPages; start += batchProfile.PagesPerBatch {
-							end := start + batchProfile.PagesPerBatch - 1
-							if end > totalPages {
-								end = totalPages
-							}
-							allSlots = append(allSlots, batchSlot{Index: idx, StartPage: start, EndPage: end})
-							idx++
-						}
-					}
-
-						completedPaths := make(map[int]string, len(allSlots))
-						completedUsage := make(map[int]map[string]interface{}, len(allSlots))
-						var batchModel string
-
-						isTransientBatchErr := func(err error) (isCacheExp bool, isTransient bool) {
-							var appErr *temporal.ApplicationError
-							if errors.As(err, &appErr) && appErr.Type() == "CacheExpired" {
-								return true, true
-							}
-						msg := err.Error()
-						if strings.Contains(msg, "RESOURCE_EXHAUSTED") || strings.Contains(msg, "429") ||
-							strings.Contains(msg, "transient error retries exhausted") ||
-							strings.Contains(msg, "DEADLINE_EXCEEDED") || strings.Contains(msg, "504") ||
-							strings.Contains(msg, "UNAVAILABLE") || strings.Contains(msg, "503") ||
-							strings.Contains(msg, "document has no pages") ||
-							strings.Contains(msg, "i/o timeout") || strings.Contains(msg, "connection reset") ||
-							strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host") {
-							return false, true
-						}
-							return false, false
-						}
-
-						runBatchRound := func(slots []batchSlot, cn string) (failed []batchSlot, hasCacheExp bool, permErr error) {
-							selector := workflow.NewSelector(ctx)
-							pending := 0
-
-							for _, slot := range slots {
-								s := slot
-					activityParam := &ConvertBatchActivityParam{
-						CacheName:      cn,
-						StartPage:      s.StartPage,
-						EndPage:        s.EndPage,
-						TotalPages:     totalPages,
-						KBUID:          kbUID,
-						FileUID:        wf.fileUID,
-						WorkflowRunID:  workflowRunID,
-						BatchIndex:     s.Index,
-						ChunkTimeout:   batchProfile.ChunkTimeout,
-						PagesPerChunk:  batchProfile.PagesPerChunk,
-						UseTimeRange:   useTimeRange,
-						StartTimestamp: s.StartTimestamp,
-						EndTimestamp:   s.EndTimestamp,
-						SegmentIndex:   s.SegmentIndex,
-						FileType:       wf.conversionData.effectiveFileType,
-					}
-							future := workflow.ExecuteActivity(batchCtx, w.ConvertBatchActivity, activityParam)
-								selector.AddFuture(future, func(f workflow.Future) {
-									var result ConvertBatchActivityResult
-									if err := f.Get(ctx, &result); err != nil {
-										cacheExp, transient := isTransientBatchErr(err)
-										if transient {
-											failed = append(failed, s)
-											if cacheExp {
-												hasCacheExp = true
-											}
-											logger.Warn("Batch failed with transient error",
-												"fileUID", wf.fileUID.String(),
-												"batchIndex", s.Index,
-												"cacheExpired", cacheExp,
-												"error", err.Error())
-										} else {
-											permErr = fmt.Errorf("batch %d failed: %w", s.Index, err)
-										}
-								} else {
-									completedPaths[s.Index] = result.TempMinIOPath
-									if result.UsageMetadata != nil {
-										completedUsage[s.Index] = result.UsageMetadata
+							var allSlots []batchSlot
+							if useTimeRange {
+								segCount := int(math.Ceil(fileDuration.Seconds() / batchProfile.SegmentDuration.Seconds()))
+								for i := 0; i < segCount; i++ {
+									start := time.Duration(i) * batchProfile.SegmentDuration
+									end := start + batchProfile.SegmentDuration
+									if end > fileDuration {
+										end = fileDuration
 									}
-									if batchModel == "" && result.Model != "" {
-										batchModel = result.Model
+									allSlots = append(allSlots, batchSlot{
+										Index:          i,
+										SegmentIndex:   i + 1,
+										StartTimestamp: start,
+										EndTimestamp:   end,
+									})
+								}
+							} else {
+								idx := 0
+								for start := 1; start <= totalPages; start += batchProfile.PagesPerBatch {
+									end := start + batchProfile.PagesPerBatch - 1
+									if end > totalPages {
+										end = totalPages
+									}
+									allSlots = append(allSlots, batchSlot{Index: idx, StartPage: start, EndPage: end})
+									idx++
+								}
+							}
+
+							completedPaths := make(map[int]string, len(allSlots))
+							completedUsage := make(map[int]map[string]interface{}, len(allSlots))
+							var batchModel string
+
+							isTransientBatchErr := func(err error) (isCacheExp bool, isTransient bool) {
+								var appErr *temporal.ApplicationError
+								if errors.As(err, &appErr) && appErr.Type() == "CacheExpired" {
+									return true, true
+								}
+								msg := err.Error()
+								if strings.Contains(msg, "RESOURCE_EXHAUSTED") || strings.Contains(msg, "429") ||
+									strings.Contains(msg, "transient error retries exhausted") ||
+									strings.Contains(msg, "DEADLINE_EXCEEDED") || strings.Contains(msg, "504") ||
+									strings.Contains(msg, "UNAVAILABLE") || strings.Contains(msg, "503") ||
+									strings.Contains(msg, "document has no pages") ||
+									strings.Contains(msg, "i/o timeout") || strings.Contains(msg, "connection reset") ||
+									strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host") {
+									return false, true
+								}
+								return false, false
+							}
+
+							runBatchRound := func(slots []batchSlot, cn string) (failed []batchSlot, hasCacheExp bool, permErr error) {
+								selector := workflow.NewSelector(ctx)
+								pending := 0
+
+								for _, slot := range slots {
+									s := slot
+									activityParam := &ConvertBatchActivityParam{
+										CacheName:      cn,
+										StartPage:      s.StartPage,
+										EndPage:        s.EndPage,
+										TotalPages:     totalPages,
+										KBUID:          kbUID,
+										FileUID:        wf.fileUID,
+										WorkflowRunID:  workflowRunID,
+										BatchIndex:     s.Index,
+										ChunkTimeout:   batchProfile.ChunkTimeout,
+										PagesPerChunk:  batchProfile.PagesPerChunk,
+										UseTimeRange:   useTimeRange,
+										StartTimestamp: s.StartTimestamp,
+										EndTimestamp:   s.EndTimestamp,
+										SegmentIndex:   s.SegmentIndex,
+										FileType:       wf.conversionData.effectiveFileType,
+									}
+									future := workflow.ExecuteActivity(batchCtx, w.ConvertBatchActivity, activityParam)
+									selector.AddFuture(future, func(f workflow.Future) {
+										var result ConvertBatchActivityResult
+										if err := f.Get(ctx, &result); err != nil {
+											cacheExp, transient := isTransientBatchErr(err)
+											if transient {
+												failed = append(failed, s)
+												if cacheExp {
+													hasCacheExp = true
+												}
+												logger.Warn("Batch failed with transient error",
+													"fileUID", wf.fileUID.String(),
+													"batchIndex", s.Index,
+													"cacheExpired", cacheExp,
+													"error", err.Error())
+											} else {
+												permErr = fmt.Errorf("batch %d failed: %w", s.Index, err)
+											}
+										} else {
+											completedPaths[s.Index] = result.TempMinIOPath
+											if result.UsageMetadata != nil {
+												completedUsage[s.Index] = result.UsageMetadata
+											}
+											if batchModel == "" && result.Model != "" {
+												batchModel = result.Model
+											}
+										}
+										pending--
+									})
+									pending++
+
+									if pending >= batchProfile.MaxConcurrentBatches {
+										selector.Select(ctx)
 									}
 								}
-									pending--
-								})
-								pending++
-
-								if pending >= batchProfile.MaxConcurrentBatches {
+								for pending > 0 {
 									selector.Select(ctx)
 								}
+								return
 							}
-							for pending > 0 {
-								selector.Select(ctx)
-							}
-							return
-						}
 
-						logger.Info("Phase 1: concurrent batch dispatch",
-							"fileUID", wf.fileUID.String(),
-							"totalBatches", len(allSlots),
-							"maxConcurrent", batchProfile.MaxConcurrentBatches,
-							"useTimeRange", useTimeRange)
-
-						failedSlots, hasCacheExpired, permanentErr := runBatchRound(allSlots, cacheName)
-
-						// Phase 2: retry transient failures (rate-limit and/or cache-expired)
-						if permanentErr == nil && len(failedSlots) > 0 {
-							logger.Info("Phase 2: retrying transient failures",
+							logger.Info("Phase 1: concurrent batch dispatch",
 								"fileUID", wf.fileUID.String(),
-								"failedBatches", len(failedSlots),
-								"hasCacheExpired", hasCacheExpired)
+								"totalBatches", len(allSlots),
+								"maxConcurrent", batchProfile.MaxConcurrentBatches,
+								"useTimeRange", useTimeRange)
 
-							if hasCacheExpired {
-								cacheCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+							failedSlots, hasCacheExpired, permanentErr := runBatchRound(allSlots, cacheName)
+
+							// Phase 2: retry transient failures (rate-limit and/or cache-expired)
+							if permanentErr == nil && len(failedSlots) > 0 {
+								logger.Info("Phase 2: retrying transient failures",
+									"fileUID", wf.fileUID.String(),
+									"failedBatches", len(failedSlots),
+									"hasCacheExpired", hasCacheExpired)
+
+								if hasCacheExpired {
+									cacheCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+										StartToCloseTimeout: ActivityTimeoutLong,
+										RetryPolicy: &temporal.RetryPolicy{
+											InitialInterval:    RetryInitialInterval,
+											BackoffCoefficient: RetryBackoffCoefficient,
+											MaximumInterval:    RetryMaximumIntervalStandard,
+											MaximumAttempts:    RetryMaximumAttempts,
+										},
+									})
+
+									var freshCacheResult CacheFileContextActivityResult
+									cacheErr := workflow.ExecuteActivity(cacheCtx, w.CacheFileContextActivity, &CacheFileContextActivityParam{
+										FileUID:         wf.fileUID,
+										KBUID:           kbUID,
+										Bucket:          wf.conversionData.effectiveBucket,
+										Destination:     wf.conversionData.effectiveDestination,
+										FileType:        wf.conversionData.effectiveFileType,
+										FileDisplayName: wf.conversionData.fileMetadata.metadata.File.DisplayName,
+										Metadata:        wf.conversionData.fileMetadata.metadata.ExternalMetadata,
+									}).Get(ctx, &freshCacheResult)
+
+									if cacheErr != nil || !freshCacheResult.CachedContextEnabled {
+										permanentErr = fmt.Errorf("failed to refresh cache for retry round: %v", cacheErr)
+									} else {
+										cacheName = freshCacheResult.CacheName
+										fileCacheNames[wf.fileUID.String()] = cacheName
+										fileCacheUsageMetadata[wf.fileUID.String()] = aggregateCacheUsageMetadata(fileCacheUsageMetadata[wf.fileUID.String()], freshCacheResult.UsageMetadata)
+										fileCacheModels[wf.fileUID.String()] = freshCacheResult.Model
+
+										defer func(cn string) {
+											cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
+											cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
+												StartToCloseTimeout: time.Minute,
+												RetryPolicy: &temporal.RetryPolicy{
+													InitialInterval:    time.Second,
+													BackoffCoefficient: 2.0,
+													MaximumInterval:    30 * time.Second,
+													MaximumAttempts:    3,
+												},
+											})
+											_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteCacheActivity, &DeleteCacheActivityParam{
+												CacheName: cn,
+											}).Get(cleanupCtx, nil)
+										}(cacheName)
+									}
+								}
+
+								if permanentErr == nil {
+									var retryFailed []batchSlot
+									retryFailed, _, permanentErr = runBatchRound(failedSlots, cacheName)
+									if permanentErr == nil && len(retryFailed) > 0 {
+										permanentErr = fmt.Errorf("%d batches still failing after retry round", len(retryFailed))
+									}
+								}
+							}
+
+							if permanentErr != nil {
+								contentErr = permanentErr
+								// Clean up temp files from completed batches
+								if len(completedPaths) > 0 {
+									cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
+									cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
+										StartToCloseTimeout: time.Minute,
+										RetryPolicy: &temporal.RetryPolicy{
+											InitialInterval:    time.Second,
+											BackoffCoefficient: 2.0,
+											MaximumInterval:    30 * time.Second,
+											MaximumAttempts:    3,
+										},
+									})
+									paths := make([]string, 0, len(completedPaths))
+									for _, p := range completedPaths {
+										paths = append(paths, p)
+									}
+									_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteFilesBatchActivity, &DeleteFilesBatchActivityParam{
+										Bucket:    wf.conversionData.effectiveBucket,
+										FilePaths: paths,
+									}).Get(cleanupCtx, nil)
+								}
+							}
+
+							if contentErr == nil {
+								// Assemble paths in batch index order
+								tempPaths := make([]string, len(allSlots))
+								for idx, path := range completedPaths {
+									tempPaths[idx] = path
+								}
+
+								saveCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 									StartToCloseTimeout: ActivityTimeoutLong,
 									RetryPolicy: &temporal.RetryPolicy{
 										InitialInterval:    RetryInitialInterval,
@@ -1688,127 +1782,41 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 									},
 								})
 
-								var freshCacheResult CacheFileContextActivityResult
-								cacheErr := workflow.ExecuteActivity(cacheCtx, w.CacheFileContextActivity, &CacheFileContextActivityParam{
-									FileUID:         wf.fileUID,
-									KBUID:           kbUID,
-									Bucket:          wf.conversionData.effectiveBucket,
-									Destination:     wf.conversionData.effectiveDestination,
-									FileType:        wf.conversionData.effectiveFileType,
-									FileDisplayName: wf.conversionData.fileMetadata.metadata.File.DisplayName,
-									Metadata:        wf.conversionData.fileMetadata.metadata.ExternalMetadata,
-								}).Get(ctx, &freshCacheResult)
-
-								if cacheErr != nil || !freshCacheResult.CachedContextEnabled {
-									permanentErr = fmt.Errorf("failed to refresh cache for retry round: %v", cacheErr)
+								var saveResult SaveAssembledContentActivityResult
+								if saveErr := workflow.ExecuteActivity(saveCtx, w.SaveAssembledContentActivity, &SaveAssembledContentActivityParam{
+									FileUID:        wf.fileUID,
+									KBUID:          kbUID,
+									FileType:       wf.conversionData.effectiveFileType,
+									TempMinIOPaths: tempPaths,
+									IsMedia:        useTimeRange,
+								}).Get(ctx, &saveResult); saveErr != nil {
+									contentErr = fmt.Errorf("failed to assemble batched content: %w", saveErr)
 								} else {
-									cacheName = freshCacheResult.CacheName
-									fileCacheNames[wf.fileUID.String()] = cacheName
+									contentResult.Content = saveResult.Content
+									contentResult.ConvertedFileUID = saveResult.ConvertedFileUID
+									contentResult.ContentBucket = saveResult.ContentBucket
+									contentResult.ContentPath = saveResult.ContentPath
+									contentResult.Length = saveResult.Length
+									contentResult.PageCount = saveResult.PageCount
+									contentResult.PositionData = saveResult.PositionData
+									contentResult.ConvertedType = wf.conversionData.effectiveFileType
+									contentResult.NeedsChunkedConversion = false
+									contentResult.Model = batchModel
 
-									defer func(cn string) {
-										cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
-										cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
-											StartToCloseTimeout: time.Minute,
-											RetryPolicy: &temporal.RetryPolicy{
-												InitialInterval:    time.Second,
-												BackoffCoefficient: 2.0,
-												MaximumInterval:    30 * time.Second,
-												MaximumAttempts:    3,
-											},
-										})
-										_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteCacheActivity, &DeleteCacheActivityParam{
-											CacheName: cn,
-										}).Get(cleanupCtx, nil)
-									}(cacheName)
+									aggregated := aggregateBatchUsage(completedUsage)
+									contentResult.UsageMetadata = aggregated
+
+									logger.Info("Per-batch chunked conversion completed successfully",
+										"fileUID", wf.fileUID.String(),
+										"pageCount", saveResult.PageCount,
+										"contentLen", len(saveResult.Content),
+										"model", batchModel,
+										"aggregatedUsage", aggregated)
 								}
-							}
-
-							if permanentErr == nil {
-								var retryFailed []batchSlot
-								retryFailed, _, permanentErr = runBatchRound(failedSlots, cacheName)
-								if permanentErr == nil && len(retryFailed) > 0 {
-									permanentErr = fmt.Errorf("%d batches still failing after retry round", len(retryFailed))
-								}
-							}
-						}
-
-						if permanentErr != nil {
-							contentErr = permanentErr
-							// Clean up temp files from completed batches
-							if len(completedPaths) > 0 {
-								cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
-								cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
-									StartToCloseTimeout: time.Minute,
-									RetryPolicy: &temporal.RetryPolicy{
-										InitialInterval:    time.Second,
-										BackoffCoefficient: 2.0,
-										MaximumInterval:    30 * time.Second,
-										MaximumAttempts:    3,
-									},
-								})
-								paths := make([]string, 0, len(completedPaths))
-								for _, p := range completedPaths {
-									paths = append(paths, p)
-								}
-								_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteFilesBatchActivity, &DeleteFilesBatchActivityParam{
-									Bucket:    wf.conversionData.effectiveBucket,
-									FilePaths: paths,
-								}).Get(cleanupCtx, nil)
-							}
-						}
-
-						if contentErr == nil {
-							// Assemble paths in batch index order
-							tempPaths := make([]string, len(allSlots))
-							for idx, path := range completedPaths {
-								tempPaths[idx] = path
-							}
-
-							saveCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-								StartToCloseTimeout: ActivityTimeoutLong,
-								RetryPolicy: &temporal.RetryPolicy{
-									InitialInterval:    RetryInitialInterval,
-									BackoffCoefficient: RetryBackoffCoefficient,
-									MaximumInterval:    RetryMaximumIntervalStandard,
-									MaximumAttempts:    RetryMaximumAttempts,
-								},
-							})
-
-						var saveResult SaveAssembledContentActivityResult
-						if saveErr := workflow.ExecuteActivity(saveCtx, w.SaveAssembledContentActivity, &SaveAssembledContentActivityParam{
-							FileUID:        wf.fileUID,
-							KBUID:          kbUID,
-							FileType:       wf.conversionData.effectiveFileType,
-							TempMinIOPaths: tempPaths,
-							IsMedia:        useTimeRange,
-						}).Get(ctx, &saveResult); saveErr != nil {
-								contentErr = fmt.Errorf("failed to assemble batched content: %w", saveErr)
-							} else {
-								contentResult.Content = saveResult.Content
-								contentResult.ConvertedFileUID = saveResult.ConvertedFileUID
-								contentResult.ContentBucket = saveResult.ContentBucket
-								contentResult.ContentPath = saveResult.ContentPath
-								contentResult.Length = saveResult.Length
-								contentResult.PageCount = saveResult.PageCount
-								contentResult.PositionData = saveResult.PositionData
-								contentResult.ConvertedType = wf.conversionData.effectiveFileType
-								contentResult.NeedsChunkedConversion = false
-								contentResult.Model = batchModel
-
-								aggregated := aggregateBatchUsage(completedUsage)
-								contentResult.UsageMetadata = aggregated
-
-								logger.Info("Per-batch chunked conversion completed successfully",
-									"fileUID", wf.fileUID.String(),
-									"pageCount", saveResult.PageCount,
-									"contentLen", len(saveResult.Content),
-									"model", batchModel,
-									"aggregatedUsage", aggregated)
 							}
 						}
 					}
 				}
-			}
 			} // end normal path block
 
 		postContent:
@@ -1836,13 +1844,13 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 				}
 			}
 
-		// For long media files, processLongMedia already populated summaryResult
-		// directly — skip the future-based summary wait entirely.
-		var summaryErr error
-		if wf.isLongMedia {
-			// summaryResult was populated inside processLongMedia; nothing to wait for.
-			// If processLongMedia failed, contentErr is already set and will be handled below.
-		} else if wf.isOpenAISequential && wf.summaryFutureChan != nil {
+			// For long media files, processLongMedia already populated summaryResult
+			// directly — skip the future-based summary wait entirely.
+			var summaryErr error
+			if wf.isLongMedia {
+				// summaryResult was populated inside processLongMedia; nothing to wait for.
+				// If processLongMedia failed, contentErr is already set and will be handled below.
+			} else if wf.isOpenAISequential && wf.summaryFutureChan != nil {
 				// OpenAI route: Receive the actual summary future from the goroutine
 				logger.Info("OpenAI sequential processing: receiving summary future from channel",
 					"fileUID", wf.fileUID.String())
@@ -1913,6 +1921,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					return
 				}
 				usageData := &FileProcessingUsageData{
+					CacheUsageMetadata:   fileCacheUsageMetadata[wf.fileUID.String()],
+					CacheModel:           fileCacheModels[wf.fileUID.String()],
 					ContentUsageMetadata: contentResult.UsageMetadata,
 					ContentModel:         contentResult.Model,
 					SummaryUsageMetadata: summaryResult.UsageMetadata,
@@ -2167,6 +2177,7 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			// According to Gemini API docs: https://ai.google.dev/gemini-api/docs/tokens?lang=python
 			if err := workflow.ExecuteActivity(ctx, w.UpdateUsageMetadataActivity, &UpdateUsageMetadataActivityParam{
 				FileUID:           fileUID,
+				CacheMetadata:     fileCacheUsageMetadata[fileUID.String()],
 				ContentMetadata:   contentResult.UsageMetadata,
 				SummaryMetadata:   summaryResult.UsageMetadata,
 				EmbeddingMetadata: embedResult.UsageMetadata,
@@ -2201,6 +2212,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 					}
 				}
 				completionUsageData := &FileProcessingUsageData{
+					CacheUsageMetadata:     fileCacheUsageMetadata[fileUID.String()],
+					CacheModel:             fileCacheModels[fileUID.String()],
 					ContentUsageMetadata:   contentResult.UsageMetadata,
 					ContentModel:           contentResult.Model,
 					SummaryUsageMetadata:   summaryResult.UsageMetadata,
@@ -2388,6 +2401,10 @@ func aggregateBatchUsage(batches map[int]map[string]interface{}) map[string]inte
 		totalTokens         int64
 		cachedContentTokens int64
 		callCount           int64
+		promptDetails       map[string]int64
+		cacheDetails        map[string]int64
+		candidateDetails    map[string]int64
+		toolUseDetails      map[string]int64
 	)
 	for _, m := range batches {
 		promptTokens += toInt64(m["promptTokenCount"])
@@ -2395,13 +2412,114 @@ func aggregateBatchUsage(batches map[int]map[string]interface{}) map[string]inte
 		totalTokens += toInt64(m["totalTokenCount"])
 		cachedContentTokens += toInt64(m["cachedContentTokenCount"])
 		callCount += toInt64(m["callCount"])
+		promptDetails = aggregateModalityDetails(promptDetails, m["promptTokensDetails"])
+		cacheDetails = aggregateModalityDetails(cacheDetails, m["cacheTokensDetails"])
+		candidateDetails = aggregateModalityDetails(candidateDetails, m["candidatesTokensDetails"])
+		toolUseDetails = aggregateModalityDetails(toolUseDetails, m["toolUsePromptTokensDetails"])
 	}
-	return map[string]interface{}{
+	out := map[string]interface{}{
 		"promptTokenCount":        promptTokens,
 		"candidatesTokenCount":    candidatesTokens,
 		"totalTokenCount":         totalTokens,
 		"cachedContentTokenCount": cachedContentTokens,
 		"callCount":               callCount,
+	}
+	if details := modalityDetailsToSlice(promptDetails); details != nil {
+		out["promptTokensDetails"] = details
+	}
+	if details := modalityDetailsToSlice(cacheDetails); details != nil {
+		out["cacheTokensDetails"] = details
+	}
+	if details := modalityDetailsToSlice(candidateDetails); details != nil {
+		out["candidatesTokensDetails"] = details
+	}
+	if details := modalityDetailsToSlice(toolUseDetails); details != nil {
+		out["toolUsePromptTokensDetails"] = details
+	}
+	return out
+}
+
+func aggregateModalityDetails(dst map[string]int64, raw any) map[string]int64 {
+	items, ok := raw.([]interface{})
+	if !ok || len(items) == 0 {
+		return dst
+	}
+	if dst == nil {
+		dst = map[string]int64{}
+	}
+	for _, item := range items {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		modality, _ := m["modality"].(string)
+		if modality == "" {
+			continue
+		}
+		dst[modality] += toInt64(m["tokenCount"])
+	}
+	return dst
+}
+
+func modalityDetailsToSlice(details map[string]int64) []map[string]interface{} {
+	if len(details) == 0 {
+		return nil
+	}
+	out := make([]map[string]interface{}, 0, len(details))
+	for modality, tokenCount := range details {
+		out = append(out, map[string]interface{}{
+			"modality":   modality,
+			"tokenCount": tokenCount,
+		})
+	}
+	return out
+}
+
+func aggregateCacheUsageMetadata(existing, next any) any {
+	if existing == nil {
+		return next
+	}
+	if next == nil {
+		return existing
+	}
+	total := cacheUsageTotalTokenCount(existing) + cacheUsageTotalTokenCount(next)
+	if total == 0 {
+		return existing
+	}
+	return map[string]interface{}{
+		"totalTokenCount": total,
+	}
+}
+
+func cacheUsageTotalTokenCount(v any) int64 {
+	if v == nil {
+		return 0
+	}
+	if m, ok := v.(map[string]interface{}); ok {
+		return toInt64(m["totalTokenCount"])
+	}
+
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return 0
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return 0
+	}
+	field := rv.FieldByName("TotalTokenCount")
+	if !field.IsValid() {
+		return 0
+	}
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return field.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int64(field.Uint())
+	default:
+		return 0
 	}
 }
 
@@ -2427,7 +2545,11 @@ func toInt64(v interface{}) int64 {
 // assembled transcript text.
 func (w *Worker) processLongMedia(
 	ctx workflow.Context,
-	logger interface{ Info(string, ...interface{}); Warn(string, ...interface{}); Error(string, ...interface{}) },
+	logger interface {
+		Info(string, ...interface{})
+		Warn(string, ...interface{})
+		Error(string, ...interface{})
+	},
 	wf *fileWorkflowFutures,
 	kbUID types.KBUIDType,
 	contentResult *ProcessContentActivityResult,
@@ -2509,6 +2631,7 @@ func (w *Worker) processLongMedia(
 
 	chunkCacheNames := make([]string, len(splitResult.Chunks))
 	chunkGCSURIs := make([]string, len(splitResult.Chunks))
+	chunkGCSObjectPaths := make([]string, len(splitResult.Chunks))
 	cacheErrs := make([]error, len(splitResult.Chunks))
 	cacheSel := workflow.NewSelector(ctx)
 	cachePending := 0
@@ -2516,29 +2639,50 @@ func (w *Worker) processLongMedia(
 	for ci, chunk := range splitResult.Chunks {
 		i := ci
 		ch := chunk
-		future := workflow.ExecuteActivity(cacheCtx, w.CacheFileContextActivity, &CacheFileContextActivityParam{
-			FileUID:         fileUID,
-			KBUID:           kbUID,
-			Bucket:          cr.effectiveBucket,
-			Destination:     ch.MinIOPath,
-			FileType:        cr.effectiveFileType,
-			FileDisplayName: fmt.Sprintf("%s (chunk %d)", cr.fileMetadata.metadata.File.DisplayName, ch.Index),
-			Metadata:        cr.fileMetadata.metadata.ExternalMetadata,
-		})
-		cacheSel.AddFuture(future, func(f workflow.Future) {
-			var result CacheFileContextActivityResult
-			if err := f.Get(ctx, &result); err != nil {
-				cacheErrs[i] = err
-			} else if !result.CachedContextEnabled {
-				logger.Warn("processLongMedia: Caching unavailable for chunk, proceeding without cache",
-					"chunkIndex", i,
-					"fileType", cr.effectiveFileType.String())
-			} else {
-				chunkCacheNames[i] = result.CacheName
-				chunkGCSURIs[i] = result.GCSURI
-			}
-			cachePending--
-		})
+		if isVideoFileType(cr.effectiveFileType) {
+			future := workflow.ExecuteActivity(cacheCtx, w.UploadToGCSActivity, &UploadToGCSActivityParam{
+				Bucket:     cr.effectiveBucket,
+				SourcePath: ch.MinIOPath,
+				MIMEType:   videoMIMETypeForFileType(cr.effectiveFileType),
+				FileUID:    fileUID.String(),
+			})
+			cacheSel.AddFuture(future, func(f workflow.Future) {
+				var result UploadToGCSActivityResult
+				if err := f.Get(ctx, &result); err != nil {
+					cacheErrs[i] = err
+				} else {
+					chunkGCSURIs[i] = result.GSURI
+					chunkGCSObjectPaths[i] = result.GCSObjectPath
+				}
+				cachePending--
+			})
+		} else {
+			future := workflow.ExecuteActivity(cacheCtx, w.CacheFileContextActivity, &CacheFileContextActivityParam{
+				FileUID:         fileUID,
+				KBUID:           kbUID,
+				Bucket:          cr.effectiveBucket,
+				Destination:     ch.MinIOPath,
+				FileType:        cr.effectiveFileType,
+				FileDisplayName: fmt.Sprintf("%s (chunk %d)", cr.fileMetadata.metadata.File.DisplayName, ch.Index),
+				Metadata:        cr.fileMetadata.metadata.ExternalMetadata,
+			})
+			cacheSel.AddFuture(future, func(f workflow.Future) {
+				var result CacheFileContextActivityResult
+				if err := f.Get(ctx, &result); err != nil {
+					cacheErrs[i] = err
+				} else {
+					chunkGCSURIs[i] = result.GCSURI
+					if !result.CachedContextEnabled {
+						logger.Warn("processLongMedia: Caching unavailable for chunk, proceeding without cache",
+							"chunkIndex", i,
+							"fileType", cr.effectiveFileType.String())
+					} else {
+						chunkCacheNames[i] = result.CacheName
+					}
+				}
+				cachePending--
+			})
+		}
 		cachePending++
 	}
 	for cachePending > 0 {
@@ -2558,6 +2702,20 @@ func (w *Worker) processLongMedia(
 				RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2.0, MaximumInterval: 30 * time.Second, MaximumAttempts: 3},
 			})
 			_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteCacheActivity, &DeleteCacheActivityParam{CacheName: cacheName}).Get(cleanupCtx, nil)
+		}()
+	}
+	for _, objectPath := range chunkGCSObjectPaths {
+		if objectPath == "" {
+			continue
+		}
+		path := objectPath
+		defer func() {
+			cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
+			cleanupCtx = workflow.WithActivityOptions(cleanupCtx, workflow.ActivityOptions{
+				StartToCloseTimeout: time.Minute,
+				RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Second, BackoffCoefficient: 2.0, MaximumInterval: 30 * time.Second, MaximumAttempts: 3},
+			})
+			_ = workflow.ExecuteActivity(cleanupCtx, w.DeleteFromGCSActivity, &DeleteFromGCSActivityParam{GCSObjectPath: path}).Get(cleanupCtx, nil)
 		}()
 	}
 
@@ -2832,7 +2990,11 @@ func (w *Worker) processLongMedia(
 // and using a single ConvertAudioDirect call instead of the chunked pipeline.
 func (w *Worker) processAudioOnlyLongMedia(
 	ctx workflow.Context,
-	logger interface{ Info(string, ...interface{}); Warn(string, ...interface{}); Error(string, ...interface{}) },
+	logger interface {
+		Info(string, ...interface{})
+		Warn(string, ...interface{})
+		Error(string, ...interface{})
+	},
 	wf *fileWorkflowFutures,
 	kbUID types.KBUIDType,
 	contentResult *ProcessContentActivityResult,

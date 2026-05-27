@@ -478,6 +478,7 @@ func newAIClient(ctx context.Context, logger *zap.Logger, storage object.Storage
 			ProjectID: cfg.RAG.Model.VertexAI.ProjectID,
 			Region:    cfg.RAG.Model.VertexAI.Region,
 			SAKey:     cfg.RAG.Model.VertexAI.SAKey,
+			Model:     cfg.RAG.Model.VertexAI.Model,
 		}, storage)
 		if err != nil {
 			logger.Error("Failed to initialize VertexAI client", zap.Error(err))
@@ -492,7 +493,7 @@ func newAIClient(ctx context.Context, logger *zap.Logger, storage object.Storage
 		}
 	} else if cfg.RAG.Model.Gemini.APIKey != "" {
 		// Fallback to Gemini API client if VertexAI not configured
-		geminiClient, err := gemini.NewClient(ctx, cfg.RAG.Model.Gemini.APIKey)
+		geminiClient, err := gemini.NewClientWithModel(ctx, cfg.RAG.Model.Gemini.APIKey, cfg.RAG.Model.Gemini.Model)
 		if err != nil {
 			logger.Error("Failed to initialize Gemini client", zap.Error(err))
 		} else {

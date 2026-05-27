@@ -180,6 +180,7 @@ type ModelConfig struct {
 // GeminiConfig defines the configuration for Gemini AI
 type GeminiConfig struct {
 	APIKey string `koanf:"apikey"`
+	Model  string `koanf:"model"`
 }
 
 // OpenAIConfig defines the configuration for OpenAI
@@ -192,6 +193,7 @@ type VertexAIConfig struct {
 	ProjectID string `koanf:"projectid"`
 	Region    string `koanf:"region"`
 	SAKey     string `koanf:"sakey"` // JSON string of service account key (base64-encoded in env vars)
+	Model     string `koanf:"model"`
 }
 
 // GCSConfig defines the configuration for Google Cloud Storage as an object storage backend
