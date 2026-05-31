@@ -6,7 +6,7 @@
 //
 //   1. User uploads 2 audio files; CreateFile dedups them (both rows
 //      already existed), so no fresh ProcessFileWorkflow fires on
-//      upload. The autofill drift detector then fires N concurrent
+//      upload. The cell drift detector then fires N concurrent
 //      ReprocessFileAdmin calls per fileUID within a few hundred
 //      milliseconds.
 //   2. Pre-fix: each Reprocess* call ran terminate-and-restart on the
@@ -213,8 +213,8 @@ function CheckConcurrentReprocessIsIdempotent(data) {
 
     // 4. Fan-out: fire CONCURRENT_REPROCESS_CALLS reprocess calls in a
     // single http.batch(). k6 dispatches them in parallel, which is
-    // the closest k6-side approximation of the autofill drift
-    // detector's per-file fan-out.
+    // the closest k6-side approximation of a cell drift detector's
+    // per-file fan-out.
     const reprocessURL = `${constant.artifactRESTPublicHost}/v1alpha/namespaces/${data.expectedOwner.id}/knowledge-bases/${kbId}/files/${fileId}/reprocess`;
     const requests = [];
     for (let i = 0; i < CONCURRENT_REPROCESS_CALLS; i++) {

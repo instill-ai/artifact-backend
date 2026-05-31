@@ -35,7 +35,7 @@ terminate-and-restart implementation violated this: the terminator
 wrote `process_status = FAILED` to the database between the previous
 workflow's `WORKFLOW_EXECUTION_STATUS_TERMINATED` transition and the
 freshly-started workflow's first `UpdateFileStatusActivity` write, so
-every fan-in burst (autofill drift gate, repeated UI clicks, scripted
+every fan-in burst (cell drift gate, repeated UI clicks, scripted
 recoveries) corrupted the file's status to `FAILED` even though a fresh
 workflow was legitimately running.
 
@@ -74,8 +74,8 @@ workflow was legitimately running.
    `status.Error(codes.AlreadyExists, ...)`. Any other path that
    produces this sentinel (future fan-in coalescing in callers) gets
    the same surfacing for free.
-5. **Cell-worker pairing (`AUTOFILL-EE-INV-DRIFT-FANIN-COALESCE`).**
-   The autofill cell-worker's drift gate MUST coalesce per-`fileUID`
+5. **Cell-worker pairing.**
+   The upstream cell-worker's drift gate MUST coalesce per-`fileUID`
    reprocess kicks via a Redis singleton before they reach this gate.
    Defence-in-depth: even if upstream coalescing is bypassed, this
    invariant ensures the file status never thrashes.
@@ -88,7 +88,7 @@ workflow was legitimately running.
   Temporal will accept a fresh start if the prior run is finished, so
   the gate only needs to refuse `RUNNING` — every other status falls
   through naturally.
-- **Robust** — covers every caller (autofill, manual UI reprocess,
+- **Robust** — covers every caller (cell drift, manual UI reprocess,
   admin RPC, future scripted callers) uniformly because they all
   funnel through `service.ProcessFile` → `Execute`. A transient
   Temporal RPC failure in `DescribeWorkflowExecution` is treated as
@@ -102,7 +102,7 @@ workflow was legitimately running.
   the operator instead of hiding it inside a handler.
 
 **Regression case:** during the 2026-05-10 `col-X0WlOK5wa9` audio-files
-incident, the autofill drift gate fan-in plus the user's reprocess
+incident, the cell drift gate fan-in plus the user's reprocess
 clicks fired 4–10 concurrent `ReprocessFileAdmin` calls per file. The
 pre-fix terminate-and-restart loop ran at sub-second intervals; every
 file ended `FAILED` even though `ProcessFileWorkflow` was alive. Live
@@ -120,10 +120,8 @@ for the duplicates while the original workflow runs to `COMPLETED`.
   the file eventually settles in `FILE_PROCESS_STATUS_COMPLETED` (never
   `FAILED`). Pre-fix every call returns 200 and the file ends up
   `FAILED`; post-fix the contract above holds.
-- Cross-link: `agent-backend-ee/docs/invariants/autofill.md`
-  (`AUTOFILL-EE-INV-DRIFT-FANIN-COALESCE`) — the upstream defence on
-  the autofill side that coalesces drift-triggered reprocess calls per
-  `fileUID`.
+- Cross-link: private cell-worker invariants — the upstream defence that
+  coalesces drift-triggered reprocess calls per `fileUID`.
 
 ## Reprocess embed-only fast path (`ARTIFACT-INV-REPROCESS-EMBED-ONLY-FAST-PATH`)
 
@@ -211,7 +209,7 @@ pipeline (~1 hour), where the fast path would have taken ~5 minutes.
   one-line addition to the gate, never opt-out.
 
 **Regression case:** during the 2026-05-10 `col-LG9QdYz4NJ` recovery,
-the cell-worker's drift gate (post-`AUTOFILL-EE-INV-DRIFT-FANIN-COALESCE`)
+the cell-worker's drift gate
 correctly fanned-in into a single `ReprocessFileByUID` per upstream
 file, and the artifact-backend's idempotency gate
 (`ARTIFACT-INV-REPROCESS-NO-TERMINATE-RACE`) correctly admitted

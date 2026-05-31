@@ -62,6 +62,26 @@ func TestInvariant_MigrationDownReversesUp(t *testing.T) {
 	}
 }
 
+func TestInvariant_MigrationFileListTimeIndexes(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(findMigrationDir(t), "000071_add_file_list_time_indexes.up.sql"))
+	if err != nil {
+		t.Fatalf("migration file not found: %v", err)
+	}
+	sql := string(data)
+
+	for _, want := range []string{
+		"idx_file_namespace_update_time_uid",
+		"ON file(namespace_uid, update_time DESC, uid DESC)",
+		"WHERE delete_time IS NULL",
+		"idx_file_knowledge_base_kb_file",
+		"ON file_knowledge_base(kb_uid, file_uid)",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("time-filter migration must contain %q", want)
+		}
+	}
+}
+
 // TestInvariant_FileKnowledgeBaseHasContentSHA256Field verifies the GORM
 // model includes the denormalized content_sha256 field.
 func TestInvariant_FileKnowledgeBaseHasContentSHA256Field(t *testing.T) {
@@ -150,12 +170,12 @@ func TestInvariant_ErrDuplicateContentSHA256Defined(t *testing.T) {
 	}
 }
 
-// TestInvariant_TargetSchemaVersionIncludesMigration070 verifies that the
-// target schema version has been bumped to include migration 070.
-func TestInvariant_TargetSchemaVersionIncludesMigration070(t *testing.T) {
+// TestInvariant_TargetSchemaVersionIncludesMigration071 verifies that the
+// target schema version has been bumped to include migration 071.
+func TestInvariant_TargetSchemaVersionIncludesMigration071(t *testing.T) {
 	src := readRepoSourceFile(t, "../db/migration/migration.go")
-	if !strings.Contains(src, "TargetSchemaVersion uint = 70") {
-		t.Error("TargetSchemaVersion must be >= 70 to include the content_sha256 unique constraint migration")
+	if !strings.Contains(src, "TargetSchemaVersion uint = 71") {
+		t.Error("TargetSchemaVersion must be >= 71 to include the file list time indexes migration")
 	}
 }
 

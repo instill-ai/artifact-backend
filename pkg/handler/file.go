@@ -703,10 +703,9 @@ func (ph *PublicHandler) CreateFile(ctx context.Context, req *artifactpb.CreateF
 			ContentSha256:      res.ContentSHA256,
 			Visibility:         convertFileVisibility(res.Visibility),
 			// ParentFolder may still be nil here when the column is
-			// populated by an EE follow-up write (e.g.
-			// artifact-backend-ee's `SetParentFolderUID`) after the CE
-			// INSERT returns. A subsequent GetFile picks up the value;
-			// the CreateFile response surfaces it whenever the column is
+			// populated by a private follow-up write after the CE INSERT
+			// returns. A subsequent GetFile picks up the value; the
+			// CreateFile response surfaces it whenever the column is
 			// already set by the time CE finishes inserting.
 			ParentFolder: ptrStringFromUUIDPointer(res.ParentFolderUID),
 		},
@@ -822,23 +821,7 @@ func (ph *PublicHandler) ListFilesWithPermissionFilter(ctx context.Context, req 
 	// Use filter directly - no need to strip knowledge_base_id since it's now in the path
 	strippedFilter := req.GetFilter()
 
-	// Parse AIP-160 filter expression
-	declarations, err := filtering.NewDeclarations([]filtering.DeclarationOption{
-		filtering.DeclareStandardFunctions(),
-		filtering.DeclareIdent("uid", filtering.TypeString),
-		filtering.DeclareIdent("id", filtering.TypeString),
-		filtering.DeclareIdent("q", filtering.TypeString),
-		filtering.DeclareIdent("process_status", filtering.TypeString),
-		// tags is a repeated string field (PostgreSQL VARCHAR[] array).
-		// Use the `:` (has) operator: tags:"value" → '?' = ANY(tags)
-		filtering.DeclareIdent("tags", &expr.Type{
-			TypeKind: &expr.Type_ListType_{
-				ListType: &expr.Type_ListType{
-					ElemType: filtering.TypeString,
-				},
-			},
-		}),
-	}...)
+	declarations, err := newListFilesFilterDeclarations()
 	if err != nil {
 		logger.Error("failed to create filter declarations", zap.Error(err))
 		return nil, errorsx.AddMessage(
@@ -847,6 +830,7 @@ func (ph *PublicHandler) ListFilesWithPermissionFilter(ctx context.Context, req 
 		)
 	}
 
+	// Parse AIP-160 filter expression
 	parsedFilter, err := filtering.ParseFilter(filterRequestWrapper{filter: strippedFilter}, declarations)
 	if err != nil {
 		logger.Error("failed to parse filter", zap.Error(err), zap.String("strippedFilter", strippedFilter))
@@ -1078,7 +1062,7 @@ func (ph *PublicHandler) ListFilesWithPermissionFilter(ctx context.Context, req 
 			IsTextBased:        kbFile.IsTextBased,
 			ContentSha256:      kbFile.ContentSHA256,
 			Visibility:         convertFileVisibility(kbFile.Visibility),
-			ParentFolder:      ptrStringFromUUIDPointer(kbFile.ParentFolderUID),
+			ParentFolder:       ptrStringFromUUIDPointer(kbFile.ParentFolderUID),
 		}
 
 		// Include status message (error or success message)
@@ -1203,6 +1187,28 @@ func (ph *PublicHandler) ListFilesWithPermissionFilter(ctx context.Context, req 
 		PageSize:      int32(len(kbFileList.Files)),
 		NextPageToken: kbFileList.NextPageToken,
 	}, nil
+}
+
+func newListFilesFilterDeclarations() (*filtering.Declarations, error) {
+	return filtering.NewDeclarations([]filtering.DeclarationOption{
+		filtering.DeclareStandardFunctions(),
+		filtering.DeclareIdent("uid", filtering.TypeString),
+		filtering.DeclareIdent("id", filtering.TypeString),
+		filtering.DeclareIdent("q", filtering.TypeString),
+		filtering.DeclareIdent("process_status", filtering.TypeString),
+		filtering.DeclareIdent("create_time", filtering.TypeTimestamp),
+		filtering.DeclareIdent("update_time", filtering.TypeTimestamp),
+		filtering.DeclareIdent("in_collection", filtering.TypeBool),
+		// tags is a repeated string field (PostgreSQL VARCHAR[] array).
+		// Use the `:` (has) operator: tags:"value" -> '?' = ANY(tags)
+		filtering.DeclareIdent("tags", &expr.Type{
+			TypeKind: &expr.Type_ListType_{
+				ListType: &expr.Type_ListType{
+					ElemType: filtering.TypeString,
+				},
+			},
+		}),
+	}...)
 }
 
 // GetFile retrieves a file with support for different views (AIP-compliant).

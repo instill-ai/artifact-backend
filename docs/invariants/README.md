@@ -6,7 +6,7 @@ On-demand reference for `ARTIFACT-INV-*` invariants. Read only the section relev
 
 | File | Invariants |
 | --- | --- |
-| [`list-files.md`](./list-files.md) | `ARTIFACT-INV-LIST-FILES-PERMISSION-FILTER`, `ARTIFACT-INV-LIST-VIEW-FANOUT` |
+| [`list-files.md`](./list-files.md) | `ARTIFACT-INV-LIST-FILES-PERMISSION-FILTER`, `ARTIFACT-INV-LIST-VIEW-FANOUT`, `ARTIFACT-INV-LIST-FILES-TIMESTAMP-FILTER` |
 | [`thumbnails.md`](./thumbnails.md) | `ARTIFACT-INV-THUMBNAIL-NON-BLOCKING`, `ARTIFACT-INV-THUMBNAIL-URI-RESOLUTION`, `ARTIFACT-INV-THUMBNAIL-BACKFILL` |
 | [`entity-aliases.md`](./entity-aliases.md) | `ARTIFACT-INV-ALIAS-BACKFILL` |
 | [`media-processing.md`](./media-processing.md) | `ARTIFACT-INV-MEDIA-DURATION-PROBE-FALLBACK`, `ARTIFACT-INV-VIDEO-REMUX-FAIL-FAST` |

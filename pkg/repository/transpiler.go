@@ -14,6 +14,8 @@ import (
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 )
 
+const collectionTagLikePattern = "agent:collection:%"
+
 type transpiler struct {
 	filter filtering.Filter
 }
@@ -101,6 +103,14 @@ func (t *transpiler) transpileCallExpr(e *expr.Expr) (*clause.Expr, error) {
 func (t *transpiler) transpileIdentExpr(e *expr.Expr) (*clause.Expr, error) {
 
 	identExpr := e.GetIdentExpr()
+	if identExpr.Name == "in_collection" {
+		return &clause.Expr{
+			SQL:                "EXISTS (SELECT 1 FROM unnest(file.tags) t WHERE t LIKE ?)",
+			Vars:               []interface{}{collectionTagLikePattern},
+			WithoutParentheses: true,
+		}, nil
+	}
+
 	identType, ok := t.filter.CheckedExpr.TypeMap[e.Id]
 	if !ok {
 		return nil, fmt.Errorf("unknown type of ident expr %d", e.Id)
@@ -151,6 +161,7 @@ func (t *transpiler) transpileNotCallExpr(e *expr.Expr) (*clause.Expr, error) {
 	}
 	return &clause.Expr{
 		SQL:                fmt.Sprintf("NOT %s", rhsExpr.SQL),
+		Vars:               rhsExpr.Vars,
 		WithoutParentheses: true,
 	}, nil
 }
@@ -199,13 +210,29 @@ func (t *transpiler) transpileComparisonCallExpr(e *expr.Expr, op interface{}) (
 				sql = "(id = ? OR ? = ANY(aliases))"
 				vars = append(vars, idVal, idVal)
 			}
+		case "in_collection":
+			collectionSQL, collectionVars, err := transpileInCollectionComparison(con.Vars, false)
+			if err != nil {
+				return nil, err
+			}
+			sql = collectionSQL
+			vars = collectionVars
 		default:
 			sql = fmt.Sprintf("%s = ?", ident.SQL)
 			vars = append(vars, con.Vars...)
 		}
 	case clause.Neq:
-		sql = fmt.Sprintf("%s <> ?", ident.SQL)
-		vars = append(vars, con.Vars...)
+		if ident.SQL == "in_collection" {
+			collectionSQL, collectionVars, err := transpileInCollectionComparison(con.Vars, true)
+			if err != nil {
+				return nil, err
+			}
+			sql = collectionSQL
+			vars = collectionVars
+		} else {
+			sql = fmt.Sprintf("%s <> ?", ident.SQL)
+			vars = append(vars, con.Vars...)
+		}
 	case clause.Lt:
 		sql = fmt.Sprintf("%s < ?", ident.SQL)
 		vars = append(vars, con.Vars...)
@@ -225,6 +252,25 @@ func (t *transpiler) transpileComparisonCallExpr(e *expr.Expr, op interface{}) (
 		Vars:               vars,
 		WithoutParentheses: true,
 	}, nil
+}
+
+func transpileInCollectionComparison(vars []interface{}, negate bool) (string, []interface{}, error) {
+	if len(vars) != 1 {
+		return "", nil, fmt.Errorf("expected one bool value for in_collection comparison")
+	}
+	inCollection, ok := vars[0].(bool)
+	if !ok {
+		return "", nil, fmt.Errorf("expected bool value for in_collection comparison, got %T", vars[0])
+	}
+	if negate {
+		inCollection = !inCollection
+	}
+
+	predicate := "EXISTS (SELECT 1 FROM unnest(file.tags) t WHERE t LIKE ?)"
+	if !inCollection {
+		predicate = "NOT " + predicate
+	}
+	return predicate, []interface{}{collectionTagLikePattern}, nil
 }
 
 func (t *transpiler) transpileBinaryLogicalCallExpr(e *expr.Expr, op clause.Expression) (*clause.Expr, error) {

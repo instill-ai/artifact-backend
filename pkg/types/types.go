@@ -104,9 +104,9 @@ type (
 	FileUIDType = uuid.UUID
 	// FolderUIDType is the Folder (folder) unique identifier. A file
 	// optionally references its parent folder via
-	// `FileModel.ParentFolderUID`; the column itself is added by an EE
-	// migration today (artifact-backend-ee 000071_add_parent_folder_uid_to_file),
-	// see the FileModel comment for the edition-boundary note.
+	// `FileModel.ParentFolderUID`; the column itself is added by private
+	// schema ownership today, see the FileModel comment for the
+	// edition-boundary note.
 	FolderUIDType = uuid.UUID
 	// ChunkUIDType is the Text chunk unique identifier
 	ChunkUIDType = uuid.UUID

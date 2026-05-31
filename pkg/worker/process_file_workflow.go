@@ -136,10 +136,9 @@ func (w *processFileWorkflow) Execute(ctx context.Context, param ProcessFileWork
 	// terminator-thrash loop at sub-second intervals and corrupted
 	// every file's status to FAILED.
 	//
-	// The fan-out coalescing on the cell-worker side
-	// (AUTOFILL-EE-INV-DRIFT-FANIN-COALESCE) is the upstream
+	// The fan-out coalescing on the cell-worker side is the upstream
 	// defence; this gate is the artifact-backend's last-line defence
-	// that any caller (autofill, manual UI reprocess, admin RPC)
+	// that any caller (cell drift, manual UI reprocess, admin RPC)
 	// gets the same idempotent contract.
 	desc, descErr := w.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
 	if descErr == nil && desc.WorkflowExecutionInfo.Status == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
@@ -355,9 +354,8 @@ func (w *Worker) ProcessFileWorkflow(ctx workflow.Context, param ProcessFileWork
 			// COMPLETED branch — files in FAILED state may have
 			// partial / inconsistent chunk and converted_file rows
 			// from the failed run, and the cell-worker drift gate
-			// (AUTOFILL-INV-pool-upstream-file-chunk-integrity)
-			// only kicks reprocess for COMPLETED files in the
-			// first place. Probe failures fall through to the
+			// only kicks reprocess for COMPLETED files in the first
+			// place. Probe failures fall through to the
 			// existing full-reprocess path: the optimisation is
 			// strictly a cost reduction, not a correctness
 			// contract.

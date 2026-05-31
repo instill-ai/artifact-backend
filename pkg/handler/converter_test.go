@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	qt "github.com/frankban/quicktest"
+	"github.com/gofrs/uuid"
 	"gorm.io/gorm"
 
 	"github.com/instill-ai/artifact-backend/pkg/repository"
@@ -113,7 +113,7 @@ func TestConvertKBFileToPB_CreatorName(t *testing.T) {
 	c := qt.New(t)
 
 	now := time.Now()
-	creatorUID := uuid.FromStringOrNil("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+	creatorUID := uuid.FromStringOrNil("aaaaaaaa-bbbb-cccc-dddd-ffffffffffff")
 
 	makeFileModel := func() *repository.FileModel {
 		return &repository.FileModel{

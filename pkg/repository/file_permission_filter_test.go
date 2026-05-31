@@ -3,8 +3,8 @@ package repository
 import (
 	"testing"
 
-	"github.com/gofrs/uuid"
 	qt "github.com/frankban/quicktest"
+	"github.com/gofrs/uuid"
 	"github.com/lib/pq"
 )
 
@@ -46,6 +46,19 @@ func TestFilePermissionClause_compile_uidsIn(t *testing.T) {
 	frag, args := clause.compile()
 
 	c.Check(frag, qt.Equals, "(file.uid = ANY(?))")
+	c.Assert(args, qt.HasLen, 1)
+	c.Check(args[0], qt.DeepEquals, pq.Array([]string{u1.String(), u2.String()}))
+}
+
+func TestFilePermissionClause_compile_parentFolderUIDsIn(t *testing.T) {
+	c := qt.New(t)
+
+	u1 := uuid.Must(uuid.NewV4())
+	u2 := uuid.Must(uuid.NewV4())
+	clause := FilePermissionClause{ParentFolderUIDsIn: []uuid.UUID{u1, u2}}
+	frag, args := clause.compile()
+
+	c.Check(frag, qt.Equals, "(file.parent_folder_uid = ANY(?))")
 	c.Assert(args, qt.HasLen, 1)
 	c.Check(args[0], qt.DeepEquals, pq.Array([]string{u1.String(), u2.String()}))
 }
@@ -143,17 +156,18 @@ func TestFilePermissionFilter_compile_singleClauseWrapping(t *testing.T) {
 }
 
 func TestFilePermissionFilter_compile_threePathOR(t *testing.T) {
-	// The canonical EE shape: cascade (TagsOverlap), direct (UIDsIn), orphan
+	// The canonical shape from downstream callers: folder cascade
+	// (ParentFolderUIDsIn), direct file grants (UIDsIn), orphan workspace files
 	// (TagsLikeNone + VisibilityIn). Ordering and parenthesisation are part of
-	// the contract — EE relies on the OR composition for correctness.
+	// the contract because the OR composition controls both rows and counts.
 	c := qt.New(t)
 
-	cascadeTags := []string{"agent:collection:c1", "agent:collection:c2"}
+	folderUID := uuid.Must(uuid.NewV4())
 	u1 := uuid.Must(uuid.NewV4())
 
 	f := &FilePermissionFilter{
 		Clauses: []FilePermissionClause{
-			{TagsOverlap: cascadeTags},
+			{ParentFolderUIDsIn: []uuid.UUID{folderUID}},
 			{UIDsIn: []uuid.UUID{u1}},
 			{TagsLikeNone: []string{"agent:collection:%"}, VisibilityIn: []string{"VISIBILITY_WORKSPACE"}},
 		},
@@ -161,13 +175,13 @@ func TestFilePermissionFilter_compile_threePathOR(t *testing.T) {
 	frag, args := f.compile()
 
 	c.Check(frag, qt.Equals,
-		"((file.tags && ?) "+
+		"((file.parent_folder_uid = ANY(?)) "+
 			"OR (file.uid = ANY(?)) "+
 			"OR (NOT EXISTS (SELECT 1 FROM unnest(file.tags) t WHERE t LIKE ?) "+
 			"AND file.visibility = ANY(?)))")
 
 	c.Assert(args, qt.HasLen, 4)
-	c.Check(args[0], qt.DeepEquals, pq.Array(cascadeTags))
+	c.Check(args[0], qt.DeepEquals, pq.Array([]string{folderUID.String()}))
 	c.Check(args[1], qt.DeepEquals, pq.Array([]string{u1.String()}))
 	c.Check(args[2], qt.Equals, "agent:collection:%")
 	c.Check(args[3], qt.DeepEquals, pq.Array([]string{"VISIBILITY_WORKSPACE"}))

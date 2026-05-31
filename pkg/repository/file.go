@@ -212,16 +212,13 @@ type FileModel struct {
 	// ParentFolderUID is the file's folder (folder) home, the single
 	// permission parent under the Folder–File Permission Model. NULL means
 	// "no folder assigned yet" — every live file should have a non-NULL
-	// value once the EE backfill (agent-backend-ee convert000132) has run.
+	// value once private legacy backfills have run.
 	//
 	// Edition-boundary note: the underlying column DDL is shipped by the
-	// EE migration `000071_add_parent_folder_uid_to_file` in
-	// artifact-backend-ee. CE only declares the GORM field so the read
-	// path can populate the corresponding proto field
-	// (`File.ParentFolder`). CE never writes the column today; the write
-	// happens through artifact-backend-ee's `EEFileRepository.SetParentFolderUID`.
-	// When the column moves into CE ownership (planned follow-up), this
-	// note can be removed.
+	// private edition today. CE only declares the GORM field so the read
+	// path can populate the corresponding proto field (`File.ParentFolder`).
+	// CE never writes the column today. When the column moves into CE
+	// ownership (planned follow-up), this note can be removed.
 	ParentFolderUID *types.FolderUIDType `gorm:"column:parent_folder_uid;type:uuid" json:"parent_folder_uid,omitempty"`
 }
 
@@ -660,6 +657,11 @@ type FilePermissionClause struct {
 	// to `file.uid = ANY($1)`. Empty slice = dimension not applied.
 	UIDsIn []uuid.UUID
 
+	// ParentFolderUIDsIn matches files whose parent folder UID is in the
+	// supplied set. Compiles to `file.parent_folder_uid = ANY($1)`. Empty
+	// slice = dimension not applied.
+	ParentFolderUIDsIn []uuid.UUID
+
 	// TagsLikeNone matches files where no element of `tags` matches any of
 	// the supplied SQL `LIKE` patterns. Each pattern compiles to a
 	// `NOT EXISTS (SELECT 1 FROM unnest(file.tags) t WHERE t LIKE $1)`. Used
@@ -680,6 +682,7 @@ type FilePermissionClause struct {
 func (c FilePermissionClause) isEmpty() bool {
 	return len(c.TagsOverlap) == 0 &&
 		len(c.UIDsIn) == 0 &&
+		len(c.ParentFolderUIDsIn) == 0 &&
 		len(c.TagsLikeNone) == 0 &&
 		len(c.VisibilityIn) == 0
 }
@@ -706,6 +709,14 @@ func (c FilePermissionClause) compile() (string, []any) {
 			uidStrs[i] = u.String()
 		}
 		preds = append(preds, "file.uid = ANY(?)")
+		args = append(args, pq.Array(uidStrs))
+	}
+	if len(c.ParentFolderUIDsIn) > 0 {
+		uidStrs := make([]string, len(c.ParentFolderUIDsIn))
+		for i, u := range c.ParentFolderUIDsIn {
+			uidStrs[i] = u.String()
+		}
+		preds = append(preds, "file.parent_folder_uid = ANY(?)")
 		args = append(args, pq.Array(uidStrs))
 	}
 	for _, pattern := range c.TagsLikeNone {

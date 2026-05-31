@@ -371,9 +371,9 @@ func (h *PrivateHandler) UpdateFileAdmin(ctx context.Context, req *artifactpb.Up
 			case "parent_folder":
 				// Set or clear the file's folder home (single permission
 				// parent under the Folder–File Permission Model). Used by
-				// agent-backend-ee's convert000132 boot-time backfill to
-				// retroactively assign a folder UID to every legacy file
-				// whose parent_folder_uid is NULL.
+				// private boot-time backfills to retroactively assign a
+				// folder UID to every legacy file whose parent_folder_uid
+				// is NULL.
 				//
 				// Empty string in `File.ParentFolder` clears the column
 				// (sets parent_folder_uid back to NULL); a non-empty
@@ -724,7 +724,7 @@ func (h *PrivateHandler) ReprocessFileAdmin(ctx context.Context, req *artifactpb
 		Size:          updatedFile.Size,
 		ContentSha256: updatedFile.ContentSHA256,
 		Visibility:    convertFileVisibility(updatedFile.Visibility),
-		ParentFolder: ptrStringFromUUIDPointer(updatedFile.ParentFolderUID),
+		ParentFolder:  ptrStringFromUUIDPointer(updatedFile.ParentFolderUID),
 	}
 	if updatedFile.CreateTime != nil {
 		pbFile.CreateTime = timestamppb.New(*updatedFile.CreateTime)
@@ -1234,33 +1234,7 @@ func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.Lis
 		publicReq.View = &view
 	}
 
-	// Convert proto permission clauses to repository-level filter.
-	var permFilter *repository.FilePermissionFilter
-	if clauses := req.GetPermissionClauses(); len(clauses) > 0 {
-		repoClauses := make([]repository.FilePermissionClause, 0, len(clauses))
-		for _, c := range clauses {
-			rc := repository.FilePermissionClause{
-				TagsOverlap:  c.GetTagsOverlap(),
-				TagsLikeNone: c.GetTagsLikeNone(),
-				VisibilityIn: c.GetVisibilityIn(),
-			}
-			if uids := c.GetUidsIn(); len(uids) > 0 {
-				parsed := make([]uuid.UUID, 0, len(uids))
-				for _, u := range uids {
-					uid, parseErr := uuid.FromString(u)
-					if parseErr != nil {
-						logger.Warn("ListFilesAdmin: skipping invalid UID in permission clause",
-							zap.String("uid", u), zap.Error(parseErr))
-						continue
-					}
-					parsed = append(parsed, uid)
-				}
-				rc.UIDsIn = parsed
-			}
-			repoClauses = append(repoClauses, rc)
-		}
-		permFilter = &repository.FilePermissionFilter{Clauses: repoClauses}
-	}
+	permFilter := convertPermissionClauses(req.GetPermissionClauses(), logger)
 
 	publicHandler := &PublicHandler{
 		service: h.service,
@@ -1277,6 +1251,48 @@ func (h *PrivateHandler) ListFilesAdmin(ctx context.Context, req *artifactpb.Lis
 		NextPageToken: resp.GetNextPageToken(),
 		TotalSize:     resp.GetTotalSize(),
 	}, nil
+}
+
+// convertPermissionClauses converts the private admin proto filter into the
+// repository filter that is pushed into the SQL WHERE clause.
+func convertPermissionClauses(clauses []*artifactpb.FilePermissionClause, logger *zap.Logger) *repository.FilePermissionFilter {
+	if len(clauses) == 0 {
+		return nil
+	}
+
+	repoClauses := make([]repository.FilePermissionClause, 0, len(clauses))
+	for _, c := range clauses {
+		rc := repository.FilePermissionClause{
+			TagsOverlap:  c.GetTagsOverlap(),
+			TagsLikeNone: c.GetTagsLikeNone(),
+			VisibilityIn: c.GetVisibilityIn(),
+		}
+		rc.UIDsIn = parsePermissionClauseUUIDs(c.GetUidsIn(), "uid", logger)
+		rc.ParentFolderUIDsIn = parsePermissionClauseUUIDs(c.GetParentFolderUidIn(), "parent_folder_uid", logger)
+		repoClauses = append(repoClauses, rc)
+	}
+
+	return &repository.FilePermissionFilter{Clauses: repoClauses}
+}
+
+func parsePermissionClauseUUIDs(values []string, field string, logger *zap.Logger) []uuid.UUID {
+	if len(values) == 0 {
+		return nil
+	}
+
+	parsed := make([]uuid.UUID, 0, len(values))
+	for _, v := range values {
+		uid, parseErr := uuid.FromString(v)
+		if parseErr != nil {
+			if logger != nil {
+				logger.Warn("ListFilesAdmin: skipping invalid UUID in permission clause",
+					zap.String("field", field), zap.String("uid", v), zap.Error(parseErr))
+			}
+			continue
+		}
+		parsed = append(parsed, uid)
+	}
+	return parsed
 }
 
 // resolveOwnerUID resolves a namespace ID to an owner UID.
