@@ -1199,30 +1199,41 @@ func (r *repository) GetContentByFileUIDs(ctx context.Context, files []FileModel
 		SourceTable string
 		SourceUID   types.SourceUIDType
 	})
+	if len(files) == 0 {
+		return result, nil
+	}
+
+	// Batch the CONTENT converted-file lookup into one indexed query
+	// (idx_unique_converted_file_file_uid_type) instead of one
+	// GetConvertedFileByFileUIDAndType per file. A list page of N files was
+	// previously N sequential round-trips — the dominant cost of the
+	// ListFiles "fetching sources" enrichment. Files without a CONTENT
+	// converted record are simply absent from the result map (same skip
+	// semantics as the per-file gorm.ErrRecordNotFound path).
+	fileUIDs := make([]types.FileUIDType, 0, len(files))
 	for _, file := range files {
-		// find the source table and source uid by file uid
-		// All file types now use converted_file as the source after the refactoring
-		// TEXT/MARKDOWN files also have converted file records (pointing to original files)
-		// We specifically need the CONTENT converted file for chunks and tokens
-		convertedFile, err := r.GetConvertedFileByFileUIDAndType(ctx, file.UID, artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				// Skip files without converted records
-				continue
-			} else {
-				logger.Error("failed to get converted file by file uid", zap.Error(err))
-				return map[types.FileUIDType]struct {
-					SourceTable string
-					SourceUID   types.SourceUIDType
-				}{}, err
-			}
-		}
-		result[file.UID] = struct {
+		fileUIDs = append(fileUIDs, file.UID)
+	}
+
+	var convertedFiles []ConvertedFileModel
+	where := fmt.Sprintf("%s IN ? AND %s = ?", ConvertedFileColumn.FileUID, ConvertedFileColumn.ConvertedType)
+	if err := r.db.WithContext(ctx).
+		Where(where, fileUIDs, artifactpb.ConvertedFileType_CONVERTED_FILE_TYPE_CONTENT.String()).
+		Find(&convertedFiles).Error; err != nil {
+		logger.Error("failed to batch-get converted files by file uids", zap.Error(err))
+		return map[types.FileUIDType]struct {
+			SourceTable string
+			SourceUID   types.SourceUIDType
+		}{}, err
+	}
+
+	for _, cf := range convertedFiles {
+		result[cf.FileUID] = struct {
 			SourceTable string
 			SourceUID   types.SourceUIDType
 		}{
 			SourceTable: ConvertedFileTableName,
-			SourceUID:   convertedFile.UID,
+			SourceUID:   cf.UID,
 		}
 	}
 

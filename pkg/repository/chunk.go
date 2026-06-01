@@ -387,41 +387,39 @@ func (r *repository) GetTotalTextChunksBySources(ctx context.Context, sources ma
 		return result, nil
 	}
 
-	// Prepare the conditions for the query
-	var conditions []string
-	var values []any
-
-	for _, source := range sources {
-		conditions = append(conditions, "(source_table = ? AND source_uid = ?)")
-		values = append(values, source.SourceTable, source.SourceUID)
+	// Group source_uids by source_table and keep a reverse index from
+	// (table, uid) -> fileUID. Querying `source_table = ? AND source_uid IN ?`
+	// (one query per distinct table, usually one) uses the
+	// (source_table, source_uid, ...) index — replacing the previous giant
+	// `(source_table=? AND source_uid=?) OR ...` chain that PostgreSQL could
+	// not index and which seq-scanned the whole chunk table per call (the
+	// dominant cost of the ListFiles "fetching chunks" enrichment). The
+	// reverse index also drops the old O(sources × results) mapping to O(N).
+	uidsByTable := make(map[types.SourceTableType][]types.SourceUIDType)
+	fileBySource := make(map[types.SourceTableType]map[types.SourceUIDType]types.FileUIDType)
+	for fileUID, source := range sources {
+		uidsByTable[source.SourceTable] = append(uidsByTable[source.SourceTable], source.SourceUID)
+		if fileBySource[source.SourceTable] == nil {
+			fileBySource[source.SourceTable] = make(map[types.SourceUIDType]types.FileUIDType)
+		}
+		fileBySource[source.SourceTable][source.SourceUID] = fileUID
 	}
 
-	// Combine all conditions
-	whereClause := strings.Join(conditions, " OR ")
-
-	// Query to get total tokens grouped by source_table and source_uid
-	var tokenSums []struct {
-		SourceTable types.SourceTableType `gorm:"column:source_table"`
-		SourceUID   types.SourceUIDType   `gorm:"column:source_uid"`
-		TotalTokens int                   `gorm:"column:total_tokens"`
-	}
-
-	err := r.db.WithContext(ctx).Model(&ChunkModel{}).
-		Select("source_table, source_uid, COUNT(*) as total_tokens").
-		Where(whereClause, values...).
-		Group("source_table, source_uid").
-		Find(&tokenSums).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Populate the result map
-	for _, sum := range tokenSums {
-		for fileUID, source := range sources {
-			if source.SourceTable == sum.SourceTable && source.SourceUID == sum.SourceUID {
-				result[fileUID] = sum.TotalTokens
-				break
+	for table, uids := range uidsByTable {
+		var counts []struct {
+			SourceUID types.SourceUIDType `gorm:"column:source_uid"`
+			Total     int                 `gorm:"column:total"`
+		}
+		if err := r.db.WithContext(ctx).Model(&ChunkModel{}).
+			Select("source_uid, COUNT(*) as total").
+			Where("source_table = ? AND source_uid IN ?", table, uids).
+			Group("source_uid").
+			Find(&counts).Error; err != nil {
+			return nil, err
+		}
+		for _, c := range counts {
+			if fileUID, ok := fileBySource[table][c.SourceUID]; ok {
+				result[fileUID] = c.Total
 			}
 		}
 	}
