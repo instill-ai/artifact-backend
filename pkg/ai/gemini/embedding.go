@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"google.golang.org/genai"
 
@@ -12,6 +13,21 @@ import (
 
 	errorsx "github.com/instill-ai/x/errors"
 )
+
+// embeddingBillableChars returns the number of billable characters to account
+// for one embedded text. It prefers the provider-reported count (the Vertex
+// API populates BillableCharacterCount) and falls back to the UTF-8 character
+// length of the input text when the provider omits it (the direct Gemini API
+// returns no usage Metadata). Gemini embeddings are billed per input
+// character, so the text we actually sent is the authoritative count — this is
+// what keeps file-processing usage faithful instead of collapsing to the flat
+// file-category fallback when no provider metadata is present.
+func embeddingBillableChars(providerBillableChars int32, text string) int32 {
+	if providerBillableChars > 0 {
+		return providerBillableChars
+	}
+	return int32(utf8.RuneCountInString(text))
+}
 
 // EmbedTexts generates embeddings for a batch of texts using Gemini API directly
 //
@@ -174,13 +190,21 @@ func (c *Client) EmbedTexts(ctx context.Context, texts []string, taskType string
 					break
 				}
 
-			// Accumulate processed characters if metadata is available
-			// (Vertex API only — may be nil for direct Gemini API)
+			// Account the characters processed for this text so usage/billing
+			// is faithful. The Vertex API reports BillableCharacterCount, but
+			// the direct Gemini API omits Metadata entirely — in that case fall
+			// back to the input length we actually sent. Gemini embeddings are
+			// billed per input character, so the text we embedded is the
+			// authoritative count when the provider doesn't supply one. Without
+			// this fallback, direct-Gemini embeddings recorded zero usage, which
+			// downstream consumers cannot bill against the real model.
+			var billableChars int32
 			if result.Metadata != nil {
-				mu.Lock()
-				totalProcessedChars += result.Metadata.BillableCharacterCount
-				mu.Unlock()
+				billableChars = result.Metadata.BillableCharacterCount
 			}
+			mu.Lock()
+			totalProcessedChars += embeddingBillableChars(billableChars, txt)
+			mu.Unlock()
 
 			// Success! Store the embedding
 			embedding = emb.Values
